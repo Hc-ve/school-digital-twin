@@ -1,0 +1,64 @@
+# ============================================================
+# Unity 项目 .gitattributes — Git LFS 追踪规则
+# 项目：School（数字孪生底座）
+#
+# 依据实测：Assets 下需 LFS 管理的二进制资源共 995 个 / 约 1.12 GB
+#   .png 453 个 721.2 MB   .exr 234 个 265.0 MB
+#   .tga  16 个  72.5 MB   .jpg  30 个  24.2 MB
+#   .fbx 245 个  17.9 MB   .psd  11 个  15.8 MB   .tif 6 个 4.6 MB
+#
+# 策略：
+#   · 二进制媒体资源 → LFS（体积大、无法有效 diff）
+#   · 文本序列化资源（.unity/.prefab/.asset/.mat）→ 保持文本，
+#     便于代码评审与冲突解决（本项目已启用 Force Text）
+# ============================================================
+
+# ---------- 3D 模型 ----------
+*.fbx  filter=lfs diff=lfs merge=lfs -text
+*.FBX  filter=lfs diff=lfs merge=lfs -text
+*.obj  filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+
+# ---------- 纹理 / 图像 ----------
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.PNG  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.tif  filter=lfs diff=lfs merge=lfs -text
+*.tiff filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+*.dds  filter=lfs diff=lfs merge=lfs -text
+
+# ---------- 音频 / 视频 ----------
+*.wav  filter=lfs diff=lfs merge=lfs -text
+*.mp3  filter=lfs diff=lfs merge=lfs -text
+*.ogg  filter=lfs diff=lfs merge=lfs -text
+*.aif  filter=lfs diff=lfs merge=lfs -text
+*.mp4  filter=lfs diff=lfs merge=lfs -text
+*.mov  filter=lfs diff=lfs merge=lfs -text
+
+# ---------- 字体 / 其他大文件 ----------
+*.ttf  filter=lfs diff=lfs merge=lfs -text
+*.otf  filter=lfs diff=lfs merge=lfs -text
+*.cubemap filter=lfs diff=lfs merge=lfs -text
+
+# ---------- 统一换行符（跨平台协作）----------
+*.cs       text eol=lf
+*.sh       text eol=lf
+*.json     text eol=lf
+*.md       text eol=lf
+
+# ---------- Unity YAML 资源：强制按文本处理，保留 diff 能力 ----------
+# 注意：此处刻意不写 merge=unityyamlmerge。
+# 若团队配置了 Unity SmartMerge（见 P0 实施计划「可选增强」），
+# 再改用：*.unity text merge=unityyamlmerge eol=lf
+*.unity    text eol=lf
+*.prefab   text eol=lf
+*.asset    text eol=lf
+*.mat      text eol=lf
+*.controller text eol=lf
+*.anim     text eol=lf
+*.meta     text eol=lf
