@@ -1,0 +1,117 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9789de2393138340bd25f0c0fb7e925, type: 3}
+  m_Name: TwinCatalog_Mock
+  m_EditorClassIdentifier: 
+  Points:
+  - TwinId: Class2-1/Sensor/Temp_01
+    DisplayName: "2-1\u73ED \u6E29\u6E7F\u5EA6\u4F20\u611F\u5668"
+    Zone: Class2-1
+    Category: Sensor
+    SourceTopic: 
+    Metrics:
+    - Metric: Temperature
+      Unit: "\xB0C"
+      Min: 10
+      Max: 35
+      WarnLow: 16
+      WarnHigh: 28
+      AlarmLow: 10
+      AlarmHigh: 32
+      Epsilon: 0.05
+    - Metric: Humidity
+      Unit: '%RH'
+      Min: 20
+      Max: 80
+      WarnLow: 30
+      WarnHigh: 65
+      AlarmLow: 20
+      AlarmHigh: 75
+      Epsilon: 0.05
+  - TwinId: Class2-1/Sensor/CO2_01
+    DisplayName: "2-1\u73ED CO\u2082 \u4F20\u611F\u5668"
+    Zone: Class2-1
+    Category: Sensor
+    SourceTopic: 
+    Metrics:
+    - Metric: CO2
+      Unit: ppm
+      Min: 400
+      Max: 2000
+      WarnLow: 400
+      WarnHigh: 1000
+      AlarmLow: 400
+      AlarmHigh: 1500
+      Epsilon: 0.05
+  - TwinId: Class2-1/Light/Main_01
+    DisplayName: "2-1\u73ED \u4E3B\u7167\u660E"
+    Zone: Class2-1
+    Category: Light
+    SourceTopic: 
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+  - TwinId: Class2-1/AC/Unit_01
+    DisplayName: "2-1\u73ED \u7A7A\u8C03\u673A\u7EC4"
+    Zone: Class2-1
+    Category: AC
+    SourceTopic: 
+    Metrics:
+    - Metric: SetTemp
+      Unit: "\xB0C"
+      Min: 16
+      Max: 30
+      WarnLow: 18
+      WarnHigh: 26
+      AlarmLow: 16
+      AlarmHigh: 30
+      Epsilon: 0.05
+    - Metric: Power
+      Unit: kW
+      Min: 0
+      Max: 3.5
+      WarnLow: 0
+      WarnHigh: 3
+      AlarmLow: 0
+      AlarmHigh: 3.5
+      Epsilon: 0.05
+  - TwinId: Class2-1/Door/Entrance_01
+    DisplayName: "2-1\u73ED \u524D\u95E8"
+    Zone: Class2-1
+    Category: Door
+    SourceTopic: 
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
