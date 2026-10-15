@@ -51,8 +51,7 @@ namespace SchoolTwin.UI
         [Range(0.75f, 3f)]
         [SerializeField] private float _uiScale = 1.25f;
 
-        [Tooltip("卡片宽度（未缩放）。实际宽度 = 该值 × 整体缩放")]
-        [SerializeField] private float _cardWidth = 384f;
+        [Tooltip("面板距屏幕边缘的留白（未缩放）。实际值 = 该值 × 整体缩放")]
         [SerializeField] private float _screenMargin = 20f;
         [Tooltip("留空则自动向系统申请含中文字形的字体（微软雅黑等）")]
         [SerializeField] private Font _fontOverride;
@@ -82,7 +81,20 @@ namespace SchoolTwin.UI
         // 所以这里把所有尺寸都定义成「基准值」，再统一乘 _uiScale，
         // 改一个滑块就能整体放大而不跑版。
 
-        private const float BaseCardWidth = 420f;
+        /// <summary>
+        /// 卡片宽度（基准值，未缩放）。实际宽度 = 该值 × _activeScale。
+        ///
+        /// 【注意：这里不再有 _cardWidth 这个 Inspector 字段】
+        /// 原先 `BaseCardWidth` 与 `_cardWidth` 并存，本意是「常量给默认值、
+        /// 字段给用户调」。但场景里早就序列化了 `_cardWidth: 384` ——
+        /// Unity 用序列化值覆盖脚本默认值，于是改 `BaseCardWidth` 完全不生效，
+        /// 而这一差异在代码里毫无迹象（读代码只会看到那个常量）。
+        /// 曾因此白改一轮。现在只留常量，单一事实来源。
+        ///
+        /// 420 → 470：用户反馈「还是小」，且对比截图看卡片偏瘦长。
+        /// 加宽比加高划算 —— 宽不占垂直空间，不会被 MaxScaleByVerticalSpace 压。
+        /// </summary>
+        private const float BaseCardWidth = 470f;
         private const float BaseScreenMargin = 20f;
         private const float BasePad = 18f;
         private const float BaseTitleY = 16f;
@@ -288,7 +300,7 @@ namespace SchoolTwin.UI
             float s = EffectiveScale();
             _activeScale = s;   // 存下来，给圆角、游标这类零散计算复用
 
-            _scaledCardWidth = _cardWidth > 0f ? _cardWidth * s : BaseCardWidth * s;
+            _scaledCardWidth = BaseCardWidth * s;
             _scaledScreenMargin = _screenMargin > 0f ? _screenMargin * s : BaseScreenMargin * s;
             _scaledPad = BasePad * s;
             _scaledTitleY = BaseTitleY * s;

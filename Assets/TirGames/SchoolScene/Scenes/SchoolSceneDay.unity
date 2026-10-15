@@ -45221,14 +45221,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _visible: 1
   _toggleKey: 285
-  _cardWidth: 384
+  _uiScale: 1.25
   _screenMargin: 20
   _fontOverride: {fileID: 0}
   _valueRefreshInterval: 0.1
   _alarmRefreshInterval: 0.25
   _flyToOnClick: 1
   _flyDistance: 6
-  _maxAlarmRows: 8
+  _maxAlarmRows: 6
 --- !u!114 &987024714
 MonoBehaviour:
   m_ObjectHideFlags: 0
