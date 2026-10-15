@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using SchoolTwin.Data;
 using SchoolTwin.Interaction;
 using SchoolTwin.Twin;
@@ -20,6 +21,7 @@ namespace SchoolTwin.EditorTools
         private const string CatalogFolder = "Assets/_Project/ScriptableObjects";
         private const string CatalogPath = CatalogFolder + "/TwinCatalog_Mock.asset";
         private const string MockRootName = "[MockPoints]";
+        private const string PanelRootName = "[TwinUI]";
         private const float MockCubeScale = 0.6f;
 
         // ================================================================ ① 生成 Mock 闭环
@@ -432,6 +434,10 @@ namespace SchoolTwin.EditorTools
 
                 if (!ids.Add(p.TwinId)) problems.Add("TwinId 重复：" + p.TwinId);
 
+                // 首尾空白在 Inspector 里几乎看不出来，但会让字符串精确匹配失败
+                if (!string.Equals(p.TwinId, p.TwinId.Trim(), System.StringComparison.Ordinal))
+                    problems.Add("TwinId 首尾有空白字符：\"" + p.TwinId + "\"（会导致收不到数据）");
+
                 if (p.Metrics == null || p.Metrics.Count == 0)
                 {
                     problems.Add("无指标定义：" + p.TwinId);
@@ -458,6 +464,10 @@ namespace SchoolTwin.EditorTools
                 sceneIds.Add(anchors[i].TwinId);
                 if (!ids.Contains(anchors[i].TwinId))
                     problems.Add("场景锚点不在点位目录中：" + anchors[i].TwinId + "（路径 " + GetPath(anchors[i].transform) + "）");
+
+                if (!string.Equals(anchors[i].TwinId, anchors[i].TwinId.Trim(), System.StringComparison.Ordinal))
+                    problems.Add("场景锚点 TwinId 首尾有空白字符：\"" + anchors[i].TwinId + "\"（路径 " +
+                                 GetPath(anchors[i].transform) + "），可用菜单 ⑦ 一键修正");
             }
             foreach (string id in ids)
             {
@@ -474,6 +484,123 @@ namespace SchoolTwin.EditorTools
             sb.Append("[P1] 校验发现 ").Append(problems.Count).Append(" 个问题：\n");
             for (int i = 0; i < problems.Count; i++) sb.Append("  · ").Append(problems[i]).Append('\n');
             Debug.LogWarning(sb.ToString());
+        }
+
+        // ================================================================ ⑥ 生成 UGUI 信息面板
+
+        [MenuItem("P1 孪生框架/⑥ 生成 UGUI 信息面板（当前场景）", false, 15)]
+        public static void CreateInfoPanel()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                EditorUtility.DisplayDialog("请先退出播放模式", "生成操作请在编辑模式下执行。", "知道了");
+                return;
+            }
+
+            EnsureEventSystem();
+
+            GameObject root = GameObject.Find(PanelRootName);
+            if (root == null)
+            {
+                root = new GameObject(PanelRootName, typeof(RectTransform));
+                Undo.RegisterCreatedObjectUndo(root, "创建孪生 UI");
+            }
+
+            Canvas canvas = root.GetComponent<Canvas>();
+            if (canvas == null) canvas = Undo.AddComponent<Canvas>(root);
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 100;
+
+            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+            if (scaler == null) scaler = Undo.AddComponent<CanvasScaler>(root);
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
+            if (root.GetComponent<GraphicRaycaster>() == null) Undo.AddComponent<GraphicRaycaster>(root);
+            if (root.GetComponent<TwinDetailPanel>() == null) Undo.AddComponent<TwinDetailPanel>(root);
+
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            Selection.activeObject = root;
+
+            Debug.Log("[P1-C] 信息面板已就位：" + PanelRootName + "\n" +
+                      "  · 界面元素在进入 Play 时由 TwinDetailPanel 自动构建（不依赖预制体，避免引用断裂）\n" +
+                      "  · 面板显示在屏幕右上：选中点位 → 详情卡片；下方为告警列表\n" +
+                      "  · F4 开关面板；左键点选点位；点击告警条目 → 选中并飞过去\n" +
+                      "  · 需要 EventSystem 才能接收点击，已自动检查/创建");
+        }
+
+        private static void EnsureEventSystem()
+        {
+            if (Object.FindObjectOfType<UnityEngine.EventSystems.EventSystem>() != null) return;
+
+            // 项目用旧版 Input Manager（activeInputHandler = 0），所以用 StandaloneInputModule
+            GameObject go = new GameObject("EventSystem",
+                typeof(UnityEngine.EventSystems.EventSystem),
+                typeof(UnityEngine.EventSystems.StandaloneInputModule));
+            Undo.RegisterCreatedObjectUndo(go, "创建 EventSystem");
+            Debug.Log("[P1-C] 场景里没有 EventSystem，已创建（否则 UI 点击无效）。");
+        }
+
+        // ================================================================ ⑦ 修正 TwinId 首尾空白
+
+        /// <summary>
+        /// 修正 TwinId / 显示名 / 分区 / 类别 的首尾空白。
+        ///
+        /// 为什么需要它：TwinId 是「业务 ID ↔ 场景对象」的对齐键，在 Inspector 里
+        /// 手输时很容易多敲一个空格。Unity 会把它原样序列化成 'Class2-1/Light/Main_01 '
+        /// （带引号 + 尾空格），肉眼几乎看不出来，但注册表按字符串精确匹配，
+        /// 结果就是该点位永远收不到数据、状态永远停在「未知」。
+        /// 这正是 P1-B 场景里实际出现过的问题。
+        /// </summary>
+        [MenuItem("P1 孪生框架/⑦ 修正 TwinId 首尾空白（当前场景）", false, 16)]
+        public static void TrimTwinIds()
+        {
+            TwinAnchor[] anchors = Object.FindObjectsOfType<TwinAnchor>(true);
+            string[] fields = { "_twinId", "_displayName", "_zone", "_category" };
+            int fixedCount = 0;
+
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                TwinAnchor anchor = anchors[i];
+                if (anchor == null) continue;
+
+                SerializedObject so = new SerializedObject(anchor);
+                bool dirty = false;
+
+                for (int k = 0; k < fields.Length; k++)
+                {
+                    SerializedProperty property = so.FindProperty(fields[k]);
+                    if (property == null || property.propertyType != SerializedPropertyType.String) continue;
+
+                    string raw = property.stringValue;
+                    string trimmed = raw == null ? "" : raw.Trim();
+                    if (string.Equals(raw, trimmed, System.StringComparison.Ordinal)) continue;
+
+                    property.stringValue = trimmed;
+                    dirty = true;
+                    Debug.Log("[P1-C] 修正 " + GetPath(anchor.transform) + " 的 " + fields[k] +
+                              "：\"" + raw + "\"  →  \"" + trimmed + "\"");
+                }
+
+                if (dirty)
+                {
+                    so.ApplyModifiedProperties();
+                    fixedCount++;
+                }
+            }
+
+            if (fixedCount > 0)
+            {
+                EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+                Debug.Log("[P1-C] 共修正 " + fixedCount + " 个锚点（检查 " + anchors.Length + " 个）。请 Ctrl+S 保存场景，" +
+                          "再执行菜单 ⑤ 复校。");
+            }
+            else
+            {
+                Debug.Log("[P1-C] 未发现带首尾空白的字段（检查 " + anchors.Length + " 个锚点）。");
+            }
         }
 
         // ================================================================ 工具

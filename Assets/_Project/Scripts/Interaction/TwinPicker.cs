@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using SchoolTwin.Twin;
 
 namespace SchoolTwin.Interaction
@@ -45,6 +46,12 @@ namespace SchoolTwin.Interaction
 
         private void Pick()
         {
+            // 指针压在 UI 上时不穿透到场景。
+            // P1-C 的信息面板/告警列表背景是 raycastTarget，如果不挡一下，
+            // 点面板会顺手把面板背后的三维物体选中，体验很怪。
+            EventSystem events = EventSystem.current;
+            if (events != null && events.IsPointerOverGameObject()) return;
+
             Camera cam = _camera != null ? _camera : Camera.main;
             if (cam == null) return;
 

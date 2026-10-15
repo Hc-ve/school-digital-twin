@@ -177,6 +177,32 @@ namespace SchoolTwin.Interaction
             return vp;
         }
 
+        /// <summary>
+        /// 平滑飞到目标附近并看向它 —— 供告警列表「点击定位」使用。
+        /// 刻意复用已有的 TransitionTo 协程，不引入第二套运动逻辑，
+        /// 这样缓动曲线、与手动操作的互斥（_transitioning）都自动一致。
+        /// </summary>
+        public void FocusOn(Transform target, float distance = 6f)
+        {
+            if (target == null) return;
+
+            distance = Mathf.Max(0.5f, distance);
+
+            // 从「相机 → 目标」的反方向退开一段距离，避免直接怼进物体内部
+            Vector3 direction = transform.position - target.position;
+            if (direction.sqrMagnitude < 0.0001f) direction = Vector3.forward;
+            direction = direction.normalized;
+
+            Viewpoint vp = new Viewpoint();
+            vp.Name = "定位：" + target.name;
+            vp.Anchor = null;
+            vp.Position = target.position + direction * distance + Vector3.up * (distance * 0.3f);
+            vp.Euler = Quaternion.LookRotation(target.position - vp.Position, Vector3.up).eulerAngles;
+
+            if (_transition != null) StopCoroutine(_transition);
+            _transition = StartCoroutine(TransitionTo(vp));
+        }
+
         private IEnumerator TransitionTo(Viewpoint vp)
         {
             if (vp == null) yield break;

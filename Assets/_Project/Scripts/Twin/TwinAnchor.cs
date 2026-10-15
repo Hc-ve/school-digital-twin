@@ -81,6 +81,16 @@ namespace SchoolTwin.Twin
             }
         }
 
+        /// <summary>距上一次收到数据的秒数；-1 表示至今没收到过任何数据。UI 用来显示「数据新鲜度」。</summary>
+        public float SecondsSinceLastSample
+        {
+            get
+            {
+                if (_lastSampleRealtime < 0f) return -1f;
+                return Time.realtimeSinceStartup - _lastSampleRealtime;
+            }
+        }
+
         public GameObject VisualTarget
         {
             get
@@ -184,6 +194,21 @@ namespace SchoolTwin.Twin
         public TwinStatus StatusOfWorst()
         {
             return _status;
+        }
+
+        /// <summary>
+        /// 取单个指标的状态。
+        /// 面板需要「按指标分别着色」（一个点位可能温度正常、CO₂ 告警），
+        /// 所以不能只暴露整体最差状态。这里把「数据陈旧」也计入。
+        /// </summary>
+        public TwinStatus StatusOf(string metric)
+        {
+            TwinValue value;
+            if (!_values.TryGetValue(metric, out value)) return TwinStatus.Unknown;
+
+            TwinStatus status = StatusOf(metric, value);
+            if (IsStale && status != TwinStatus.Offline) status = TwinStatus.Stale;
+            return status;
         }
 
         // ---------------------------------------------------------------- 内部
