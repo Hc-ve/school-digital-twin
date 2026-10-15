@@ -104,14 +104,37 @@ namespace SchoolTwin.UI
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
         private readonly List<TwinAlarmRow> _alarmRows = new List<TwinAlarmRow>(8);
         private readonly List<TwinMetricDefinition> _metricDefBuf = new List<TwinMetricDefinition>(6);
-        private readonly List<TwinAnchor> _alarmBuf = new List<TwinAnchor>(64);
+
+        /// <summary>
+        /// 告警展示缓冲。
+        ///
+        /// 【为什么不是「全部收集后排序」】P1-C 只有 5~6 个点位时怎么排都无所谓，
+        /// 但 P1-E 要压到 100/200/500 个点位，且每 0.25s 刷一次：
+        ///   · 全收集 → N 个元素；
+        ///   · 全排序 → N log N 次比较，每次比较都要重算状态（读 _values 字典）；
+        ///   · 而实际只需要前 _maxAlarmRows(8) 行。
+        /// 500 点位 @ 4Hz 下，这就是 500×9≈4500 次比较/秒 vs 下面「维持 top-8 插入」的
+        /// 500×8≈4000 次**简单比较**——差距不大，但关键是我们不再为「不显示的 492 行」排序，
+        /// 而且状态只算一次、结果直接带着走，省掉了排序期间的反复重算。
+        ///
+        /// 结构体 + 预分配 List：整个过程零 GC。
+        /// </summary>
+        private struct AlarmEntry
+        {
+            public TwinAnchor Anchor;
+            public TwinStatus Status;
+            public int Severity;
+        }
+
+        private readonly List<AlarmEntry> _alarmTop = new List<AlarmEntry>(16);
+        private int _alarmTotal;        // 异常点位的**总**数（不只是显示出来的）
+        private int _twinTotal;         // 场景注册的点位总数
+
         private readonly Dictionary<string, TwinMetricDefinition> _syntheticMetrics =
             new Dictionary<string, TwinMetricDefinition>(StringComparer.Ordinal);
 
         private readonly StringBuilder _sb = new StringBuilder(192);
         private readonly StringBuilder _sbAlarm = new StringBuilder(128);
-
-        private static readonly Comparison<TwinAnchor> s_alarmCompare = CompareAlarm;
 
         private TwinAnchor _selected;
         private float _nextValueRefresh;
@@ -662,47 +685,68 @@ namespace SchoolTwin.UI
             if (!_built) return;
 
             TwinRuntime runtime = TwinRuntime.Instance;
-            _alarmBuf.Clear();
+            _alarmTop.Clear();
+            _alarmTotal = 0;
+            _twinTotal = 0;
 
-            if (runtime != null)
+            int worstSeverity = -1;
+            TwinStatus worstStatus = TwinStatus.Unknown;
+
+            // 只维持「前 _maxAlarmRows 名」的有序小数组，其余只计数。
+            // 这样：① 不为不显示的行排序；② 每个点位的状态只算一次。
+            int capacity = Mathf.Max(1, _maxAlarmRows);
+
+            if (runtime != null && runtime.Registry != null)
             {
                 IReadOnlyList<TwinAnchor> all = runtime.Registry.All;
+                _twinTotal = all.Count;
+
                 for (int i = 0; i < all.Count; i++)
                 {
                     TwinAnchor anchor = all[i];
                     if (anchor == null) continue;
-                    if (TwinStatusPalette.NeedsAttention(StatusForList(anchor))) _alarmBuf.Add(anchor);
+
+                    TwinStatus status = CurrentStatus(anchor);
+                    if (!TwinStatusPalette.NeedsAttention(status)) continue;
+
+                    _alarmTotal++;
+
+                    int severity = TwinStatusPalette.Severity(status);
+                    if (severity > worstSeverity)
+                    {
+                        worstSeverity = severity;
+                        worstStatus = status;
+                    }
+
+                    InsertTopAlarm(anchor, status, severity, capacity);
                 }
             }
 
-            _alarmBuf.Sort(s_alarmCompare);
-
-            int shown = Mathf.Min(_alarmBuf.Count, Mathf.Max(1, _maxAlarmRows));
+            int shown = _alarmTop.Count;
 
             for (int i = 0; i < shown; i++)
             {
                 TwinAlarmRow row = EnsureAlarmRow(i);
                 row.gameObject.SetActive(true);
 
-                TwinAnchor anchor = _alarmBuf[i];
-                TwinStatus status = StatusForList(anchor);
-                Color color = TwinStatusPalette.Of(status);
+                AlarmEntry entry = _alarmTop[i];
+                Color color = TwinStatusPalette.Of(entry.Status);
 
-                row.Target = anchor;
+                row.Target = entry.Anchor;
                 row.SetBaseColor(new Color(color.r, color.g, color.b, 0.10f));
                 if (row.Dot != null) row.Dot.color = color;
                 if (row.Label != null) row.Label.color = TwinStatusPalette.TextPrimary;
 
                 _sbAlarm.Length = 0;
-                _sbAlarm.Append(TwinStatusPalette.Label(status)).Append("  ·  ")
-                        .Append(anchor.DisplayName).Append("   ")
-                        .Append(DescribeAlarm(anchor, status));
+                _sbAlarm.Append(TwinStatusPalette.Label(entry.Status)).Append("  ·  ")
+                        .Append(entry.Anchor.DisplayName).Append("   ")
+                        .Append(DescribeAlarm(entry.Anchor, entry.Status));
                 SetCached(row.Label, ref row.LastText, _sbAlarm.ToString());
             }
 
             for (int i = shown; i < _alarmRows.Count; i++) _alarmRows[i].gameObject.SetActive(false);
 
-            bool hasAlarm = shown > 0;
+            bool hasAlarm = _alarmTotal > 0;
 
             if (_alarmEmpty != null)
             {
@@ -712,30 +756,69 @@ namespace SchoolTwin.UI
 
             if (_alarmTitle != null)
             {
+                // 压测观察窗口：点位总数也要显示出来。
+                // P1-C 时 5 个点位，「(2)」就够了；P1-E 压到 500 个点位时，
+                // 若只显示「(37)」会让人以为是 37/37，看不出「37 / 500」的全局比例。
                 _sbAlarm.Length = 0;
                 _sbAlarm.Append("告警与异常");
-                if (hasAlarm) _sbAlarm.Append("  (").Append(_alarmBuf.Count).Append(')');
+                if (hasAlarm) _sbAlarm.Append("  (").Append(_alarmTotal).Append(')');
+                if (_twinTotal > 0) _sbAlarm.Append("  ·  共 ").Append(_twinTotal).Append(" 点位");
                 SetCached(_alarmTitle, ref _cachedAlarmTitle, _sbAlarm.ToString());
 
-                if (hasAlarm)
-                {
-                    TwinStatus worst = TwinStatus.Unknown;
-                    for (int i = 0; i < _alarmBuf.Count; i++)
-                    {
-                        TwinStatus s = StatusForList(_alarmBuf[i]);
-                        if (TwinStatusPalette.Severity(s) > TwinStatusPalette.Severity(worst)) worst = s;
-                    }
-                    _alarmTitle.color = TwinStatusPalette.Of(worst);
-                }
-                else
-                {
-                    _alarmTitle.color = TwinStatusPalette.TextSecondary;
-                }
+                _alarmTitle.color = hasAlarm
+                    ? TwinStatusPalette.Of(worstStatus)
+                    : TwinStatusPalette.TextSecondary;
             }
 
             // 行数或溢出数量变化都要重排；这里直接每次都重排 —— 4Hz、单个 RectTransform，
             // 开销可忽略，换来的好处是逻辑不用记状态。
             PlaceAlarmPanel(shown);
+        }
+
+        /// <summary>
+        /// 把一条告警插入「前 capacity 名」的有序数组。
+        ///
+        /// 小数组插入排序：容量固定为 _maxAlarmRows（默认 8），
+        /// 所以最坏情况 8 次比较，远优于对全部异常点位排序。
+        /// 排序键：严重度降序 → TwinId 升序（保证同一严重度下顺序稳定，界面不闪）。
+        /// </summary>
+        private void InsertTopAlarm(TwinAnchor anchor, TwinStatus status, int severity, int capacity)
+        {
+            int insertAt = _alarmTop.Count;
+
+            for (int i = 0; i < _alarmTop.Count; i++)
+            {
+                AlarmEntry e = _alarmTop[i];
+                if (severity > e.Severity)
+                {
+                    insertAt = i;
+                    break;
+                }
+                if (severity == e.Severity)
+                {
+                    string a = anchor != null ? anchor.TwinId : "";
+                    string b = e.Anchor != null ? e.Anchor.TwinId : "";
+                    if (string.CompareOrdinal(a, b) < 0)
+                    {
+                        insertAt = i;
+                        break;
+                    }
+                }
+            }
+
+            // 已经填满且排不进去，直接丢弃（这类点位已经在 _alarmTotal 里计过数了）
+            if (insertAt >= capacity) return;
+
+            AlarmEntry entry;
+            entry.Anchor = anchor;
+            entry.Status = status;
+            entry.Severity = severity;
+
+            if (insertAt >= _alarmTop.Count) _alarmTop.Add(entry);
+            else _alarmTop.Insert(insertAt, entry);
+
+            // 超出容量则裁掉末尾
+            if (_alarmTop.Count > capacity) _alarmTop.RemoveAt(_alarmTop.Count - 1);
         }
 
         private TwinAlarmRow EnsureAlarmRow(int index)
@@ -774,7 +857,7 @@ namespace SchoolTwin.UI
         {
             if (_alarmPanel == null) return;
 
-            bool overflow = rows > 0 && _alarmBuf.Count > rows;
+            bool overflow = rows > 0 && _alarmTotal > rows;
             float height;
             if (rows <= 0)
             {
@@ -797,7 +880,7 @@ namespace SchoolTwin.UI
                     float y = AlarmRowsTop + rows * AlarmRowHeight + (rows - 1) * AlarmRowGap + 2f;
                     TwinUIFactory.Place(_alarmMore.rectTransform, Pad, y, _cardWidth - Pad * 2f, 14f);
                     _sbAlarm.Length = 0;
-                    _sbAlarm.Append("… 另有 ").Append(_alarmBuf.Count - rows).Append(" 个异常点位");
+                    _sbAlarm.Append("… 另有 ").Append(_alarmTotal - rows).Append(" 个异常点位");
                     SetCached(_alarmMore, ref _cachedAlarmMore, _sbAlarm.ToString());
                 }
             }
@@ -877,19 +960,6 @@ namespace SchoolTwin.UI
             return status;
         }
 
-        private static TwinStatus StatusForList(TwinAnchor anchor)
-        {
-            return CurrentStatus(anchor);
-        }
-
-        private static int CompareAlarm(TwinAnchor a, TwinAnchor b)
-        {
-            int rankA = TwinStatusPalette.Severity(StatusForList(a));
-            int rankB = TwinStatusPalette.Severity(StatusForList(b));
-            if (rankA != rankB) return rankB.CompareTo(rankA);
-            return string.CompareOrdinal(a != null ? a.TwinId : "", b != null ? b.TwinId : "");
-        }
-
         private static DataQuality WorstQuality(TwinAnchor anchor)
         {
             DataQuality worst = DataQuality.Good;
@@ -928,7 +998,7 @@ namespace SchoolTwin.UI
         {
             Debug.Log("[TwinUI] 可见=" + _visible + "  选中=" + (_selected != null ? _selected.TwinId : "(无)") +
                       "  指标行=" + _metricRows.Count + "  告警行=" + _alarmRows.Count +
-                      "  告警数=" + _alarmBuf.Count);
+                      "  异常点位=" + _alarmTotal + "/" + _twinTotal);
         }
     }
 }
