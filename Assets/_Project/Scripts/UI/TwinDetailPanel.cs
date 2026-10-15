@@ -43,6 +43,13 @@ namespace SchoolTwin.UI
         [SerializeField] private bool _visible = true;
         [Tooltip("面板开关快捷键（注意：数字键 1-9 已被预设机位占用，F3 被调试 HUD 占用）")]
         [SerializeField] private KeyCode _toggleKey = KeyCode.F4;
+
+        [Tooltip("整体缩放。1 = 原始大小。字体看不清就调大，例如 1.3 / 1.5。\n" +
+                 "缩放会同步放大字号、行高、卡片宽度与内边距，不会出现「字大了框没大」的错位。")]
+        [Range(0.75f, 2f)]
+        [SerializeField] private float _uiScale = 1.35f;
+
+        [Tooltip("卡片宽度（未缩放）。实际宽度 = 该值 × 整体缩放")]
         [SerializeField] private float _cardWidth = 384f;
         [SerializeField] private float _screenMargin = 20f;
         [Tooltip("留空则自动向系统申请含中文字形的字体（微软雅黑等）")]
@@ -62,24 +69,137 @@ namespace SchoolTwin.UI
         [Header("告警列表")]
         [SerializeField] private int _maxAlarmRows = 8;
 
-        // ================================================================ 布局常量
+        // ================================================================ 基础尺寸（未缩放）
+        //
+        // 【为什么要有一个缩放因子】
+        // 面板尺寸由「字号 + 行高 + Y 坐标」三组数字共同决定，它们必须成比例。
+        // 只把字号从 19 改成 26，文字会溢出到下一行、量程条会被压住 —— 因为坐标没动。
+        // 所以这里把所有尺寸都定义成「基准值」，再统一乘 _uiScale，
+        // 改一个滑块就能整体放大而不跑版。
 
-        private const float Pad = 16f;
-        private const float TitleY = 14f;
-        private const float SubtitleY = 44f;
-        private const float Divider1Y = 72f;
-        private const float MetricsTop = 82f;
-        private const float RowHeight = 52f;
-        private const float RowGap = 6f;
-        private const float BarY = 26f;
-        private const float FooterHeight = 16f;
-        private const float AlarmTitleY = 16f;
-        private const float AlarmRowsTop = 44f;
-        private const float AlarmRowHeight = 26f;
-        private const float AlarmRowGap = 3f;
-        private const float PanelGap = 12f;
+        private const float BaseCardWidth = 384f;
+        private const float BaseScreenMargin = 20f;
+        private const float BasePad = 16f;
+        private const float BaseTitleY = 14f;
+        private const float BaseSubtitleY = 44f;
+        private const float BaseDivider1Y = 72f;
+        private const float BaseMetricsTop = 82f;
+        private const float BaseRowHeight = 52f;
+        private const float BaseRowGap = 6f;
+        private const float BaseBarY = 26f;
+        private const float BaseBarHeight = 8f;
+        private const float BaseFooterHeight = 16f;
+        private const float BaseAlarmTitleY = 16f;
+        private const float BaseAlarmRowsTop = 44f;
+        private const float BaseAlarmRowHeight = 26f;
+        private const float BaseAlarmRowGap = 3f;
+        private const float BasePanelGap = 12f;
+        private const float BaseChipWidth = 76f;
+        private const float BaseChipHeight = 24f;
+
+        // ---- 字号（未缩放）----
+        private const int FsTitle = 19;
+        private const int FsChip = 12;
+        private const int FsSubtitle = 12;
+        private const int FsHint = 13;
+        private const int FsFooter = 11;
+        private const int FsAlarmTitle = 14;
+        private const int FsAlarmEmpty = 12;
+        private const int FsAlarmMore = 12;
+        private const int FsMetricName = 13;
+        private const int FsMetricValue = 19;
+        private const int FsMetricHint = 11;
+        private const int FsAlarmRow = 12;
+
         private const int MaxMetricRows = 6;
         private const int MaxBands = 5;
+
+        // ================================================================ 缩放后的尺寸（构造时算一次）
+        //
+        // 只算一次而不是每次排版都乘：布局函数在数值刷新路径之外也会被调用，
+        // 反复做乘法除了浪费没有收益。OnValidate 改了 _uiScale 会重建界面。
+
+        private float _scaledCardWidth;
+        private float _scaledScreenMargin;
+        private float _scaledPad;
+        private float _scaledTitleY;
+        private float _scaledSubtitleY;
+        private float _scaledDivider1Y;
+        private float _scaledMetricsTop;
+        private float _scaledRowHeight;
+        private float _scaledRowGap;
+        private float _scaledBarY;
+        private float _scaledFooterHeight;
+        private float _scaledAlarmTitleY;
+        private float _scaledAlarmRowsTop;
+        private float _scaledAlarmRowHeight;
+        private float _scaledAlarmRowGap;
+        private float _scaledBarHeight;
+        private float _scaledPanelGap;
+        private float _scaledChipWidth;
+        private float _scaledChipHeight;
+        /// <summary>标题右侧要让出的宽度（状态胶囊 + 间隙），供 Truncate 计算可用字数。</summary>
+        private float _scaledChipSpace;
+
+        private int _scaledFsTitle;
+        private int _scaledFsChip;
+        private int _scaledFsSubtitle;
+        private int _scaledFsHint;
+        private int _scaledFsFooter;
+        private int _scaledFsAlarmTitle;
+        private int _scaledFsAlarmEmpty;
+        private int _scaledFsAlarmMore;
+        private int _scaledFsMetricName;
+        private int _scaledFsMetricValue;
+        private int _scaledFsMetricHint;
+        private int _scaledFsAlarmRow;
+
+        /// <summary>把基准尺寸按 _uiScale 展开成实际尺寸。BuildUI 之前必须调用。</summary>
+        private void ApplyScale()
+        {
+            float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+
+            _scaledCardWidth = _cardWidth > 0f ? _cardWidth * s : BaseCardWidth * s;
+            _scaledScreenMargin = _screenMargin > 0f ? _screenMargin * s : BaseScreenMargin * s;
+            _scaledPad = BasePad * s;
+            _scaledTitleY = BaseTitleY * s;
+            _scaledSubtitleY = BaseSubtitleY * s;
+            _scaledDivider1Y = BaseDivider1Y * s;
+            _scaledMetricsTop = BaseMetricsTop * s;
+            _scaledRowHeight = BaseRowHeight * s;
+            _scaledRowGap = BaseRowGap * s;
+            _scaledBarY = BaseBarY * s;
+            _scaledFooterHeight = BaseFooterHeight * s;
+            _scaledAlarmTitleY = BaseAlarmTitleY * s;
+            _scaledAlarmRowsTop = BaseAlarmRowsTop * s;
+            _scaledAlarmRowHeight = BaseAlarmRowHeight * s;
+            _scaledAlarmRowGap = BaseAlarmRowGap * s;
+            _scaledBarHeight = BaseBarHeight * s;
+            _scaledPanelGap = BasePanelGap * s;
+            _scaledChipWidth = BaseChipWidth * s;
+            _scaledChipHeight = BaseChipHeight * s;
+            _scaledChipSpace = _scaledChipWidth + 8f * s;
+
+            _scaledFsTitle = ScaleFont(FsTitle, s);
+            _scaledFsChip = ScaleFont(FsChip, s);
+            _scaledFsSubtitle = ScaleFont(FsSubtitle, s);
+            _scaledFsHint = ScaleFont(FsHint, s);
+            _scaledFsFooter = ScaleFont(FsFooter, s);
+            _scaledFsAlarmTitle = ScaleFont(FsAlarmTitle, s);
+            _scaledFsAlarmEmpty = ScaleFont(FsAlarmEmpty, s);
+            _scaledFsAlarmMore = ScaleFont(FsAlarmMore, s);
+            _scaledFsMetricName = ScaleFont(FsMetricName, s);
+            _scaledFsMetricValue = ScaleFont(FsMetricValue, s);
+            _scaledFsMetricHint = ScaleFont(FsMetricHint, s);
+            _scaledFsAlarmRow = ScaleFont(FsAlarmRow, s);
+        }
+
+        /// <summary>字号缩放：取整（UGUI 的 fontSize 是 int），并保证不小于 8 免得看不清。</summary>
+        private static int ScaleFont(int baseSize, float scale)
+        {
+            return Mathf.Max(8, Mathf.RoundToInt(baseSize * scale));
+        }
+
 
         // ================================================================ 运行时引用
 
@@ -196,6 +316,99 @@ namespace SchoolTwin.UI
             SetVisible(_visible);
         }
 
+#if UNITY_EDITOR
+        /// <summary>
+        /// 编辑器里拖动「整体缩放」滑块后立刻重建界面，不用退出播放模式再看效果。
+        ///
+        /// 【为什么只在播放模式重建】编辑模式下面板压根没构建（_built 是 false），
+        /// 此时销毁再重建没有意义，反而会在场景里留下一堆没用的 UI 节点。
+        /// 另外 OnValidate 在脚本重编译、资源导入时也会被 Unity 调用，
+        /// 所以必须用 Application.isPlaying 挡一道，避免误触发。
+        /// </summary>
+        private void OnValidate()
+        {
+            if (!Application.isPlaying) return;
+            if (!_built) return;              // 还没构建过，等 Awake 自己来
+            if (_uiRoot == null) return;
+
+            // 延迟到下一帧：OnValidate 触发时 Unity 仍在序列化流程中，
+            // 立刻 Destroy 会打出「Destroying object during serialization」告警。
+            UnityEditor.EditorApplication.delayCall += RebuildAfterScaleChange;
+        }
+
+        private void RebuildAfterScaleChange()
+        {
+            // delayCall 是全局回调，可能在本对象已被销毁后才执行
+            if (this == null) return;
+            if (!Application.isPlaying) return;
+            if (!_built || _uiRoot == null) return;
+
+            TeardownUI();
+            BuildUI();
+            ApplySelection();
+            RefreshAlarms();
+            SetVisible(_visible);
+        }
+#endif
+
+        /// <summary>
+        /// 拆掉上一次构建出来的界面，并把所有运行时引用清空。
+        /// 编辑器的 OnValidate 重建与运行时 RebuildUI 共用这一段，所以不能放进 #if UNITY_EDITOR。
+        ///
+        /// 【为什么要逐个清引用】Destroy 只销毁 GameObject，C# 侧的字段仍然指向
+        /// 已销毁对象（Unity 的「假 null」）。这里若不清，重建后 _metricRows / _alarmRows
+        /// 里会残留旧的（已销毁的）行对象，EnsureMetricRow 的 while 循环会误判
+        /// 「已经有了」而不再创建新行 —— 表现就是放大后指标行集体消失。
+        /// </summary>
+        private void TeardownUI()
+        {
+            if (_uiRoot != null)
+            {
+                for (int i = _uiRoot.childCount - 1; i >= 0; i--)
+                {
+                    Transform child = _uiRoot.GetChild(i);
+                    if (child == null) continue;
+                    // 运行时用 Destroy（延迟到帧末，安全）；只有编辑器编辑模式下
+                    // 才会出现「非播放」状态，此时必须用 DestroyImmediate，
+                    // 否则新节点会和待销毁的旧节点并存一帧。
+                    if (Application.isPlaying) Destroy(child.gameObject);
+#if UNITY_EDITOR
+                    else DestroyImmediate(child.gameObject);
+#endif
+                }
+            }
+
+            _card = null;
+            _cardGroup = null;
+            _cardBg = null;
+            _chip = null;
+            _chipText = null;
+            _title = null;
+            _subtitle = null;
+            _hint = null;
+            _divider1 = null;
+            _divider2 = null;
+            _footer = null;
+            _alarmPanel = null;
+            _alarmTitle = null;
+            _alarmEmpty = null;
+            _alarmMore = null;
+
+            _metricRows.Clear();
+            _alarmRows.Clear();
+
+            // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
+            // 结果是新 Text 一片空白。
+            _cachedTitle = null;
+            _cachedSubtitle = null;
+            _cachedChip = null;
+            _cachedHint = null;
+            _cachedFooter = null;
+
+            _built = false;
+            _cardAlpha = 0f;
+        }
+
         private void Update()
         {
             if (Input.GetKeyDown(_toggleKey)) SetVisible(!_visible);
@@ -294,9 +507,22 @@ namespace SchoolTwin.UI
 
         // ================================================================ 构建界面
 
+        /// <summary>
+        /// 外部（菜单、自定义脚本）要求重建界面时用这个。
+        /// 会先拆干净再重建 —— 直接调 BuildUI 会被 _built 挡掉，什么都不发生。
+        /// </summary>
         public void RebuildUI()
         {
-            BuildUI();
+            if (!_built)
+            {
+                // 还没构建过（Awake 尚未跑或运行中刚挂上）：直接构建即可
+                BuildUI();
+            }
+            else
+            {
+                TeardownUI();
+                BuildUI();
+            }
             ApplySelection();
             RefreshAlarms();
         }
@@ -307,63 +533,75 @@ namespace SchoolTwin.UI
             if (_built) return;
             _built = true;
 
+            ApplyScale();   // 尺寸必须先展开，后面所有 Place/Label 都依赖它
+
             // ---------------- 详情卡片 ----------------
             _card = (RectTransform)TwinUIFactory.Node("DetailCard", _uiRoot).transform;
-            _cardBg = TwinUIFactory.Rounded(_card, "Bg", 14f,
+            _cardBg = TwinUIFactory.Rounded(_card, "Bg", 14f * Mathf.Clamp(_uiScale, 0.5f, 3f),
                 TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
                 TwinStatusPalette.PanelBorder, 1f, true);
             TwinUIFactory.Stretch(_cardBg.rectTransform);
             _cardGroup = _card.gameObject.AddComponent<CanvasGroup>();
 
-            _title = TwinUIFactory.Label(_card, "Title", 19, TextAnchor.UpperLeft,
+            _title = TwinUIFactory.Label(_card, "Title", _scaledFsTitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextPrimary, FontStyle.Bold);
-            TwinUIFactory.Place(_title.rectTransform, Pad, TitleY, _cardWidth - Pad * 2f - 84f, 26f);
+            TwinUIFactory.Place(_title.rectTransform, _scaledPad, _scaledTitleY,
+                _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace, _scaledTitleY + _scaledFsTitle + 6f);
 
-            _chip = TwinUIFactory.Rounded(_card, "StatusChip", 12f,
+            _chip = TwinUIFactory.Rounded(_card, "StatusChip", 12f * Mathf.Clamp(_uiScale, 0.5f, 3f),
                 TwinStatusPalette.Unknown, TwinStatusPalette.Unknown,
                 TwinStatusPalette.Unknown, 1f, false);
-            TwinUIFactory.Place(_chip.rectTransform, _cardWidth - Pad - 76f, TitleY + 1f, 76f, 24f);
+            TwinUIFactory.Place(_chip.rectTransform, _scaledCardWidth - _scaledPad - _scaledChipWidth,
+                _scaledTitleY + 1f, _scaledChipWidth, _scaledChipHeight);
 
-            _chipText = TwinUIFactory.Label(_chip.transform, "ChipText", 12, TextAnchor.MiddleCenter,
+            _chipText = TwinUIFactory.Label(_chip.transform, "ChipText", _scaledFsChip, TextAnchor.MiddleCenter,
                 TwinStatusPalette.TextPrimary, FontStyle.Bold);
             TwinUIFactory.Stretch(_chipText.rectTransform);
 
-            _subtitle = TwinUIFactory.Label(_card, "Subtitle", 12, TextAnchor.UpperLeft,
+            _subtitle = TwinUIFactory.Label(_card, "Subtitle", _scaledFsSubtitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextSecondary);
-            TwinUIFactory.Place(_subtitle.rectTransform, Pad, SubtitleY, _cardWidth - Pad * 2f, 18f);
+            TwinUIFactory.Place(_subtitle.rectTransform, _scaledPad, _scaledSubtitleY,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFsSubtitle + 7f);
 
             _divider1 = TwinUIFactory.Block(_card, "Divider1", TwinStatusPalette.Divider, false);
-            TwinUIFactory.Place(_divider1.rectTransform, Pad, Divider1Y, _cardWidth - Pad * 2f, 1f);
+            TwinUIFactory.Place(_divider1.rectTransform, _scaledPad, _scaledDivider1Y,
+                _scaledCardWidth - _scaledPad * 2f, 1f);
 
-            _hint = TwinUIFactory.Label(_card, "Hint", 13, TextAnchor.UpperLeft,
+            _hint = TwinUIFactory.Label(_card, "Hint", _scaledFsHint, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted, FontStyle.Normal, HorizontalWrapMode.Wrap);
-            TwinUIFactory.Place(_hint.rectTransform, Pad, MetricsTop, _cardWidth - Pad * 2f, 52f);
+            TwinUIFactory.Place(_hint.rectTransform, _scaledPad, _scaledMetricsTop,
+                _scaledCardWidth - _scaledPad * 2f, _scaledRowHeight * 2f);
 
             _divider2 = TwinUIFactory.Block(_card, "Divider2", TwinStatusPalette.Divider, false);
-            TwinUIFactory.Place(_divider2.rectTransform, Pad, 200f, _cardWidth - Pad * 2f, 1f);
+            TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, 0f,
+                _scaledCardWidth - _scaledPad * 2f, 1f);
 
-            _footer = TwinUIFactory.Label(_card, "Footer", 11, TextAnchor.UpperLeft,
+            _footer = TwinUIFactory.Label(_card, "Footer", _scaledFsFooter, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_footer.rectTransform, Pad, 210f, _cardWidth - Pad * 2f, FooterHeight);
+            TwinUIFactory.Place(_footer.rectTransform, _scaledPad, 0f,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFooterHeight);
 
             // ---------------- 告警面板 ----------------
             _alarmPanel = (RectTransform)TwinUIFactory.Node("AlarmPanel", _uiRoot).transform;
-            TwinRoundedRect alarmBg = TwinUIFactory.Rounded(_alarmPanel, "Bg", 14f,
+            TwinRoundedRect alarmBg = TwinUIFactory.Rounded(_alarmPanel, "Bg", 14f * Mathf.Clamp(_uiScale, 0.5f, 3f),
                 TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
                 TwinStatusPalette.PanelBorder, 1f, true);
             TwinUIFactory.Stretch(alarmBg.rectTransform);
 
-            _alarmTitle = TwinUIFactory.Label(_alarmPanel, "AlarmTitle", 14, TextAnchor.UpperLeft,
+            _alarmTitle = TwinUIFactory.Label(_alarmPanel, "AlarmTitle", _scaledFsAlarmTitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextSecondary, FontStyle.Bold);
-            TwinUIFactory.Place(_alarmTitle.rectTransform, Pad, AlarmTitleY, _cardWidth - Pad * 2f, 22f);
+            TwinUIFactory.Place(_alarmTitle.rectTransform, _scaledPad, _scaledAlarmTitleY,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmTitle + 8f);
 
-            _alarmEmpty = TwinUIFactory.Label(_alarmPanel, "AlarmEmpty", 12, TextAnchor.UpperLeft,
+            _alarmEmpty = TwinUIFactory.Label(_alarmPanel, "AlarmEmpty", _scaledFsAlarmEmpty, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_alarmEmpty.rectTransform, Pad, AlarmRowsTop, _cardWidth - Pad * 2f, 20f);
+            TwinUIFactory.Place(_alarmEmpty.rectTransform, _scaledPad, _scaledAlarmRowsTop,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmEmpty + 8f);
 
-            _alarmMore = TwinUIFactory.Label(_alarmPanel, "AlarmMore", 11, TextAnchor.UpperLeft,
+            _alarmMore = TwinUIFactory.Label(_alarmPanel, "AlarmMore", _scaledFsAlarmMore, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_alarmMore.rectTransform, Pad, AlarmRowsTop, _cardWidth - Pad * 2f, 14f);
+            TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, _scaledAlarmRowsTop,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmMore + 6f);
             _alarmMore.gameObject.SetActive(false);
         }
 
@@ -393,7 +631,10 @@ namespace SchoolTwin.UI
             }
             else
             {
-                SetCached(_title, ref _cachedTitle, TwinUIFactory.Truncate(_selected.DisplayName, 19, _cardWidth - Pad * 2f - 84f));
+                // 截断宽度与字号都用缩放后的值，否则放大后标题会溢出到状态胶囊上
+                SetCached(_title, ref _cachedTitle, TwinUIFactory.Truncate(
+                    _selected.DisplayName, _scaledFsTitle,
+                    _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace));
                 SetCached(_subtitle, ref _cachedSubtitle,
                     _selected.TwinId + "   ·   " + _selected.Zone + " / " + _selected.Category);
 
@@ -424,15 +665,18 @@ namespace SchoolTwin.UI
             }
             // ---- 卡片高度与底部元素 ----
             int slots = Mathf.Max(1, shown);
-            float metricsBlock = slots * RowHeight + (slots - 1) * RowGap;
-            float divider2Y = MetricsTop + metricsBlock + 8f;
-            float footerY = divider2Y + 1f + 6f;
-            float cardHeight = footerY + FooterHeight + 14f;
+            float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
+            float divider2Y = _scaledMetricsTop + metricsBlock + 8f * Mathf.Clamp(_uiScale, 0.5f, 3f);
+            float footerY = divider2Y + 1f + 6f * Mathf.Clamp(_uiScale, 0.5f, 3f);
+            float cardHeight = footerY + _scaledFooterHeight + 14f * Mathf.Clamp(_uiScale, 0.5f, 3f);
 
-            TwinUIFactory.Place(_divider2.rectTransform, Pad, divider2Y, _cardWidth - Pad * 2f, 1f);
-            TwinUIFactory.Place(_footer.rectTransform, Pad, footerY, _cardWidth - Pad * 2f, FooterHeight);
+            TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, divider2Y,
+                _scaledCardWidth - _scaledPad * 2f, 1f);
+            TwinUIFactory.Place(_footer.rectTransform, _scaledPad, footerY,
+                _scaledCardWidth - _scaledPad * 2f, _scaledFooterHeight);
 
-            TwinUIFactory.AnchorTopRight(_card, _screenMargin, _screenMargin, _cardWidth, cardHeight);
+            TwinUIFactory.AnchorTopRight(_card, _scaledScreenMargin, _scaledScreenMargin,
+                _scaledCardWidth, cardHeight);
         }
 
         private List<TwinMetricDefinition> CollectMetrics(TwinAnchor anchor, List<TwinMetricDefinition> buffer)
@@ -491,41 +735,43 @@ namespace SchoolTwin.UI
             {
                 int i = _metricRows.Count;
                 MetricRow row = new MetricRow();
-                float width = _cardWidth - Pad * 2f;
-                float top = MetricsTop + i * (RowHeight + RowGap);
+                float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+                float width = _scaledCardWidth - _scaledPad * 2f;
+                float top = _scaledMetricsTop + i * (_scaledRowHeight + _scaledRowGap);
 
                 GameObject go = TwinUIFactory.Node("Metric" + i, _card);
                 row.Root = (RectTransform)go.transform;
-                TwinUIFactory.Place(row.Root, Pad, top, width, RowHeight);
+                TwinUIFactory.Place(row.Root, _scaledPad, top, width, _scaledRowHeight);
 
                 // 先建量程条，后建文字 —— UGUI 里后建的兄弟节点渲染在上层，
                 // 这样文字永远不会被量程游标盖住。
                 row.BarWidth = width;
 
+                float barH = _scaledBarHeight;
                 row.Track = TwinUIFactory.Block(go.transform, "Track", TwinStatusPalette.Track, false);
-                TwinUIFactory.Place(row.Track.rectTransform, 0f, BarY, width, 8f);
+                TwinUIFactory.Place(row.Track.rectTransform, 0f, _scaledBarY, width, barH);
 
                 row.Bands = new Image[MaxBands];
                 for (int b = 0; b < MaxBands; b++)
                 {
                     row.Bands[b] = TwinUIFactory.Block(go.transform, "Band" + b, TwinStatusPalette.Transparent, false);
-                    TwinUIFactory.Place(row.Bands[b].rectTransform, 0f, BarY, 0f, 8f);
+                    TwinUIFactory.Place(row.Bands[b].rectTransform, 0f, _scaledBarY, 0f, barH);
                 }
 
                 row.Marker = TwinUIFactory.Block(go.transform, "Marker", TwinStatusPalette.TextPrimary, false);
-                TwinUIFactory.Place(row.Marker.rectTransform, 0f, BarY - 3f, 3f, 14f);
+                TwinUIFactory.Place(row.Marker.rectTransform, 0f, _scaledBarY - 3f * s, 3f * s, 14f * s);
 
-                row.Name = TwinUIFactory.Label(go.transform, "Name", 13, TextAnchor.UpperLeft,
+                row.Name = TwinUIFactory.Label(go.transform, "Name", _scaledFsMetricName, TextAnchor.UpperLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(row.Name.rectTransform, 0f, 1f, width * 0.5f, 20f);
+                TwinUIFactory.Place(row.Name.rectTransform, 0f, 1f, width * 0.62f, _scaledFsMetricName + 9f);
 
-                row.Value = TwinUIFactory.Label(go.transform, "Value", 19, TextAnchor.UpperRight,
+                row.Value = TwinUIFactory.Label(go.transform, "Value", _scaledFsMetricValue, TextAnchor.UpperRight,
                     TwinStatusPalette.TextPrimary, FontStyle.Bold);
-                TwinUIFactory.Place(row.Value.rectTransform, 0f, 0f, width, 25f);
+                TwinUIFactory.Place(row.Value.rectTransform, 0f, 0f, width, _scaledFsMetricValue + 8f);
 
-                row.Hint = TwinUIFactory.Label(go.transform, "Hint", 11, TextAnchor.UpperLeft,
+                row.Hint = TwinUIFactory.Label(go.transform, "Hint", _scaledFsMetricHint, TextAnchor.UpperLeft,
                     TwinStatusPalette.TextMuted);
-                TwinUIFactory.Place(row.Hint.rectTransform, 0f, BarY + 12f, width, 14f);
+                TwinUIFactory.Place(row.Hint.rectTransform, 0f, _scaledBarY + 12f * s, width, _scaledFsMetricHint + 5f);
 
                 _metricRows.Add(row);
             }
@@ -593,7 +839,7 @@ namespace SchoolTwin.UI
             Image band = row.Bands[slot];
             band.gameObject.SetActive(true);
             band.color = TwinStatusPalette.Of(status, 0.38f);
-            TwinUIFactory.Place(band.rectTransform, x, BarY, w, 8f);
+            TwinUIFactory.Place(band.rectTransform, x, _scaledBarY, w, BarHeight);
             return 1;
         }
 
@@ -627,7 +873,9 @@ namespace SchoolTwin.UI
 
                 // 量程游标
                 float t = row.Max > row.Min ? Mathf.Clamp01((value.Value - row.Min) / (row.Max - row.Min)) : 0.5f;
-                row.Marker.rectTransform.anchoredPosition = new Vector2(t * row.BarWidth - 1.5f, -(BarY - 3f));
+                row.Marker.rectTransform.anchoredPosition =
+                    new Vector2(t * row.BarWidth - 1.5f * Mathf.Clamp(_uiScale, 0.5f, 3f),
+                                -(_scaledBarY - 3f * Mathf.Clamp(_uiScale, 0.5f, 3f)));
                 row.Marker.color = color;
 
                 _sb.Length = 0;
@@ -826,22 +1074,26 @@ namespace SchoolTwin.UI
             while (_alarmRows.Count <= index)
             {
                 int i = _alarmRows.Count;
-                float width = _cardWidth - Pad * 2f;
+                float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+                float width = _scaledCardWidth - _scaledPad * 2f;
 
                 GameObject go = TwinUIFactory.Node("AlarmRow" + i, _alarmPanel);
-                TwinUIFactory.Place((RectTransform)go.transform, Pad,
-                    AlarmRowsTop + i * (AlarmRowHeight + AlarmRowGap), width, AlarmRowHeight);
+                TwinUIFactory.Place((RectTransform)go.transform, _scaledPad,
+                    _scaledAlarmRowsTop + i * (_scaledAlarmRowHeight + _scaledAlarmRowGap),
+                    width, _scaledAlarmRowHeight);
 
                 // 行背景必须是 raycastTarget，否则收不到点击
                 Image bg = TwinUIFactory.Block(go.transform, "Bg", TwinStatusPalette.Transparent, true);
                 TwinUIFactory.Stretch(bg.rectTransform);
 
+                float dotSize = 8f * s;
                 Image dot = TwinUIFactory.Block(go.transform, "Dot", TwinStatusPalette.Unknown, false);
-                TwinUIFactory.Place(dot.rectTransform, 8f, 9f, 8f, 8f);
+                TwinUIFactory.Place(dot.rectTransform, 8f * s, (_scaledAlarmRowHeight - dotSize) * 0.5f,
+                    dotSize, dotSize);
 
-                Text label = TwinUIFactory.Label(go.transform, "Label", 12, TextAnchor.MiddleLeft,
+                Text label = TwinUIFactory.Label(go.transform, "Label", _scaledFsAlarmRow, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(label.rectTransform, 24f, 0f, width - 32f, AlarmRowHeight);
+                TwinUIFactory.Place(label.rectTransform, 24f * s, 0f, width - 32f * s, _scaledAlarmRowHeight);
 
                 TwinAlarmRow row = go.AddComponent<TwinAlarmRow>();
                 row.Owner = this;
@@ -857,28 +1109,32 @@ namespace SchoolTwin.UI
         {
             if (_alarmPanel == null) return;
 
+            float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
             bool overflow = rows > 0 && _alarmTotal > rows;
             float height;
             if (rows <= 0)
             {
-                height = AlarmRowsTop + 22f + 14f;
+                height = _scaledAlarmRowsTop + _scaledFsAlarmEmpty + 8f + 14f * s;
             }
             else
             {
-                height = AlarmRowsTop + rows * AlarmRowHeight + (rows - 1) * AlarmRowGap + 14f;
-                if (overflow) height += 16f;
+                height = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
+                         + (rows - 1) * _scaledAlarmRowGap + 14f * s;
+                if (overflow) height += _scaledFsAlarmMore + 8f;
             }
 
-            float top = _screenMargin + (_card != null ? _card.sizeDelta.y : 0f) + PanelGap;
-            TwinUIFactory.AnchorTopRight(_alarmPanel, _screenMargin, top, _cardWidth, height);
+            float top = _scaledScreenMargin + (_card != null ? _card.sizeDelta.y : 0f) + _scaledPanelGap;
+            TwinUIFactory.AnchorTopRight(_alarmPanel, _scaledScreenMargin, top, _scaledCardWidth, height);
 
             if (_alarmMore != null)
             {
                 _alarmMore.gameObject.SetActive(overflow);
                 if (overflow)
                 {
-                    float y = AlarmRowsTop + rows * AlarmRowHeight + (rows - 1) * AlarmRowGap + 2f;
-                    TwinUIFactory.Place(_alarmMore.rectTransform, Pad, y, _cardWidth - Pad * 2f, 14f);
+                    float y = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
+                              + (rows - 1) * _scaledAlarmRowGap + 2f;
+                    TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, y,
+                        _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmMore + 6f);
                     _sbAlarm.Length = 0;
                     _sbAlarm.Append("… 另有 ").Append(_alarmTotal - rows).Append(" 个异常点位");
                     SetCached(_alarmMore, ref _cachedAlarmMore, _sbAlarm.ToString());
