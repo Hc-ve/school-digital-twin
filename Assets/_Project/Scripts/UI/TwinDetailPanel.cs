@@ -44,21 +44,12 @@ namespace SchoolTwin.UI
         [Tooltip("面板开关快捷键（注意：数字键 1-9 已被预设机位占用，F3 被调试 HUD 占用）")]
         [SerializeField] private KeyCode _toggleKey = KeyCode.F4;
 
-        [Tooltip("整体缩放的「意愿值」。1 = 基准大小。\n" +
-                 "注意：实际生效值还会被「垂直空间」压一道 —— 放大面板也会变高，\n" +
-                 "放到一定程度内容会顶出屏幕，所以系统会自动取一个放得下的上限。\n" +
-                 "勾选下面的「自动适配分辨率」后此项被忽略。")]
+        [Tooltip("整体缩放。1 = 基准大小。字体看不清就调大，例如 1.2 / 1.5 / 1.8。\n" +
+                 "缩放会同步放大字号、行高、卡片宽度与内边距，不会出现「字大了框没大」的错位。\n" +
+                 "注意：无需按分辨率调 —— Canvas 已做分辨率适配，同一数值在任何屏幕上观感一致。\n" +
+                 "若内容过多顶出屏幕，会被自动压回放得下的上限（见 MaxScaleByVerticalSpace）。")]
         [Range(0.75f, 3f)]
-        [SerializeField] private float _uiScale = 1.2f;
-
-        [Tooltip("自动适配分辨率：按屏幕高度推导缩放（1080p → 约 1.2，1440p 更大），\n" +
-                 "并自动受「垂直空间上限」约束，保证面板不会顶出屏幕。\n" +
-                 "Game 视图改尺寸时会自动重排。")]
-        [SerializeField] private bool _autoFitResolution = true;
-
-        [Tooltip("自动适配的灵敏度。1 = 按高度线性；调小更保守（大屏上不会过分巨大）。")]
-        [Range(0.5f, 1.5f)]
-        [SerializeField] private float _autoFitGain = 1f;
+        [SerializeField] private float _uiScale = 1.25f;
 
         [Tooltip("卡片宽度（未缩放）。实际宽度 = 该值 × 整体缩放")]
         [SerializeField] private float _cardWidth = 384f;
@@ -139,11 +130,8 @@ namespace SchoolTwin.UI
         // 只算一次而不是每次排版都乘：布局函数在数值刷新路径之外也会被调用，
         // 反复做乘法除了浪费没有收益。OnValidate 改了 _uiScale 会重建界面。
 
-        /// <summary>本次实际生效的缩放系数（手动值或自动适配值）。由 ApplyScale() 写入。</summary>
+        /// <summary>本次实际生效的缩放系数（手动值，可能被垂直上限压低）。由 ApplyScale() 写入。</summary>
         private float _activeScale = 1f;
-
-        /// <summary>上一次自动适配时的屏幕高度，用来发现 Game 视图被拖动改尺寸。</summary>
-        private int _lastFitScreenHeight = -1;
 
         private float _scaledCardWidth;
         private float _scaledScreenMargin;
@@ -183,45 +171,55 @@ namespace SchoolTwin.UI
         /// <summary>
         /// 求本次实际生效的缩放系数。
         ///
-        /// 【为什么要自动适配】手工拖滑块有个先有鸡还是先有蛋的问题：
-        /// 用户在小窗口里拖到满意，换个大屏看还是小；反之亦然。
-        /// 而面板是叠在 3D 场景上的，它的物理尺寸应该跟着**屏幕**走，
-        /// 不是跟着某个固定像素数走。
+        /// ── 这里踩过一个坑，说明白免得以后再犯 ──
         ///
-        /// 所以默认按屏幕高度对 1080p 的比例推导：1080p → 1.6，1440p → 约 2.13。
+        /// 最初想「按屏幕像素高度自动适配」：`s = Screen.height / 1080 × 1.6`。
+        /// 看起来合理，实际是错的。因为 Canvas 已经配了
+        /// `ScaleWithScreenSize` + 参考分辨率 `1920×1080`：
+        /// **UGUI 会先把实际分辨率归一化到 1080 高的坐标系**，
+        /// 同一份 UI 在任何窗口尺寸下看起来都「一样大」（占屏比例相同）。
         ///
-        /// 【为什么以 1080p 为基准而不是原始 1.0】因为原始的 384px 卡片在 1080p
-        /// 下本来就偏小（用户实际反馈），所以把「舒服的 1080p 尺寸」定义为 1.6。
+        /// 所以再乘一次 `Screen.height / 1080` 等于**重复缩放**。
+        /// 在 1080p 全屏下恰好等于 1（看不出问题），
+        /// 但 Game 视图开成小窗口时（比如 1084×357），
+        /// `357/1080 = 0.33` —— 面板直接被缩小到三分之一。
+        /// 这就是「越调越小」的直接原因。
         ///
-        /// 【为什么要再被「垂直空间」压一道】放大 = 字更大，但也 = 面板更高。
-        /// UGUI 的 Canvas 参考高度恒为 1080（ScaleWithScreenSize），所以缩放放大的
-        /// 是「面板 / 视口」的比例 —— 放到一定程度面板就顶出屏幕了。
-        /// 实测 1.6 时 6 指标 + 满配告警会把底部切掉。
-        /// 所以这里算出「垂直方向最多能容忍多大」，取小值。
-        /// 宁可字略小，也不能让内容被屏幕边缘切掉。
+        /// ── 正确做法 ──
+        ///
+        /// 默认就用一个**固定值**（`_uiScale`）当作缩放，与分辨率无关 ——
+        /// 因为 Canvas 已经负责了分辨率适配。文档里那一节「各分辨率对照」
+        /// 其实是个幻觉：不同分辨率下 UGUI 看到的坐标系都是 1080 高，
+        /// 面板大小本来就一样。唯一真正会变的是**窗口宽高比**，
+        /// 那由 CanvasScaler 的 matchWidthOrHeight 处理，不归我们管。
+        ///
+        /// 唯一必须动态计算的，是「垂直方向放不放得下」这道硬约束：
+        /// 内容太多时削掉一点，免得顶出屏幕。
         /// </summary>
         private float EffectiveScale()
         {
             float manual = Mathf.Clamp(_uiScale, 0.5f, 3f);
-            // 垂直空间上限对自动/手动模式都生效 —— 手动拖到 2.5 也一样会溢出
-            float maxByHeight = MaxScaleByVerticalSpace();
-            float hardCap = Mathf.Max(0.75f, maxByHeight);
 
-            if (!_autoFitResolution) return Mathf.Min(manual, hardCap);
+            // 垂直空间是唯一的动态约束：内容顶出屏幕时压回来
+            float hardCap = Mathf.Max(0.75f, MaxScaleByVerticalSpace());
 
-            int h = Screen.height;
-            if (h <= 0) return Mathf.Min(manual, hardCap);
-
-            const float gain = 1.6f;
-            float s = (h / 1080f) * gain * Mathf.Clamp(_autoFitGain, 0.5f, 1.5f);
-
-            return Mathf.Clamp(Mathf.Min(s, hardCap), 0.75f, 3f);
+            return Mathf.Clamp(Mathf.Min(manual, hardCap), 0.75f, 3f);
         }
 
         /// <summary>
-        /// Canvas 的「参考高度」。ScaleWithScreenSize + MatchWidthOrHeight 下，
-        /// UI 坐标系的可用高度 = 屏幕高度 / 缩放因子。
-        /// 1080p 全屏时就是 1080；窗口变小、或其他分辨率下会变。
+        /// Canvas 的「参考高度」——UI 坐标系里竖直方向有多少可用空间。
+        ///
+        /// 以当前配置推算：`ScaleWithScreenSize` + 参考 `1920×1080` +
+        /// `matchWidthOrHeight = 0.5`（宽高各占一半权重）。
+        /// 屏幕按 `factor = lerp(w/1920, h/1080, 0.5)` 缩放，所以
+        ///   视口高 = 屏幕高 / factor
+        ///
+        /// · 标准 16:9（1280×720 / 1920×1080 / 2560×1440）→ factor = h/1080 → 视口高恒为 1080
+        /// · 宽高比偏离 16:9 时会变：比如 1084×357（约 3:1 扁条）→ 视口高只有约 798
+        ///
+        /// 【为什么这个值有意义】Canvas 已经做了分辨率适配，所以「面板多大」
+        /// 在标准 16:9 各分辨率下是一样的。唯一会变的就是宽高比 ——
+        /// 扁长的窗口纵向空间少，面板自然要收敛。这不是 bug，是物理限制。
         /// </summary>
         private float ViewportHeight()
         {
@@ -440,7 +438,6 @@ namespace SchoolTwin.UI
 
             if (_fontOverride != null) TwinUIFactory.OverrideFont(_fontOverride);
 
-            _lastFitScreenHeight = Screen.height;
             BuildUI();
             _selected = TwinPicker.Selected;
             ApplySelection();
@@ -475,7 +472,6 @@ namespace SchoolTwin.UI
             if (!Application.isPlaying) return;
             if (!_built || _uiRoot == null) return;
 
-            _lastFitScreenHeight = Screen.height;
             TeardownUI();
             BuildUI();
             ApplySelection();
@@ -563,14 +559,6 @@ namespace SchoolTwin.UI
 
             float now = Time.unscaledTime;
 
-            // 自动适配模式下，Game 视图被拖动改尺寸时要跟着重排。
-            // 只在分辨率真的变了才重建（重建有成本，不能每帧做）。
-            if (_autoFitResolution && _lastFitScreenHeight != Screen.height)
-            {
-                _lastFitScreenHeight = Screen.height;
-                if (_built) RebuildUI();
-            }
-
             if (_selected != null && now >= _nextValueRefresh)
             {
                 _nextValueRefresh = now + Mathf.Max(0.02f, _valueRefreshInterval);
@@ -654,8 +642,6 @@ namespace SchoolTwin.UI
         /// </summary>
         public void RebuildUI()
         {
-            _lastFitScreenHeight = Screen.height;
-
             if (!_built)
             {
                 // 还没构建过（Awake 尚未跑或运行中刚挂上）：直接构建即可
