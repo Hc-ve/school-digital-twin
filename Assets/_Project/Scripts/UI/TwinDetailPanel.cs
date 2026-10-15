@@ -747,15 +747,14 @@ namespace SchoolTwin.UI
                 // 这样文字永远不会被量程游标盖住。
                 row.BarWidth = width;
 
-                float barH = _scaledBarHeight;
                 row.Track = TwinUIFactory.Block(go.transform, "Track", TwinStatusPalette.Track, false);
-                TwinUIFactory.Place(row.Track.rectTransform, 0f, _scaledBarY, width, barH);
+                TwinUIFactory.Place(row.Track.rectTransform, 0f, _scaledBarY, width, _scaledBarHeight);
 
                 row.Bands = new Image[MaxBands];
                 for (int b = 0; b < MaxBands; b++)
                 {
                     row.Bands[b] = TwinUIFactory.Block(go.transform, "Band" + b, TwinStatusPalette.Transparent, false);
-                    TwinUIFactory.Place(row.Bands[b].rectTransform, 0f, _scaledBarY, 0f, barH);
+                    TwinUIFactory.Place(row.Bands[b].rectTransform, 0f, _scaledBarY, 0f, _scaledBarHeight);
                 }
 
                 row.Marker = TwinUIFactory.Block(go.transform, "Marker", TwinStatusPalette.TextPrimary, false);
@@ -839,7 +838,7 @@ namespace SchoolTwin.UI
             Image band = row.Bands[slot];
             band.gameObject.SetActive(true);
             band.color = TwinStatusPalette.Of(status, 0.38f);
-            TwinUIFactory.Place(band.rectTransform, x, _scaledBarY, w, BarHeight);
+            TwinUIFactory.Place(band.rectTransform, x, _scaledBarY, w, _scaledBarHeight);
             return 1;
         }
 
