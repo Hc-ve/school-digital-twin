@@ -362,18 +362,19 @@ namespace SchoolTwin.Data
 
                 // 若指标名从主题取，则 TwinId 不含最后一段
                 int metricIdx = _metricSegmentIndex;
-                if (metricIdx < 0 && string.IsNullOrEmpty(metric))
+                if (metricIdx < 0)
                 {
-                    // 未显式指定且载荷也没给：用最后一段当指标
+                    // -1 = 自动模式：最后一段永远是 metric 段
                     metricIdx = segs.Length - 1;
                 }
 
-                if (metricIdx >= 0)
+                if (metricIdx < start || metricIdx >= segs.Length) return false;
+                // metric 优先用载荷里的，载荷没有才从主题取
+                if (string.IsNullOrEmpty(metric))
                 {
-                    if (metricIdx < start || metricIdx >= segs.Length) return false;
                     metric = segs[metricIdx];
-                    end = metricIdx;
                 }
+                end = metricIdx;
 
                 if (end <= start) return false;
 

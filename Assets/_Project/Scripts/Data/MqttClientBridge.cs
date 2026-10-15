@@ -124,9 +124,8 @@ namespace SchoolTwin.Data
 
             if (subResult != null && subResult.Items != null)
             {
-                for (int i = 0; i < subResult.Items.Count; i++)
+                foreach (MqttClientSubscribeResultItem item in subResult.Items)
                 {
-                    MqttClientSubscribeResultItem item = subResult.Items[i];
                     if (item == null) continue;
                     // 4.x：订阅失败体现在 ResultCode 上，不会抛异常，必须显式检查
                     if ((int)item.ResultCode >= 128)
