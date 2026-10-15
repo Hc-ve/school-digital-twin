@@ -44,10 +44,21 @@ namespace SchoolTwin.UI
         [Tooltip("面板开关快捷键（注意：数字键 1-9 已被预设机位占用，F3 被调试 HUD 占用）")]
         [SerializeField] private KeyCode _toggleKey = KeyCode.F4;
 
-        [Tooltip("整体缩放。1 = 原始大小。字体看不清就调大，例如 1.3 / 1.5。\n" +
-                 "缩放会同步放大字号、行高、卡片宽度与内边距，不会出现「字大了框没大」的错位。")]
-        [Range(0.75f, 2f)]
-        [SerializeField] private float _uiScale = 1.35f;
+        [Tooltip("整体缩放的「意愿值」。1 = 基准大小。\n" +
+                 "注意：实际生效值还会被「垂直空间」压一道 —— 放大面板也会变高，\n" +
+                 "放到一定程度内容会顶出屏幕，所以系统会自动取一个放得下的上限。\n" +
+                 "勾选下面的「自动适配分辨率」后此项被忽略。")]
+        [Range(0.75f, 3f)]
+        [SerializeField] private float _uiScale = 1.2f;
+
+        [Tooltip("自动适配分辨率：按屏幕高度推导缩放（1080p → 约 1.2，1440p 更大），\n" +
+                 "并自动受「垂直空间上限」约束，保证面板不会顶出屏幕。\n" +
+                 "Game 视图改尺寸时会自动重排。")]
+        [SerializeField] private bool _autoFitResolution = true;
+
+        [Tooltip("自动适配的灵敏度。1 = 按高度线性；调小更保守（大屏上不会过分巨大）。")]
+        [Range(0.5f, 1.5f)]
+        [SerializeField] private float _autoFitGain = 1f;
 
         [Tooltip("卡片宽度（未缩放）。实际宽度 = 该值 × 整体缩放")]
         [SerializeField] private float _cardWidth = 384f;
@@ -67,7 +78,10 @@ namespace SchoolTwin.UI
         [SerializeField] private float _flyDistance = 6f;
 
         [Header("告警列表")]
-        [SerializeField] private int _maxAlarmRows = 8;
+        [Tooltip("最多显示多少条告警。这直接决定告警面板高度 ——\n" +
+                 "在 1080p 下，指标占满 6 行时告警最多能放 6~7 条，再多会把面板顶出屏幕。\n" +
+                 "超出部分不会丢，会折叠成一行「… 另有 N 个异常点位」。")]
+        [SerializeField] private int _maxAlarmRows = 6;
 
         // ================================================================ 基础尺寸（未缩放）
         //
@@ -77,39 +91,45 @@ namespace SchoolTwin.UI
         // 所以这里把所有尺寸都定义成「基准值」，再统一乘 _uiScale，
         // 改一个滑块就能整体放大而不跑版。
 
-        private const float BaseCardWidth = 384f;
+        private const float BaseCardWidth = 420f;
         private const float BaseScreenMargin = 20f;
-        private const float BasePad = 16f;
-        private const float BaseTitleY = 14f;
-        private const float BaseSubtitleY = 44f;
-        private const float BaseDivider1Y = 72f;
-        private const float BaseMetricsTop = 82f;
-        private const float BaseRowHeight = 52f;
-        private const float BaseRowGap = 6f;
-        private const float BaseBarY = 26f;
-        private const float BaseBarHeight = 8f;
-        private const float BaseFooterHeight = 16f;
-        private const float BaseAlarmTitleY = 16f;
-        private const float BaseAlarmRowsTop = 44f;
-        private const float BaseAlarmRowHeight = 26f;
-        private const float BaseAlarmRowGap = 3f;
+        private const float BasePad = 18f;
+        private const float BaseTitleY = 16f;
+        private const float BaseSubtitleY = 50f;
+        private const float BaseDivider1Y = 80f;
+        private const float BaseMetricsTop = 90f;
+        private const float BaseRowHeight = 62f;
+        private const float BaseRowGap = 7f;
+        private const float BaseBarY = 30f;
+        private const float BaseBarHeight = 9f;
+        private const float BaseFooterHeight = 18f;
+        private const float BaseAlarmTitleY = 18f;
+        private const float BaseAlarmRowsTop = 48f;
+        private const float BaseAlarmRowHeight = 30f;
+        private const float BaseAlarmRowGap = 4f;
         private const float BasePanelGap = 12f;
-        private const float BaseChipWidth = 76f;
-        private const float BaseChipHeight = 24f;
+        private const float BaseChipWidth = 86f;
+        private const float BaseChipHeight = 28f;
 
         // ---- 字号（未缩放）----
-        private const int FsTitle = 19;
-        private const int FsChip = 12;
-        private const int FsSubtitle = 12;
-        private const int FsHint = 13;
-        private const int FsFooter = 11;
-        private const int FsAlarmTitle = 14;
-        private const int FsAlarmEmpty = 12;
-        private const int FsAlarmMore = 12;
-        private const int FsMetricName = 13;
-        private const int FsMetricValue = 19;
-        private const int FsMetricHint = 11;
-        private const int FsAlarmRow = 12;
+        //
+        // 【为什么这里整体比最初版本大一圈】最初版本是 19/13/12/11 这一档，
+        // 用户实测「数据看不清」。此时能拉的杠杆有两根：
+        //   ① 调大 _uiScale —— 但会等比撑高面板，垂直空间不够（见 MaxScaleByVerticalSpace）
+        //   ② 调大基准字号 —— 只撑高一点行高，性价比高得多
+        // 所以这里把基准字号直接抬一档，缩放再在其上做微调。
+        private const int FsTitle = 22;
+        private const int FsChip = 14;
+        private const int FsSubtitle = 14;
+        private const int FsHint = 15;
+        private const int FsFooter = 13;
+        private const int FsAlarmTitle = 16;
+        private const int FsAlarmEmpty = 14;
+        private const int FsAlarmMore = 14;
+        private const int FsMetricName = 15;
+        private const int FsMetricValue = 23;
+        private const int FsMetricHint = 13;
+        private const int FsAlarmRow = 14;
 
         private const int MaxMetricRows = 6;
         private const int MaxBands = 5;
@@ -118,6 +138,12 @@ namespace SchoolTwin.UI
         //
         // 只算一次而不是每次排版都乘：布局函数在数值刷新路径之外也会被调用，
         // 反复做乘法除了浪费没有收益。OnValidate 改了 _uiScale 会重建界面。
+
+        /// <summary>本次实际生效的缩放系数（手动值或自动适配值）。由 ApplyScale() 写入。</summary>
+        private float _activeScale = 1f;
+
+        /// <summary>上一次自动适配时的屏幕高度，用来发现 Game 视图被拖动改尺寸。</summary>
+        private int _lastFitScreenHeight = -1;
 
         private float _scaledCardWidth;
         private float _scaledScreenMargin;
@@ -154,10 +180,115 @@ namespace SchoolTwin.UI
         private int _scaledFsMetricHint;
         private int _scaledFsAlarmRow;
 
-        /// <summary>把基准尺寸按 _uiScale 展开成实际尺寸。BuildUI 之前必须调用。</summary>
+        /// <summary>
+        /// 求本次实际生效的缩放系数。
+        ///
+        /// 【为什么要自动适配】手工拖滑块有个先有鸡还是先有蛋的问题：
+        /// 用户在小窗口里拖到满意，换个大屏看还是小；反之亦然。
+        /// 而面板是叠在 3D 场景上的，它的物理尺寸应该跟着**屏幕**走，
+        /// 不是跟着某个固定像素数走。
+        ///
+        /// 所以默认按屏幕高度对 1080p 的比例推导：1080p → 1.6，1440p → 约 2.13。
+        ///
+        /// 【为什么以 1080p 为基准而不是原始 1.0】因为原始的 384px 卡片在 1080p
+        /// 下本来就偏小（用户实际反馈），所以把「舒服的 1080p 尺寸」定义为 1.6。
+        ///
+        /// 【为什么要再被「垂直空间」压一道】放大 = 字更大，但也 = 面板更高。
+        /// UGUI 的 Canvas 参考高度恒为 1080（ScaleWithScreenSize），所以缩放放大的
+        /// 是「面板 / 视口」的比例 —— 放到一定程度面板就顶出屏幕了。
+        /// 实测 1.6 时 6 指标 + 满配告警会把底部切掉。
+        /// 所以这里算出「垂直方向最多能容忍多大」，取小值。
+        /// 宁可字略小，也不能让内容被屏幕边缘切掉。
+        /// </summary>
+        private float EffectiveScale()
+        {
+            float manual = Mathf.Clamp(_uiScale, 0.5f, 3f);
+            // 垂直空间上限对自动/手动模式都生效 —— 手动拖到 2.5 也一样会溢出
+            float maxByHeight = MaxScaleByVerticalSpace();
+            float hardCap = Mathf.Max(0.75f, maxByHeight);
+
+            if (!_autoFitResolution) return Mathf.Min(manual, hardCap);
+
+            int h = Screen.height;
+            if (h <= 0) return Mathf.Min(manual, hardCap);
+
+            const float gain = 1.6f;
+            float s = (h / 1080f) * gain * Mathf.Clamp(_autoFitGain, 0.5f, 1.5f);
+
+            return Mathf.Clamp(Mathf.Min(s, hardCap), 0.75f, 3f);
+        }
+
+        /// <summary>
+        /// Canvas 的「参考高度」。ScaleWithScreenSize + MatchWidthOrHeight 下，
+        /// UI 坐标系的可用高度 = 屏幕高度 / 缩放因子。
+        /// 1080p 全屏时就是 1080；窗口变小、或其他分辨率下会变。
+        /// </summary>
+        private float ViewportHeight()
+        {
+            if (Screen.height <= 0) return 1080f;
+
+            CanvasScaler scaler = _uiRoot != null
+                ? _uiRoot.GetComponentInParent<CanvasScaler>()
+                : null;
+            if (scaler == null || scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+                return Screen.height;
+
+            Vector2 refRes = scaler.referenceResolution;
+            float sx = Screen.width / Mathf.Max(1f, refRes.x);
+            float sy = Screen.height / Mathf.Max(1f, refRes.y);
+            float factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+            if (factor <= 0.0001f) return 1080f;
+            return Screen.height / factor;
+        }
+
+        /// <summary>
+        /// 在「最坏情况内容」下，缩放最大能到多少才不把面板顶出屏幕。
+        ///
+        /// 最坏情况 = 指标行占满 MaxMetricRows（6 行）+ 告警面板占满 _maxAlarmRows。
+        /// 这是常驻显示的上限；实际内容少的时候面板更矮，自然放得下。
+        ///
+        /// 推导：整条竖直排列是
+        ///   上边距 + 卡片高 + 面板间隙 + 告警面板高 + 下边距 ≤ 视口高
+        /// 其中卡片高与告警面板高都是「基准值 × s」，所以能把 s 解出来。
+        /// </summary>
+        private float MaxScaleByVerticalSpace()
+        {
+            float viewport = ViewportHeight();
+            // 上下各留一点呼吸空间（不参与缩放，用基准值的 1 倍）
+            float reserve = 24f;
+
+            // --- 分子：s = 1 时的面板总高 ---
+            // 卡片：metricsTop + 6 行 + 间隙 + div2 + footer + 底部留白
+            int slots = Mathf.Max(1, MaxMetricRows);
+            float cardAt1 = BaseMetricsTop
+                            + slots * BaseRowHeight + (slots - 1) * BaseRowGap
+                            + 8f + 1f + 6f + BaseFooterHeight + 14f;
+
+            // 告警面板：标题区 + N 行 + 「还有更多」行 + 底部留白
+            int rows = Mathf.Max(1, _maxAlarmRows);
+            float alarmAt1 = BaseAlarmRowsTop
+                             + rows * BaseAlarmRowHeight + (rows - 1) * BaseAlarmRowGap
+                             + 14f + FsAlarmMore + 8f;
+
+            float panelAt1 = cardAt1 + alarmAt1 + BasePanelGap;
+
+            // 还有上边距、下边距（各 BaseScreenMargin）
+            float fixedAt1 = panelAt1 + BaseScreenMargin * 2f;
+
+            if (fixedAt1 <= 0f) return 3f;
+
+            float room = viewport - reserve;
+            if (room <= 0f) return 0.75f;
+
+            // room = fixedAt1 * s  →  s = room / fixedAt1
+            return room / fixedAt1;
+        }
+
+        /// <summary>把基准尺寸按实际缩放展开成实际尺寸。BuildUI 之前必须调用。</summary>
         private void ApplyScale()
         {
-            float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+            float s = EffectiveScale();
+            _activeScale = s;   // 存下来，给圆角、游标这类零散计算复用
 
             _scaledCardWidth = _cardWidth > 0f ? _cardWidth * s : BaseCardWidth * s;
             _scaledScreenMargin = _screenMargin > 0f ? _screenMargin * s : BaseScreenMargin * s;
@@ -309,6 +440,7 @@ namespace SchoolTwin.UI
 
             if (_fontOverride != null) TwinUIFactory.OverrideFont(_fontOverride);
 
+            _lastFitScreenHeight = Screen.height;
             BuildUI();
             _selected = TwinPicker.Selected;
             ApplySelection();
@@ -343,6 +475,7 @@ namespace SchoolTwin.UI
             if (!Application.isPlaying) return;
             if (!_built || _uiRoot == null) return;
 
+            _lastFitScreenHeight = Screen.height;
             TeardownUI();
             BuildUI();
             ApplySelection();
@@ -430,6 +563,14 @@ namespace SchoolTwin.UI
 
             float now = Time.unscaledTime;
 
+            // 自动适配模式下，Game 视图被拖动改尺寸时要跟着重排。
+            // 只在分辨率真的变了才重建（重建有成本，不能每帧做）。
+            if (_autoFitResolution && _lastFitScreenHeight != Screen.height)
+            {
+                _lastFitScreenHeight = Screen.height;
+                if (_built) RebuildUI();
+            }
+
             if (_selected != null && now >= _nextValueRefresh)
             {
                 _nextValueRefresh = now + Mathf.Max(0.02f, _valueRefreshInterval);
@@ -513,6 +654,8 @@ namespace SchoolTwin.UI
         /// </summary>
         public void RebuildUI()
         {
+            _lastFitScreenHeight = Screen.height;
+
             if (!_built)
             {
                 // 还没构建过（Awake 尚未跑或运行中刚挂上）：直接构建即可
@@ -537,7 +680,7 @@ namespace SchoolTwin.UI
 
             // ---------------- 详情卡片 ----------------
             _card = (RectTransform)TwinUIFactory.Node("DetailCard", _uiRoot).transform;
-            _cardBg = TwinUIFactory.Rounded(_card, "Bg", 14f * Mathf.Clamp(_uiScale, 0.5f, 3f),
+            _cardBg = TwinUIFactory.Rounded(_card, "Bg", 14f * _activeScale,
                 TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
                 TwinStatusPalette.PanelBorder, 1f, true);
             TwinUIFactory.Stretch(_cardBg.rectTransform);
@@ -548,7 +691,7 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(_title.rectTransform, _scaledPad, _scaledTitleY,
                 _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace, _scaledTitleY + _scaledFsTitle + 6f);
 
-            _chip = TwinUIFactory.Rounded(_card, "StatusChip", 12f * Mathf.Clamp(_uiScale, 0.5f, 3f),
+            _chip = TwinUIFactory.Rounded(_card, "StatusChip", 12f * _activeScale,
                 TwinStatusPalette.Unknown, TwinStatusPalette.Unknown,
                 TwinStatusPalette.Unknown, 1f, false);
             TwinUIFactory.Place(_chip.rectTransform, _scaledCardWidth - _scaledPad - _scaledChipWidth,
@@ -583,7 +726,7 @@ namespace SchoolTwin.UI
 
             // ---------------- 告警面板 ----------------
             _alarmPanel = (RectTransform)TwinUIFactory.Node("AlarmPanel", _uiRoot).transform;
-            TwinRoundedRect alarmBg = TwinUIFactory.Rounded(_alarmPanel, "Bg", 14f * Mathf.Clamp(_uiScale, 0.5f, 3f),
+            TwinRoundedRect alarmBg = TwinUIFactory.Rounded(_alarmPanel, "Bg", 14f * _activeScale,
                 TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
                 TwinStatusPalette.PanelBorder, 1f, true);
             TwinUIFactory.Stretch(alarmBg.rectTransform);
@@ -666,9 +809,9 @@ namespace SchoolTwin.UI
             // ---- 卡片高度与底部元素 ----
             int slots = Mathf.Max(1, shown);
             float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
-            float divider2Y = _scaledMetricsTop + metricsBlock + 8f * Mathf.Clamp(_uiScale, 0.5f, 3f);
-            float footerY = divider2Y + 1f + 6f * Mathf.Clamp(_uiScale, 0.5f, 3f);
-            float cardHeight = footerY + _scaledFooterHeight + 14f * Mathf.Clamp(_uiScale, 0.5f, 3f);
+            float divider2Y = _scaledMetricsTop + metricsBlock + 8f * _activeScale;
+            float footerY = divider2Y + 1f + 6f * _activeScale;
+            float cardHeight = footerY + _scaledFooterHeight + 14f * _activeScale;
 
             TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, divider2Y,
                 _scaledCardWidth - _scaledPad * 2f, 1f);
@@ -735,7 +878,7 @@ namespace SchoolTwin.UI
             {
                 int i = _metricRows.Count;
                 MetricRow row = new MetricRow();
-                float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+                float s = _activeScale;
                 float width = _scaledCardWidth - _scaledPad * 2f;
                 float top = _scaledMetricsTop + i * (_scaledRowHeight + _scaledRowGap);
 
@@ -873,8 +1016,8 @@ namespace SchoolTwin.UI
                 // 量程游标
                 float t = row.Max > row.Min ? Mathf.Clamp01((value.Value - row.Min) / (row.Max - row.Min)) : 0.5f;
                 row.Marker.rectTransform.anchoredPosition =
-                    new Vector2(t * row.BarWidth - 1.5f * Mathf.Clamp(_uiScale, 0.5f, 3f),
-                                -(_scaledBarY - 3f * Mathf.Clamp(_uiScale, 0.5f, 3f)));
+                    new Vector2(t * row.BarWidth - 1.5f * _activeScale,
+                                -(_scaledBarY - 3f * _activeScale));
                 row.Marker.color = color;
 
                 _sb.Length = 0;
@@ -939,9 +1082,11 @@ namespace SchoolTwin.UI
             int worstSeverity = -1;
             TwinStatus worstStatus = TwinStatus.Unknown;
 
-            // 只维持「前 _maxAlarmRows 名」的有序小数组，其余只计数。
+            // 只维持「前 capacity 名」的有序小数组，其余只计数。
             // 这样：① 不为不显示的行排序；② 每个点位的状态只算一次。
-            int capacity = Mathf.Max(1, _maxAlarmRows);
+            // capacity 会被屏幕高度裁剪 —— 6 个指标 + 8 条告警在 1080p 下会超出屏幕，
+            // 所以先算「卡片下方还剩多少高度」再决定能放几行。
+            int capacity = FitAlarmCapacity(Mathf.Max(1, _maxAlarmRows));
 
             if (runtime != null && runtime.Registry != null)
             {
@@ -1073,7 +1218,7 @@ namespace SchoolTwin.UI
             while (_alarmRows.Count <= index)
             {
                 int i = _alarmRows.Count;
-                float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+                float s = _activeScale;
                 float width = _scaledCardWidth - _scaledPad * 2f;
 
                 GameObject go = TwinUIFactory.Node("AlarmRow" + i, _alarmPanel);
@@ -1104,11 +1249,48 @@ namespace SchoolTwin.UI
             return _alarmRows[index];
         }
 
+        /// <summary>
+        /// 按「屏幕上还剩多少高度」裁剪告警行数。
+        ///
+        /// 【与 MaxScaleByVerticalSpace 的分工】
+        /// MaxScaleByVerticalSpace 保证「满配内容」不溢出，所以正常情况下这里不会削掉任何行。
+        /// 但它在算上限时用的是「指标占满 6 行」的假设；若某个点位只有 1~2 个指标，
+        /// 卡片会矮很多，此时可以多显示几条告警 —— 反过来也成立。
+        /// 所以这里按**当前实际卡片高度**再算一次，两头都不浪费。
+        ///
+        /// 【为什么不用 _card.sizeDelta.y】RefreshAlarms 可能先于 ApplySelection 跑，
+        /// 那时卡片高度还是旧值。这里用同一个公式现算，不依赖时序。
+        /// </summary>
+        private int FitAlarmCapacity(int desired)
+        {
+            float s = _activeScale;
+            float viewport = ViewportHeight();
+
+            // 当前实际卡片高度（与 ApplySelection 用同一套公式）
+            int slots = Mathf.Max(1, _hasData ? _metricRows.Count : 1);
+            float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
+            float divider2Y = _scaledMetricsTop + metricsBlock + 8f * s;
+            float footerY = divider2Y + 1f + 6f * s;
+            float cardH = footerY + _scaledFooterHeight + 14f * s;
+            if (_selected == null) cardH = _scaledMetricsTop + _scaledRowHeight * 2f + 14f * s;
+
+            float avail = viewport - _scaledScreenMargin - cardH - _scaledPanelGap - _scaledScreenMargin;
+
+            // 面板自身固定开销：标题区 + 1 行 + 底部预留 + 「还有更多」提示行
+            float overhead = _scaledAlarmRowsTop + _scaledAlarmRowHeight + 14f * s
+                             + _scaledFsAlarmMore + 8f;
+
+            float rowStep = _scaledAlarmRowHeight + _scaledAlarmRowGap;
+            int fit = Mathf.FloorToInt((avail - overhead) / Mathf.Max(1f, rowStep)) + 1;
+
+            return Mathf.Clamp(fit, 1, desired);
+        }
+
         private void PlaceAlarmPanel(int rows)
         {
             if (_alarmPanel == null) return;
 
-            float s = Mathf.Clamp(_uiScale, 0.5f, 3f);
+            float s = _activeScale;
             bool overflow = rows > 0 && _alarmTotal > rows;
             float height;
             if (rows <= 0)
