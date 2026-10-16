@@ -77,9 +77,8 @@ namespace SchoolTwin.Twin
             for (int i = 0; i < _sources.Count; i++)
             {
                 DataSourceBase src = _sources[i];
-                if (src == null || !src.IsRunning) continue;
-                src.StopSource();
-                src.StartSource(target);
+                if (src == null) continue;
+                src.BindSink(target);
             }
         }
 

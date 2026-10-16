@@ -89,6 +89,12 @@ namespace SchoolTwin.Data
             }
         }
 
+        /// <summary>不重启线程，只换数据出口（供录制器挂入时使用）。</summary>
+        public void BindSink(IDataSink sink)
+        {
+            if (sink != null) Sink = sink;
+        }
+
         public void StopSource()
         {
             if (!_running)

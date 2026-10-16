@@ -101207,6 +101207,8 @@ GameObject:
   - component: {fileID: 2126855772}
   - component: {fileID: 2126855771}
   - component: {fileID: 2126855774}
+  - component: {fileID: 2126855775}
+  - component: {fileID: 2126855776}
   m_Layer: 0
   m_Name: '[TwinRuntime]'
   m_TagString: Untagged
@@ -101293,6 +101295,45 @@ MonoBehaviour:
   _metricField: metric
   _badMessageLogPerSecond: 3
   _logFirstMessages: 5
+--- !u!114 &2126855775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2126855770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd602b852931417a865f8c4bab9c6a44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _autoStart: 1
+  _outputFolder: Recordings
+  _filePrefix: twin
+  _maxDurationMinutes: 0
+  _maxQueuedLines: 100000
+  _fileBufferBytes: 65536
+  _flushEveryLines: 2000
+--- !u!114 &2126855776
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2126855770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a0ae8bba08244728bb80ef78513faff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _autoStart: 1
+  _recordingPath: E:\Unity Projects\School\Recordings\twin-20261016-101951.jsonl
+  _useLatestIfEmpty: 1
+  _speed: 1
+  _loop: 1
+  _maxInitialIdleSeconds: 2
+  _maxSamplesPerFrame: 2000
+  _honorTimestamps: 1
 --- !u!1001 &2128860402
 PrefabInstance:
   m_ObjectHideFlags: 0

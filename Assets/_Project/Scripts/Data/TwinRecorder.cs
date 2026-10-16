@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 using SchoolTwin.Core;
+using SchoolTwin.Twin;
 
 namespace SchoolTwin.Data
 {
@@ -115,6 +116,12 @@ namespace SchoolTwin.Data
         // ---------------------------------------------------------------- 生命周期
 
         private void OnEnable()
+        {
+            // 延迟到 Start()：此时所有数据源的 OnEnable 已跑完，
+            // RedirectSinkTo 才能正确 rebind 到正在运行的数据源。
+        }
+
+        private void Start()
         {
             if (_autoStart) StartRecording();
         }
@@ -331,7 +338,7 @@ namespace SchoolTwin.Data
         {
             StreamWriter writer = null;
             int sinceFlush = 0;
-            float fileOpenedRealtime = Time.realtimeSinceStartup;
+            double fileOpenedUtc = NowUtcSeconds();
 
             try
             {
@@ -376,13 +383,13 @@ namespace SchoolTwin.Data
 
                         // 分卷：超过时长上限就换文件
                         if (_maxDurationMinutes > 0f &&
-                            Time.realtimeSinceStartup - fileOpenedRealtime > _maxDurationMinutes * 60f)
+                            NowUtcSeconds() - fileOpenedUtc > _maxDurationMinutes * 60.0)
                         {
                             writer.Flush();
                             writer.Dispose();
                             _currentPath = OpenFile();
                             writer = new StreamWriter(_currentPath, false, new UTF8Encoding(false), _fileBufferBytes);
-                            fileOpenedRealtime = Time.realtimeSinceStartup;
+                            fileOpenedUtc = NowUtcSeconds();
                             sinceFlush = 0;
                         }
                         continue;
