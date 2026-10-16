@@ -32,8 +32,10 @@ namespace SchoolTwin.Twin
         [SerializeField] private string _visualTargetPath = "";
 
         [Header("时效与通知")]
-        [Tooltip("超过这个秒数没收到数据 → Stale；数据源整体离线 → Offline")]
+        [Tooltip("超过这个秒数没收到数据 → Stale（陈旧，灰）")]
         [SerializeField] private float _staleAfterSeconds = 3f;
+        [Tooltip("在 Stale 基础上再沉默这么久 → Offline（离线，暗）。判定的是「沉默时长」，与数据源类型无关")]
+        [SerializeField] private float _offlineAfterSeconds = 5f;
         [Tooltip("两次刷新事件的最小间隔，防止高频抖动导致 UI 反复重绘")]
         [SerializeField] private float _minNotifyInterval = 0.05f;
         [SerializeField] private bool _logEverySample = false;
@@ -71,7 +73,10 @@ namespace SchoolTwin.Twin
             get { return string.IsNullOrEmpty(_category) ? Segment(_twinId, 1) : _category; }
         }
 
-        /// <summary>数据是否已陈旧（本机接收时刻判定，不依赖数据源时钟）。</summary>
+        /// <summary>
+        /// 数据是否已陈旧（本机接收时刻判定，不依赖数据源时钟）。
+        /// 注意这是**第一段**：陈旧之后若继续沉默，Update() 会把状态推进到 Offline。
+        /// </summary>
         public bool IsStale
         {
             get
@@ -136,14 +141,41 @@ namespace SchoolTwin.Twin
         {
             if (_lastSampleRealtime < 0f) return;
             if (!IsStale) return;
-            if (_status == TwinStatus.Stale || _status == TwinStatus.Offline) return;
-            SetStatus(TwinStatus.Stale);
+
+            // 两段式时效：沉默超过 _staleAfterSeconds → Stale；再持续沉默 _offlineAfterSeconds → Offline。
+            //
+            // 【为什么不用数据源的 StateChanged 事件来判离线】
+            // 那样会让「离线」这个状态依赖具体的数据源实现（MQTT / 回放 / 真实网关各不相同），
+            // 于是每接一种新数据源都要重新实现一遍离线判定。
+            // 改成「沉默时长」判定后，离线语义与数据源完全解耦：
+            // 不管是 broker 挂了、进程被杀、还是网线被拔，只要数据不再到达，就一定会走到 Offline。
+            //
+            // 【为什么不能一步到位直接 Offline】
+            // 短暂丢包（一两秒）应该是可恢复的「陈旧」，不该立刻渲染成「离线」——
+            // 否则网络一抖全场景变黑，运维会误判成大面积设备故障。
+            TwinStatus next = SilentSeconds > (_staleAfterSeconds + _offlineAfterSeconds)
+                ? TwinStatus.Offline
+                : TwinStatus.Stale;
+
+            if (_status == next) return;
+            SetStatus(next);
             ReportIfNeeded(true);
+        }
+
+        /// <summary>距上次收到数据已沉默的秒数；未收到过任何数据时为 0。</summary>
+        private float SilentSeconds
+        {
+            get
+            {
+                if (_lastSampleRealtime < 0f) return 0f;
+                return Time.realtimeSinceStartup - _lastSampleRealtime;
+            }
         }
 
         private void OnValidate()
         {
             _staleAfterSeconds = Mathf.Max(0.1f, _staleAfterSeconds);
+            _offlineAfterSeconds = Mathf.Max(0f, _offlineAfterSeconds);
             _minNotifyInterval = Mathf.Max(0f, _minNotifyInterval);
         }
 
@@ -199,7 +231,7 @@ namespace SchoolTwin.Twin
         /// <summary>
         /// 取单个指标的状态。
         /// 面板需要「按指标分别着色」（一个点位可能温度正常、CO₂ 告警），
-        /// 所以不能只暴露整体最差状态。这里把「数据陈旧」也计入。
+        /// 所以不能只暴露整体最差状态。这里把「数据陈旧 / 离线」也计入。
         /// </summary>
         public TwinStatus StatusOf(string metric)
         {
@@ -207,8 +239,25 @@ namespace SchoolTwin.Twin
             if (!_values.TryGetValue(metric, out value)) return TwinStatus.Unknown;
 
             TwinStatus status = StatusOf(metric, value);
-            if (IsStale && status != TwinStatus.Offline) status = TwinStatus.Stale;
+
+            // 沉默判定要覆盖到「按指标着色」这条路径，否则会出现
+            // 「整机已是 Offline，但面板里每个指标还各自显示正常/告警」的矛盾画面。
+            // 注意：只有真的已陈旧（IsStale）才让沉默状态参与，否则数据新鲜时
+            // 也会被误判成 Stale（那是「没数据」的状态，不能盖在新鲜数据上）。
+            if (IsStale)
+            {
+                TwinStatus silence = SilenceStatus();
+                if (Severity(silence) > Severity(status)) status = silence;
+            }
             return status;
+        }
+
+        /// <summary>纯由「沉默时长」推出的状态。调用方需先用 IsStale 确认已进入沉默期。</summary>
+        private TwinStatus SilenceStatus()
+        {
+            return SilentSeconds > (_staleAfterSeconds + _offlineAfterSeconds)
+                ? TwinStatus.Offline
+                : TwinStatus.Stale;
         }
 
         // ---------------------------------------------------------------- 内部
