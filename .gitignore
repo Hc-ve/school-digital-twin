@@ -66,3 +66,7 @@ crashlytics-build.properties
 # ---------- 本地 AI 工具缓存（避免污染仓库）----------
 .workbuddy-ai/
 .claude/
+
+# ---------- 诊断/截图临时文件（开发过程产物，不入库）----------
+/workbuddy*.png
+/workbuddy*.jpg
