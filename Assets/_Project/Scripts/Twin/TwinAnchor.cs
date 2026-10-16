@@ -122,10 +122,15 @@ namespace SchoolTwin.Twin
 
         private void OnEnable()
         {
-            // Ensure 而非依赖场景里已有 TwinRuntime：避免 Awake/OnEnable 顺序陷阱
+            // 注册挪到 Start()：OnEnable 时 TwinRuntime.Awake 可能还没跑，Registry 是 null
+        }
+
+        private void Start()
+        {
             TwinRuntime runtime = TwinRuntime.Ensure();
             _catalog = runtime.Catalog;
-            runtime.Registry.Register(this);
+            try { runtime.Registry.Register(this); }
+            catch (System.Exception e) { Debug.LogWarning("[Twin] " + _twinId + " 注册警告：" + e.Message); }
             runtime.Bus.Subscribe(_twinId, this);
         }
 
@@ -140,7 +145,16 @@ namespace SchoolTwin.Twin
         private void Update()
         {
             if (_lastSampleRealtime < 0f) return;
-            if (!IsStale) return;
+
+            if (!IsStale)
+            {
+                // 数据刚恢复：把 Stale/Offline 清掉，重新按阈值评估状态
+                if (_status == TwinStatus.Stale || _status == TwinStatus.Offline)
+                {
+                    EvaluateStatus();
+                }
+                return;
+            }
 
             // 两段式时效：沉默超过 _staleAfterSeconds → Stale；再持续沉默 _offlineAfterSeconds → Offline。
             //

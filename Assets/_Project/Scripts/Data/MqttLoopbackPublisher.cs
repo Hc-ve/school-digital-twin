@@ -173,7 +173,7 @@ namespace SchoolTwin.Data
                         if (!ok)
                         {
                             if (token.IsCancellationRequested) break;
-                            float wait = Mathf.Min(30f, Mathf.Pow(2f, Mathf.Min(attempt - 1, 5)));
+                            float wait = 1f; // 本地模拟器：固定1秒重连，不等指数退避
                             Debug.LogWarning("[Twin] 模拟器连不上 broker，将等 " + wait.ToString("0.#") +
                                              " 秒后重试（broker 起了吗？）");
                             if (token.WaitHandle.WaitOne(TimeSpan.FromSeconds(wait))) break;
@@ -210,6 +210,7 @@ namespace SchoolTwin.Data
         private void PublishLoop(IMqttBridge bridge, CancellationToken token)
         {
             int intervalMs = Mathf.Max(50, Mathf.RoundToInt(1000f / Mathf.Max(0.1f, _hz)));
+            int consecutiveFails = 0;
 
             while (!token.IsCancellationRequested && _running)
             {
@@ -253,9 +254,19 @@ namespace SchoolTwin.Data
                     }
                 }
 
-                if (sent == 0 && _sentCount == 0)
+                // 连续发布失败 → 认为连接断了，退出循环让外层重连
+                if (sent == 0)
                 {
-                    Debug.LogWarning("[Twin] 模拟器发布失败，可能连接已断。");
+                    consecutiveFails++;
+                    if (consecutiveFails >= 3)
+                    {
+                        Debug.LogWarning("[Twin] 模拟器连续 " + consecutiveFails + " 次发布失败，连接可能已断，准备重连");
+                        break;
+                    }
+                }
+                else
+                {
+                    consecutiveFails = 0;
                 }
 
                 if (token.WaitHandle.WaitOne(intervalMs)) break;
