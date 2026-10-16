@@ -45,7 +45,8 @@ namespace SchoolTwin.Data
         {
             TwinRuntime runtime = TwinRuntime.Ensure();
             runtime.RegisterSource(this);
-            if (_autoStart) StartSource(runtime.Bus);
+            // 用 runtime.Sink 而不是 runtime.Bus：录制器可能套在中间
+            if (_autoStart) StartSource(runtime.Sink);
         }
 
         protected virtual void OnDisable()
