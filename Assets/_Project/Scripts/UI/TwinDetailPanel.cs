@@ -780,12 +780,7 @@ namespace SchoolTwin.UI
                     _selected.TwinId + "   ·   " + _selected.Zone + " / " + _selected.Category);
 
                 _chip.gameObject.SetActive(true);
-                TwinStatus status = CurrentStatus(_selected);
-                Color statusColor = TwinStatusPalette.Of(status);
-                _chip.SetFill(TwinStatusPalette.Of(status, 0.20f), TwinStatusPalette.Of(status, 0.20f));
-                _chip.SetBorder(TwinStatusPalette.Of(status, 0.65f), 1f);
-                SetCached(_chipText, ref _cachedChip, TwinStatusPalette.Label(status));
-                _chipText.color = statusColor;
+                RefreshChip();
 
                 bool waiting = !_selected.HasData;
                 _hint.gameObject.SetActive(waiting);
@@ -983,11 +978,54 @@ namespace SchoolTwin.UI
             return 1;
         }
 
+        // ================================================================ 状态徽章
+
+        /// <summary>
+        /// 刷新标题右侧的状态胶囊。
+        ///
+        /// 【为什么必须单独抽出来、并且每 0.1s 调一次】
+        /// 它原先写在 ApplySelection() 里，而 ApplySelection() 只在
+        /// 「选中变化 / 有无数据变化」时才跑。于是胶囊被冻结在**点选那一刻**的状态：
+        ///
+        ///   选中时正常（绿）→ 之后这个点位真的告警了 → 头部还是绿的
+        ///
+        /// 这是最坏的方向 —— 告警列表里已经红了，面板顶部却还在说「正常」，
+        /// 用户盯着标题看就以为没事。反之（选中时告警、后来恢复）也会一直红着，
+        /// 让人以为修不好。
+        ///
+        /// 刷新成本可控：SetFill / SetBorder 内部会比对颜色，值没变就提前返回，
+        /// 不会每个周期重建网格；文字走 SetCached，内容相同不重写。
+        /// </summary>
+        private void RefreshChip()
+        {
+            if (_chip == null || _selected == null) return;
+
+            TwinStatus status = CurrentStatus(_selected);
+            Color statusColor = TwinStatusPalette.Of(status);
+
+            _chip.SetFill(TwinStatusPalette.Of(status, 0.20f), TwinStatusPalette.Of(status, 0.20f));
+            _chip.SetBorder(TwinStatusPalette.Of(status, 0.65f), 1f);
+            SetCached(_chipText, ref _cachedChip, TwinStatusPalette.Label(status));
+
+            if (_chipText == null) return;
+
+            // 文字颜色 = 状态色，但**底色太暗时必须改用主文字色**。
+            // Offline(0.28) / Unknown(0.38) / Alarm(0.41) 这几个状态色按 BT.601
+            // 算出来的感知亮度都不到 0.45，压在 20% 同色底的胶囊上几乎看不见 ——
+            // 「离线」这两个字看不清，等于这个状态白设了。
+            float lum = 0.299f * statusColor.r + 0.587f * statusColor.g + 0.114f * statusColor.b;
+            Color textColor = lum < 0.45f ? TwinStatusPalette.TextPrimary : statusColor;
+            if (_chipText.color != textColor) _chipText.color = textColor;
+        }
+
         // ================================================================ 数值刷新（10Hz）
 
         private void RefreshValues()
         {
             if (_selected == null) return;
+
+            // 状态会随数据变，胶囊必须跟着走（见 RefreshChip 的注释）
+            RefreshChip();
 
             for (int i = 0; i < _metricRows.Count; i++)
             {
