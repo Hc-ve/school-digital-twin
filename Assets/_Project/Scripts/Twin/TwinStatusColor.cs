@@ -39,6 +39,18 @@ namespace SchoolTwin.Twin
         [SerializeField] private bool _applyEmission = true;
         [SerializeField] private float _emissionIntensity = 0.7f;
 
+        [Header("染色强度（0 = 保留原色，1 = 完全替换成状态色）")]
+        [Tooltip("Warning / Stale / Unknown 的染色强度。门、墙、柜子这类大件建议 0.2~0.35，否则会整片变成绿/黄")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _tintStrength = 0.30f;
+
+        [Tooltip("Alarm 的染色强度。必须明显高于 _tintStrength，否则真出事时看不出来")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _alarmTintStrength = 0.75f;
+
+        [Tooltip("勾上后：正常状态完全不染色，保留物体原本的颜色；只有异常才泛色")]
+        [SerializeField] private bool _tintOnlyWhenAbnormal = true;
+
         [Header("告警闪烁")]
         [Tooltip("Alarm 状态是否闪烁")]
         [SerializeField] private bool _blinkAlarm = true;
@@ -69,13 +81,27 @@ namespace SchoolTwin.Twin
         private bool _renderersCollected;
         private float _nextRefresh;
 
+        /// <summary>每个 Renderer 原始材质色。染色时和它混合，而不是整个替换掉。</summary>
+        private Color[] _baseColors;
+        private float _appliedStrength = -1f;
+
         private void OnEnable()
         {
             ResolveAnchor();
             CollectRenderers();
-            _target = ColorForCurrentStatus();
-            _current = _target;
-            Apply(_current);
+
+            TwinStatus status = ColorStatus();
+            _current = ColorFor(status);
+            _target = _current;
+            _appliedStrength = StrengthFor(status);
+            Apply(_current, _appliedStrength);
+        }
+
+        private void OnDisable()
+        {
+            // 组件关掉后必须把颜色还回去，否则「门一直是绿的」会留在场景里，
+            // 而且下次打开组件时也看不出问题出在哪。
+            RestoreBaseColors();
         }
 
         private void Update()
@@ -89,16 +115,47 @@ namespace SchoolTwin.Twin
             if (now < _nextRefresh) return;
             _nextRefresh = now + interval;
 
+            // 强度也要参与判断：状态从 Normal 变成 Warning 时颜色可能刚好没变多少，
+            // 但强度从 0 跳到 0.3，必须重新应用一次。
+            float strength = StrengthFor(status);
+            bool strengthChanged = Mathf.Abs(strength - _appliedStrength) > 0.005f;
+
             Color baseColor = ColorFor(status);
             _target = blinking ? ApplyBlink(baseColor) : baseColor;
 
-            if (Approximately(_current, _target)) return;
+            if (!strengthChanged && Approximately(_current, _target)) return;
 
             // 闪烁时目标色本身在脉动，用普通的 _lerpSpeed(8) 会把脉冲抹平成常亮，
             // 所以这里换一个更快的跟随速度。
             float speed = blinking ? _blinkLerpSpeed : _lerpSpeed;
             _current = Color.Lerp(_current, _target, 1f - Mathf.Exp(-speed * interval));
-            Apply(_current);
+            Apply(_current, strength);
+            _appliedStrength = strength;
+        }
+
+        /// <summary>
+        /// 按状态决定「染多深」。
+        ///
+        /// 【为什么不能一律 1.0】
+        /// 原来的实现是把材质的 _Color 整个换成状态色 —— 一扇白门绑上点位后
+        /// 直接变成一整块纯绿，很难看，而且「一切正常」时满屋子都是绿色，
+        /// 真正出事的那一处反而不显眼。
+        ///
+        /// 现在：正常不染色（保留原色），异常才泛色，告警比警告更深。
+        /// </summary>
+        private float StrengthFor(TwinStatus status)
+        {
+            switch (status)
+            {
+                case TwinStatus.Normal:
+                    return _tintOnlyWhenAbnormal ? 0f : _tintStrength;
+                case TwinStatus.Alarm:
+                    return _alarmTintStrength;
+                case TwinStatus.Offline:
+                    return _alarmTintStrength * 0.8f;
+                default:
+                    return _tintStrength;   // Warning / Stale / Unknown
+            }
         }
 
         /// <summary>
@@ -159,7 +216,36 @@ namespace SchoolTwin.Twin
                 GameObject target = _anchor != null ? _anchor.VisualTarget : gameObject;
                 _renderers = target.GetComponentsInChildren<Renderer>(true);
             }
+            CaptureBaseColors();
             _renderersCollected = true;
+        }
+
+        /// <summary>
+        /// 记下每个 Renderer 的原始材质色。
+        /// 染色 = 在「原色」和「状态色」之间按强度插值，而不是把原色丢掉 ——
+        /// 丢掉原色的结果就是白门变纯绿。
+        /// </summary>
+        private void CaptureBaseColors()
+        {
+            if (_renderers == null) { _baseColors = null; return; }
+
+            _baseColors = new Color[_renderers.Length];
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                Renderer r = _renderers[i];
+                Material shared = r != null ? r.sharedMaterial : null;
+
+                if (shared == null) { _baseColors[i] = Color.white; continue; }
+                if (shared.HasProperty(s_colorId)) _baseColors[i] = shared.GetColor(s_colorId);
+                else if (shared.HasProperty(s_baseColorId)) _baseColors[i] = shared.GetColor(s_baseColorId);
+                else _baseColors[i] = Color.white;
+            }
+        }
+
+        private Color BaseColorAt(int index)
+        {
+            if (_baseColors == null || index < 0 || index >= _baseColors.Length) return Color.white;
+            return _baseColors[index];
         }
 
         private TwinStatus ColorStatus()
@@ -179,11 +265,6 @@ namespace SchoolTwin.Twin
             return s;
         }
 
-        private Color ColorForCurrentStatus()
-        {
-            return ColorFor(ColorStatus());
-        }
-
         private Color ColorFor(TwinStatus status)
         {
             switch (status)
@@ -197,7 +278,7 @@ namespace SchoolTwin.Twin
             }
         }
 
-        private void Apply(Color color)
+        private void Apply(Color statusColor, float strength)
         {
             if (_renderers == null) return;
             if (_mpb == null) _mpb = new MaterialPropertyBlock();
@@ -210,13 +291,40 @@ namespace SchoolTwin.Twin
                 Material shared = r.sharedMaterial;
                 if (shared == null) continue;
 
+                // 强度 0 = 完全保留原色。注意这里不是「不写属性」而是「写回原值」：
+                // MPB 是叠加在材质上的，之前写过的状态色不会自己消失。
+                Color final = strength <= 0.001f
+                    ? BaseColorAt(i)
+                    : Color.Lerp(BaseColorAt(i), statusColor, strength);
+
                 r.GetPropertyBlock(_mpb);
-                if (shared.HasProperty(s_colorId)) _mpb.SetColor(s_colorId, color);
-                if (shared.HasProperty(s_baseColorId)) _mpb.SetColor(s_baseColorId, color);
+                if (shared.HasProperty(s_colorId)) _mpb.SetColor(s_colorId, final);
+                if (shared.HasProperty(s_baseColorId)) _mpb.SetColor(s_baseColorId, final);
                 if (_applyEmission && shared.HasProperty(s_emissionId))
-                    _mpb.SetColor(s_emissionId, color * _emissionIntensity);
+                {
+                    // 自发光同样按强度混合：低强度时几乎不发光，
+                    // 否则「淡淡的泛色」会被自发光放大成整块发亮的绿。
+                    _mpb.SetColor(s_emissionId,
+                        Color.Lerp(Color.black, statusColor, strength) * _emissionIntensity);
+                }
                 r.SetPropertyBlock(_mpb);
                 _mpb.Clear();
+            }
+        }
+
+        /// <summary>清掉 MPB 覆盖，让渲染器回落到材质本身的颜色。</summary>
+        private void RestoreBaseColors()
+        {
+            if (_renderers == null) return;
+            if (_mpb == null) _mpb = new MaterialPropertyBlock();
+
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                Renderer r = _renderers[i];
+                if (r == null) continue;
+                r.GetPropertyBlock(_mpb);
+                _mpb.Clear();
+                r.SetPropertyBlock(_mpb);
             }
         }
 
@@ -231,7 +339,8 @@ namespace SchoolTwin.Twin
             _renderers = null;
             _renderersCollected = false;
             CollectRenderers();
-            Apply(_target);
+            _appliedStrength = StrengthFor(ColorStatus());
+            Apply(_target, _appliedStrength);
         }
 
         [ContextMenu("打印当前状态")]
