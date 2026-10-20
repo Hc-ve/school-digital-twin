@@ -236,7 +236,17 @@ namespace SchoolTwin.EditorTools
                 if (point == null) continue;
 
                 string objectName = "TwinPoint_" + point.TwinId.Replace('/', '_');
-                if (root.transform.Find(objectName) != null) continue;
+
+                // 按 TwinId 去重，而不是按 GameObject 名字。
+                //
+                // 旧实现是 root.transform.Find(objectName) —— 一旦方块被改名
+                // （例如为消除冲突加 BAK/ 前缀），就找不到它，于是重复生成一个
+                // 抢同一 TwinId 的锚点：Console 报「TwinId 重复」，
+                // 且新方块永远收不到数据（它不在点位目录里）。
+                //
+                // 另外 Light 这类点位在场景里已有真实物体（灯具预制体）承载锚点，
+                // 本来就不该再生成辅助方块 —— 查全场景能一并覆盖这种情况。
+                if (HasTwinIdInScene(point.TwinId)) continue;
 
                 GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 cube.name = objectName;
@@ -256,6 +266,22 @@ namespace SchoolTwin.EditorTools
             }
 
             return root;
+        }
+
+        /// <summary>
+        /// 整个场景（含未激活对象）里是否已有该 TwinId 的锚点。
+        /// TwinId 才是点位的身份，GameObject 名字不是 —— 名字随时可能被改。
+        /// </summary>
+        private static bool HasTwinIdInScene(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return false;
+
+            TwinAnchor[] all = Object.FindObjectsOfType<TwinAnchor>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].TwinId == twinId) return true;
+            }
+            return false;
         }
 
         private static void AddLabel(GameObject parent, string text)

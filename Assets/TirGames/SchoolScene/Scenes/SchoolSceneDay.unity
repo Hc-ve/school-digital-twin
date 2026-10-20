@@ -15354,6 +15354,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &324235521
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20880,6 +20886,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &483822955
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -33757,6 +33769,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &753091179
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -39348,6 +39366,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &867654318
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -45364,7 +45388,7 @@ MonoBehaviour:
   m_ScaleFactor: 1
   m_ReferenceResolution: {x: 1000, y: 720}
   m_ScreenMatchMode: 0
-  m_MatchWidthOrHeight: 0.5
+  m_MatchWidthOrHeight: 0
   m_PhysicalUnit: 3
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
@@ -65262,6 +65286,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1370463245
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -66030,6 +66060,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1392306004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -70082,6 +70118,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1483204374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -72229,6 +72271,9 @@ MonoBehaviour:
   _catalog: {fileID: 11400000, guid: b8bf14bcb2fef0d468132056fc97564b, type: 2}
   _hz: 2
   _periodSeconds: 30
+  _excursionPeriodSeconds: 45
+  _excursionSeconds: 6
+  _excursionDepth: 0.95
   _autoStart: 1
   _fakeTopicCount: 0
   _qos: 0
@@ -72368,6 +72413,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1531466401
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -77037,6 +77088,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1627343750
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -89689,6 +89746,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &1904018451
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -99640,12 +99703,12 @@ GameObject:
   - component: {fileID: 2085740711}
   - component: {fileID: 2085740710}
   m_Layer: 0
-  m_Name: TwinPoint_Class2-1_Light_Main_01
+  m_Name: TwinPoint_BAK2_Class2-1_Light_Main_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2085740709
 Transform:
   m_ObjectHideFlags: 0
@@ -99687,6 +99750,12 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
 --- !u!114 &2085740711
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -99699,7 +99768,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _twinId: Class2-1/Light/Main_01
+  _twinId: BAK2/Class2-1/Light/Main_01
   _displayName: "2-1\u73ED \u4E3B\u7167\u660E"
   _zone: Class2-1
   _category: Light
@@ -101497,6 +101566,9 @@ MonoBehaviour:
   _hz: 10
   _noiseRatio: 0.03
   _staggerPhase: 1
+  _excursionPeriodSeconds: 45
+  _excursionSeconds: 6
+  _excursionDepth: 0.95
   _dropRate: 0
 --- !u!114 &2126855772
 MonoBehaviour:
@@ -101578,6 +101650,37 @@ MonoBehaviour:
   _maxQueuedLines: 100000
   _fileBufferBytes: 65536
   _flushEveryLines: 2000
+--- !u!114 &2126855776
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2126855770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b7ade5c15384c0899e8ca6541a6a711, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _pollInterval: 0.2
+  _repeatSeconds: 30
+  _raiseOnWarning: 1
+--- !u!114 &2126855777
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2126855770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e43f68de74874305bbc7e22426b13583, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _volume: 0.35
+  _mute: 0
+  _soundOnWarning: 0
+  _minGapSeconds: 0.6
 --- !u!1001 &2128860402
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -102741,30 +102844,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: dae965d9ed8802048877e54ec2f0be78, type: 3}
---- !u!114 &2126855776
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2126855770}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0b7ade5c15384c0899e8ca6541a6a711, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!114 &2126855777
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2126855770}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e43f68de74874305bbc7e22426b13583, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
