@@ -1097,7 +1097,15 @@ namespace SchoolTwin.UI
                     if (anchor == null) continue;
 
                     TwinStatus status = CurrentStatus(anchor);
-                    if (!TwinStatusPalette.NeedsAttention(status)) continue;
+
+                    // 未配置阈值的点位（Unknown 且有数据）也要进列表：
+                    // 它有数据、但我们判不了好坏，不能让它悄悄从告警列表里消失 ——
+                    // 那等于「这个点位没被监管」，却还占着「一切正常」的名额。
+                    // 注意：Unknown 不在 NeedsAttention 里，所以它只进列表、不触发告警音
+                    // （配置缺失是开发期问题，不该在演示/值班时一直响）。
+                    bool needsLook = TwinStatusPalette.NeedsAttention(status)
+                                     || (status == TwinStatus.Unknown && anchor.HasData);
+                    if (!needsLook) continue;
 
                     _alarmTotal++;
 
@@ -1329,6 +1337,12 @@ namespace SchoolTwin.UI
                 return age < 0f ? "尚无数据" : age.ToString("0.#") + "s 未更新";
             }
             if (status == TwinStatus.Offline) return "数据源离线";
+
+            // Unknown + 已有数据 = 点位目录里查不到阈值定义。
+            // 必须说清是「没配置」而不是「正常」—— 否则运维会以为这个点位已被监管。
+            // Unknown 且没有数据 = 还没收到过数据，交给下面的通用文案。
+            if (status == TwinStatus.Unknown)
+                return anchor.HasData ? "未配置阈值" : TwinStatusPalette.Label(status);
 
             // 找出最差的那个指标，把它的值一并显示，省得还要点进去看
             string worstMetric = null;

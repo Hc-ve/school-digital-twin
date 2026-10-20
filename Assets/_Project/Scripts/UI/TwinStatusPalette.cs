@@ -99,6 +99,9 @@ namespace SchoolTwin.UI
                 case TwinStatus.Alarm: return 3;
                 case TwinStatus.Warning: return 2;
                 case TwinStatus.Stale: return 1;
+                // 与 TwinAnchor 内部口径保持一致：Unknown（未配置阈值）排在 Normal 之上，
+                // 否则「有一个正常指标」就会把「另一个指标没配阈值」盖成绿色。
+                case TwinStatus.Unknown: return 1;
                 case TwinStatus.Normal: return 0;
                 default: return -1;
             }

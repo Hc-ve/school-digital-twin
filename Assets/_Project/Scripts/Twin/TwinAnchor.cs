@@ -43,6 +43,10 @@ namespace SchoolTwin.Twin
         private readonly Dictionary<string, TwinValue> _values =
             new Dictionary<string, TwinValue>(StringComparer.Ordinal);
 
+        /// <summary>已经提醒过「未配置阈值」的 (TwinId|Metric)。跨实例共享，避免刷屏。</summary>
+        private static readonly HashSet<string> s_unconfiguredWarned =
+            new HashSet<string>(StringComparer.Ordinal);
+
         private TwinCatalog _catalog;
         private GameObject _resolvedTarget;
         private float _lastSampleRealtime = -1f;
@@ -307,8 +311,34 @@ namespace SchoolTwin.Twin
             {
                 if (value.Value < def.AlarmLow || value.Value > def.AlarmHigh) return TwinStatus.Alarm;
                 if (value.Value < def.WarnLow || value.Value > def.WarnHigh) return TwinStatus.Warning;
+                return TwinStatus.Normal;
             }
-            return TwinStatus.Normal;
+
+            // 未配置阈值 → Unknown，**绝不能返回 Normal**。
+            //
+            // 这是整个链路里最危险的静默失败方向：真实设备发来一个点位目录里没有的
+            // 点位/指标时，数值再离谱也会被显示成绿色「正常」。运维看到一片绿，
+            // 实际问题被完全掩盖 —— 比报错难查得多。
+            //
+            // 用 Unknown 而不是 Warning：这是「配置缺失」不是「设备异常」，
+            // 不该触发告警音（见 TwinStatusPalette.NeedsAttention），
+            // 但必须在画面上呈现为灰色，让人一眼看出「这个点位没被纳入监管」。
+            WarnUnconfiguredOnce(metric);
+            return TwinStatus.Unknown;
+        }
+
+        /// <summary>
+        /// 未配置阈值的警告只打一次。StatusOf 每个数据周期都会被调用，
+        /// 不去重的话 Console 会被刷屏，反而把真正的问题淹掉。
+        /// 静态集合跨实例共享 —— 同一 (TwinId, Metric) 全局只提醒一次。
+        /// </summary>
+        private void WarnUnconfiguredOnce(string metric)
+        {
+            string key = _twinId + "|" + metric;
+            if (!s_unconfiguredWarned.Add(key)) return;
+            Debug.LogWarning("[Twin] 点位 " + _twinId + " 的指标 " + metric +
+                             " 未在点位目录中配置阈值，状态显示为「未知」（灰）。" +
+                             "请在 TwinCatalog 里补上该指标的阈值。");
         }
 
         private TwinMetricDefinition FindMetricDefinition(string metric)
@@ -362,6 +392,14 @@ namespace SchoolTwin.Twin
                 case TwinStatus.Alarm: return 3;
                 case TwinStatus.Warning: return 2;
                 case TwinStatus.Stale: return 1;
+                // Unknown 与 Stale 同级（都在 Normal 之上）：
+                // 「未配置阈值」和「数据陈旧」一样，都不是「一切正常」，
+                // 但也都不是需要立刻处置的故障。
+                //
+                // 【为什么必须 > Normal】EvaluateStatus 取「最差指标」作为整机状态。
+                // 若 Unknown 排在 Normal 之下，一个点只要有一个配置好的指标是正常的，
+                // 未配置的那个指标就会被盖住，整机仍显示绿色 —— 安全告警形同虚设。
+                case TwinStatus.Unknown: return 1;
                 case TwinStatus.Normal: return 0;
                 default: return -1;
             }
