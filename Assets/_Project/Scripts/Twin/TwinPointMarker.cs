@@ -42,11 +42,12 @@ namespace SchoolTwin.Twin
         [SerializeField] private float _widthMeters = 0.62f;
         [SerializeField] private float _heightMeters = 0.19f;
 
-        [Tooltip("向上偏移（米），避免和墙/设备重叠")]
-        [SerializeField] private float _lift = 0.24f;
+        [Tooltip("向上偏移（米）。贴墙挂时保持 0，让牌心正好在物体位置")]
+        [SerializeField] private float _lift = 0f;
 
-        [Tooltip("始终正对相机。关掉则固定朝向（由摆放时的旋转决定）")]
-        [SerializeField] private bool _billboard = true;
+        [Tooltip("始终正对相机。**贴墙挂时务必关掉** —— billboard 会让牌子绕 Y 轴转，" +
+                 "一侧直接转进墙里，表现为「牌子被削掉一半」")]
+        [SerializeField] private bool _billboard = false;
 
         [Tooltip("在标记下方显示实时数值")]
         [SerializeField] private bool _showValues = true;

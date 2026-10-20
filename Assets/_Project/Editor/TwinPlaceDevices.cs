@@ -33,18 +33,19 @@ namespace SchoolTwin.EditorTools
         private const string IdTemp = "Class2-1/Sensor/Temp_01";
         private const string IdCo2 = "Class2-1/Sensor/CO2_01";
 
-        // 北墙一排：两块标记牌挂在**两扇窗之间**的实墙上（窗户在 x=-20.94/-16.86/-12.89，
-        // 正对暖气片），牌子贴墙 z=39.62，不挡窗户、也不悬在半空。
+        // 北墙内表面实测 z≈39.85（窗帘 Blinds01c 在 39.82、室外机 Conditioner01 在 40.27）。
+        // 窗户中心 x=-21.41 / -17.42 / -13.42（窗帘位置），牌子挂到**两窗正中间**：
+        // x=-19.42 / -15.42，贴墙 z=39.70，关掉 billboard 后不会转进墙里。
         // 空调位置是用户在 Scene 视图里手调过的，以场景为准 —— 重新跑 Apply 会覆盖，慎用。
         private static readonly Vector3 AcPos = new Vector3(-11.685f, 6.361f, 38.97f);
-        private static readonly Vector3 TempPos = new Vector3(-18.90f, 5.26f, 39.62f);
-        private static readonly Vector3 Co2Pos = new Vector3(-14.90f, 5.26f, 39.62f);
+        private static readonly Vector3 TempPos = new Vector3(-19.42f, 5.50f, 39.70f);
+        private static readonly Vector3 Co2Pos = new Vector3(-15.42f, 5.50f, 39.70f);
         private const float WallYaw = 180f;
 
-        // 标记牌世界尺寸：0.62m 宽约等于一块门牌。1.1m 在 2 米内会把窗户整块挡住。
-        private const float MarkerWidth = 0.62f;
-        private const float MarkerHeight = 0.19f;
-        private const float MarkerLift = 0.24f;
+        // 标记牌世界尺寸：0.72m 宽 ≈ 一块门牌。1.1m 在 2 米内会把窗户整块挡住。
+        private const float MarkerWidth = 0.72f;
+        private const float MarkerHeight = 0.22f;
+        private const float MarkerLift = 0f;
 
         /// <summary>菜单入口（用户在编辑器里也能点，效果与批处理一致）。</summary>
         [MenuItem("P1 孪生框架/⑩ 一键放置 2-1 班设备", false, 22)]
@@ -231,10 +232,12 @@ namespace SchoolTwin.EditorTools
             WriteIdentity(anchor, point);
 
             TwinPointMarker marker = host.AddComponent<TwinPointMarker>();
-            // 尺寸显式写死，不依赖脚本默认值 —— 否则改了默认值、老场景还是老尺寸。
+            // 尺寸/朝向显式写死，不依赖脚本默认值 —— 否则改了默认值、老场景还是老尺寸。
             SetFloat(marker, "_widthMeters", MarkerWidth);
             SetFloat(marker, "_heightMeters", MarkerHeight);
             SetFloat(marker, "_lift", MarkerLift);
+            // 贴墙挂必须关 billboard：否则牌子绕 Y 轴转，一侧直接转进墙里被削掉一半
+            SetBool(marker, "_billboard", false);
 
             // 标记牌是纯 UI，没有 Renderer → 不补碰撞体就点不中
             BoxCollider box = host.AddComponent<BoxCollider>();
@@ -356,6 +359,21 @@ namespace SchoolTwin.EditorTools
                 return;
             }
             p.floatValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(target);
+        }
+
+        private static void SetBool(UnityEngine.Object target, string fieldName, bool value)
+        {
+            if (target == null) return;
+            SerializedObject so = new SerializedObject(target);
+            SerializedProperty p = so.FindProperty(fieldName);
+            if (p == null)
+            {
+                Debug.LogWarning("[Twin] 字段不存在：" + target.GetType().Name + "." + fieldName);
+                return;
+            }
+            p.boolValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(target);
         }
