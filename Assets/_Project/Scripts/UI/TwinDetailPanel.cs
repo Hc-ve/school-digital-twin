@@ -1344,6 +1344,12 @@ namespace SchoolTwin.UI
             }
             if (string.IsNullOrEmpty(worstMetric)) return TwinStatusPalette.Label(status);
 
+            // worstRank <= 0 表示所有指标都已回到正常，但 anchor.Status 还停留在上一拍
+            // （它是 OnSample 时算出的整机最差，最多滞后一个数据周期）。
+            // 此时若仍去显示某个指标的数值，就会出现「警告 · 温度 26.32℃」这种自相矛盾的文案
+            // —— 26.32 < WarnHigh(28)，用户一定会问「这为什么是警告」。
+            if (worstRank <= 0) return "已恢复";
+
             TwinValue value;
             if (!anchor.TryGetValue(worstMetric, out value)) return TwinStatusPalette.Label(status);
 

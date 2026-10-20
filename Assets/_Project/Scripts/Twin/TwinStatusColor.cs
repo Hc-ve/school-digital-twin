@@ -39,6 +39,26 @@ namespace SchoolTwin.Twin
         [SerializeField] private bool _applyEmission = true;
         [SerializeField] private float _emissionIntensity = 0.7f;
 
+        [Header("告警闪烁")]
+        [Tooltip("Alarm 状态是否闪烁")]
+        [SerializeField] private bool _blinkAlarm = true;
+
+        [Tooltip("Offline 状态是否闪烁")]
+        [SerializeField] private bool _blinkOffline = true;
+
+        [Tooltip("闪烁周期（秒）")]
+        [SerializeField] private float _blinkPeriod = 0.9f;
+
+        [Tooltip("最暗时的亮度系数（1 = 不闪）。0.45 在深色场景里已经很明显")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _blinkFloor = 0.45f;
+
+        [Tooltip("闪烁时的刷新间隔（秒）。必须比普通刷新快，否则闪成几帧一跳")]
+        [SerializeField] private float _blinkRefreshInterval = 0.033f;
+
+        [Tooltip("闪烁时的颜色跟随速度。太慢会把脉冲抹平成常亮")]
+        [SerializeField] private float _blinkLerpSpeed = 60f;
+
         private static readonly int s_colorId = Shader.PropertyToID("_Color");
         private static readonly int s_baseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int s_emissionId = Shader.PropertyToID("_EmissionColor");
@@ -60,14 +80,64 @@ namespace SchoolTwin.Twin
 
         private void Update()
         {
-            if (Time.realtimeSinceStartup < _nextRefresh) return;
-            _nextRefresh = Time.realtimeSinceStartup + _refreshInterval;
+            float now = Time.realtimeSinceStartup;
 
-            _target = ColorForCurrentStatus();
+            TwinStatus status = ColorStatus();
+            bool blinking = ShouldBlink(status);
+            float interval = blinking ? _blinkRefreshInterval : _refreshInterval;
+
+            if (now < _nextRefresh) return;
+            _nextRefresh = now + interval;
+
+            Color baseColor = ColorFor(status);
+            _target = blinking ? ApplyBlink(baseColor) : baseColor;
 
             if (Approximately(_current, _target)) return;
-            _current = Color.Lerp(_current, _target, 1f - Mathf.Exp(-_lerpSpeed * _refreshInterval));
+
+            // 闪烁时目标色本身在脉动，用普通的 _lerpSpeed(8) 会把脉冲抹平成常亮，
+            // 所以这里换一个更快的跟随速度。
+            float speed = blinking ? _blinkLerpSpeed : _lerpSpeed;
+            _current = Color.Lerp(_current, _target, 1f - Mathf.Exp(-speed * interval));
             Apply(_current);
+        }
+
+        /// <summary>
+        /// 只闪 Alarm / Offline。
+        /// Warning 不闪 —— 它出现频率高，满屏都闪等于没有闪，人会自动忽略。
+        /// </summary>
+        private bool ShouldBlink(TwinStatus status)
+        {
+            if (_blinkAlarm && status == TwinStatus.Alarm) return true;
+            if (_blinkOffline && status == TwinStatus.Offline) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 余弦脉冲。亮色（Alarm 红）用「压暗」闪，暗色（Offline 灰黑）用「提亮」闪。
+        ///
+        /// 为什么必须区分：Offline 的基色是 (0.28,0.28,0.30)，压到 0.45 倍后是 0.126，
+        /// 在深色场景里比背景还黑 —— 看起来像"不闪"，等于没有提醒。
+        /// </summary>
+        private Color ApplyBlink(Color c)
+        {
+            float period = Mathf.Max(0.2f, _blinkPeriod);
+            float phase = Mathf.Repeat(Time.unscaledTime, period) / period;
+
+            // cos 而非 sin：相位 0 与 1 时都在最亮，状态切换的瞬间不会突然变暗
+            float k = 0.5f + 0.5f * Mathf.Cos(phase * 2f * Mathf.PI);
+
+            // 感知亮度（ITU-R BT.601 权重）
+            float lum = c.r * 0.299f + c.g * 0.587f + c.b * 0.114f;
+
+            if (lum < 0.35f)
+            {
+                // 暗色：提亮脉冲，最亮时到 2.6 倍
+                float boost = Mathf.Lerp(1f, 2.6f, k);
+                return new Color(c.r * boost, c.g * boost, c.b * boost, c.a);
+            }
+
+            float factor = Mathf.Lerp(Mathf.Clamp01(_blinkFloor), 1f, k);
+            return new Color(c.r * factor, c.g * factor, c.b * factor, c.a);
         }
 
         private void ResolveAnchor()
