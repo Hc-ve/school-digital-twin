@@ -46,8 +46,19 @@ namespace SchoolTwin.Data
         [Tooltip("发布频率（Hz）")]
         [SerializeField] private float _hz = 2f;
 
-        [Tooltip("周期（秒），数值按正弦波变化。用于观察曲线是否随时间变化")]
+        [Tooltip("基线波动周期（秒）。数值平时在这个周期内缓慢起伏")]
         [SerializeField] private float _periodSeconds = 30f;
+
+        [Header("偶发异常（让演示中能看到告警，而不是一屋子同时报警）")]
+        [Tooltip("异常事件周期（秒）。每隔这么久制造一次短暂越界。<=1 表示永不越界")]
+        [SerializeField] private float _excursionPeriodSeconds = 45f;
+
+        [Tooltip("每次异常事件持续秒数")]
+        [SerializeField] private float _excursionSeconds = 6f;
+
+        [Tooltip("异常峰值冲向量程边界的深度。0.95 ≈ 冲到 Min/Max 附近")]
+        [Range(0.3f, 1f)]
+        [SerializeField] private float _excursionDepth = 0.95f;
 
         [Tooltip("自动在 OnEnable 时开始发布")]
         [SerializeField] private bool _autoStart = true;
@@ -232,7 +243,7 @@ namespace SchoolTwin.Data
                         TwinMetricDefinition metric = point.Metrics[k];
                         if (metric == null || string.IsNullOrEmpty(metric.Metric)) continue;
 
-                        float value = MakeValue(point, metric, t, i, k);
+                        float value = MakeValue(metric, t, i, k);
                         string topic = _topicPrefix + point.TwinId + "/" + metric.Metric;
                         string payload = MakePayload(value, tsUnix, metric.Metric);
 
@@ -273,18 +284,27 @@ namespace SchoolTwin.Data
             }
         }
 
-        /// <summary>按正弦波生成数值，落在指标的 [Min, Max] 之间。</summary>
-        private float MakeValue(TwinPointDefinition point, TwinMetricDefinition metric,
-                                double t, int pointIndex, int metricIndex)
+        /// <summary>
+        /// 生成数值：平时在正常区间内缓慢波动，偶发短暂越界。
+        ///
+        /// 旧实现是 Min + norm*(Max-Min) —— 正弦走遍全量程，而阈值卡在量程中段，
+        /// 于是约一半时间必然落在警告/告警区（实测 5 个点位常态 3 个异常）。
+        /// 具体算法见 MockSignalGenerator：MockDataSource 与这里共用同一实现，
+        /// 保证「换数据源」时画面表现一致。
+        /// </summary>
+        private float MakeValue(TwinMetricDefinition metric, double t, int pointIndex, int metricIndex)
         {
-            float period = Mathf.Max(5f, _periodSeconds);
+            MockSignalGenerator.Config cfg = new MockSignalGenerator.Config
+            {
+                PeriodSeconds = _periodSeconds,
+                ExcursionPeriodSeconds = _excursionPeriodSeconds,
+                ExcursionSeconds = _excursionSeconds,
+                ExcursionDepth = _excursionDepth
+            };
+
             // 每个点位/指标错开相位，避免所有曲线同步
             double ph = pointIndex * 1.7 + metricIndex * 2.9;
-            double norm = 0.5 + 0.5 * Math.Sin(2.0 * Math.PI * (t / period) + ph);
-
-            float min = metric.Min;
-            float max = metric.Max;
-            return (float)(min + norm * (max - min));
+            return MockSignalGenerator.Next(metric, t, ph, in cfg);
         }
 
         /// <summary>

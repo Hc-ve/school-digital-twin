@@ -34,6 +34,17 @@ namespace SchoolTwin.Data
         [Tooltip("不同指标的相位错开，避免所有曲线整齐划一")]
         [SerializeField] private bool _staggerPhase = true;
 
+        [Header("偶发异常（让演示中能看到告警，而不是一屋子同时报警）")]
+        [Tooltip("异常事件周期（秒）。每隔这么久制造一次短暂越界。<=1 表示永不越界")]
+        [SerializeField] private float _excursionPeriodSeconds = 45f;
+
+        [Tooltip("每次异常事件持续秒数")]
+        [SerializeField] private float _excursionSeconds = 6f;
+
+        [Tooltip("异常峰值冲向量程边界的深度。0.95 ≈ 冲到 Min/Max 附近")]
+        [Range(0.3f, 1f)]
+        [SerializeField] private float _excursionDepth = 0.95f;
+
         [Tooltip("模拟丢包率，用于验证脏数据处理")]
         [Range(0f, 1f)]
         [SerializeField] private float _dropRate = 0f;
@@ -125,8 +136,18 @@ namespace SchoolTwin.Data
                         if (metric == null) continue;
 
                         float span = metric.Max - metric.Min;
-                        float norm = 0.5f + 0.5f * (float)Math.Sin(t * OmegaOf(metric) + PhaseOf(i, k, seq));
-                        float value = metric.Min + norm * span;
+
+                        // 平时在正常区间内波动，偶发短暂越界。
+                        // 与 MqttLoopbackPublisher 共用 MockSignalGenerator，
+                        // 保证「换数据源」时画面表现一致（P1 架构承诺的延伸）。
+                        MockSignalGenerator.Config cfg = new MockSignalGenerator.Config
+                        {
+                            PeriodSeconds = 6.2831853f / OmegaOf(metric),
+                            ExcursionPeriodSeconds = _excursionPeriodSeconds,
+                            ExcursionSeconds = _excursionSeconds,
+                            ExcursionDepth = _excursionDepth
+                        };
+                        float value = MockSignalGenerator.Next(metric, t, PhaseOf(i, k, seq), in cfg);
                         value += (float)((rng.NextDouble() - 0.5) * 2.0) * span * _noiseRatio;
 
                         float overridden;
