@@ -33,17 +33,92 @@ namespace SchoolTwin.EditorTools
         private const string IdTemp = "Class2-1/Sensor/Temp_01";
         private const string IdCo2 = "Class2-1/Sensor/CO2_01";
 
-        // 北墙一排：空调居中，两块标记牌在两端
-        private static readonly Vector3 AcPos = new Vector3(-16.86f, 6.11f, 38.75f);
-        private static readonly Vector3 TempPos = new Vector3(-20.94f, 5.15f, 38.90f);
-        private static readonly Vector3 Co2Pos = new Vector3(-12.89f, 5.15f, 38.90f);
+        // 北墙一排：两块标记牌挂在**两扇窗之间**的实墙上（窗户在 x=-20.94/-16.86/-12.89，
+        // 正对暖气片），牌子贴墙 z=39.62，不挡窗户、也不悬在半空。
+        // 空调位置是用户在 Scene 视图里手调过的，以场景为准 —— 重新跑 Apply 会覆盖，慎用。
+        private static readonly Vector3 AcPos = new Vector3(-11.685f, 6.361f, 38.97f);
+        private static readonly Vector3 TempPos = new Vector3(-18.90f, 5.26f, 39.62f);
+        private static readonly Vector3 Co2Pos = new Vector3(-14.90f, 5.26f, 39.62f);
         private const float WallYaw = 180f;
+
+        // 标记牌世界尺寸：0.62m 宽约等于一块门牌。1.1m 在 2 米内会把窗户整块挡住。
+        private const float MarkerWidth = 0.62f;
+        private const float MarkerHeight = 0.19f;
+        private const float MarkerLift = 0.24f;
 
         /// <summary>菜单入口（用户在编辑器里也能点，效果与批处理一致）。</summary>
         [MenuItem("P1 孪生框架/⑩ 一键放置 2-1 班设备", false, 22)]
         public static void ApplyFromMenu()
         {
             Apply();
+        }
+
+        /// <summary>
+        /// 射线探墙：从教室内部朝四个方向打，拿到墙面的**真实 z / x**。
+        /// 场景里没有叫「Wall」的对象可以对齐，只能靠碰撞体量。
+        /// 同时打印空调实例的世界包围盒，用来判断它离墙多远、尺寸对不对。
+        /// </summary>
+        public static void Probe()
+        {
+            StringBuilder log = new StringBuilder();
+            Scene scene = SceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+                scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+            log.AppendLine("[Twin] ==== 墙面探测（教室内部朝四个方向）====");
+
+            float[] heights = { 3.95f, 4.60f, 5.40f, 6.10f };
+            for (int i = 0; i < heights.Length; i++)
+            {
+                Vector3 o = new Vector3(-16.90f, heights[i], 36.60f);
+                log.AppendLine("-- y=" + heights[i]);
+                Shoot(log, o, Vector3.forward, "北 +Z");
+                Shoot(log, o, Vector3.back, "南 -Z");
+                Shoot(log, o, Vector3.right, "东 +X");
+                Shoot(log, o, Vector3.left, "西 -X");
+            }
+
+            log.AppendLine("[Twin] ==== 空调实例包围盒 ====");
+            Transform ac = FindByName("AC_Class2-1");
+            if (ac == null)
+            {
+                log.AppendLine("  找不到 AC_Class2-1");
+            }
+            else
+            {
+                Renderer[] rs = ac.GetComponentsInChildren<Renderer>(true);
+                log.AppendLine("  渲染器 " + rs.Length + " 个，position=" + ac.position.ToString("F3"));
+                if (rs.Length > 0)
+                {
+                    Bounds b = rs[0].bounds;
+                    for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+                    log.AppendLine("  世界包围盒 center=" + b.center.ToString("F3") + " size=" + b.size.ToString("F3"));
+                }
+            }
+
+            Debug.Log(log.ToString());
+        }
+
+        private static void Shoot(StringBuilder log, Vector3 origin, Vector3 dir, string label)
+        {
+            RaycastHit hit;
+            if (!Physics.Raycast(origin, dir, out hit, 30f))
+            {
+                log.AppendLine("   " + label + " 未命中");
+                return;
+            }
+            log.AppendLine(string.Format("   {0} 距离 {1,6:F2}m  命中点 {2}  碰撞体 {3}",
+                label, hit.distance, hit.point.ToString("F2"), hit.collider.gameObject.name));
+        }
+
+        private static Transform FindByName(string name)
+        {
+            Transform[] all = UnityEngine.Object.FindObjectsOfType<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].name == name) return all[i];
+            }
+            return null;
         }
 
         /// <summary>批处理入口：Unity.exe -executeMethod SchoolTwin.EditorTools.TwinPlaceDevices.Apply</summary>
@@ -155,12 +230,16 @@ namespace SchoolTwin.EditorTools
             TwinAnchor anchor = host.AddComponent<TwinAnchor>();
             WriteIdentity(anchor, point);
 
-            host.AddComponent<TwinPointMarker>();
+            TwinPointMarker marker = host.AddComponent<TwinPointMarker>();
+            // 尺寸显式写死，不依赖脚本默认值 —— 否则改了默认值、老场景还是老尺寸。
+            SetFloat(marker, "_widthMeters", MarkerWidth);
+            SetFloat(marker, "_heightMeters", MarkerHeight);
+            SetFloat(marker, "_lift", MarkerLift);
 
             // 标记牌是纯 UI，没有 Renderer → 不补碰撞体就点不中
             BoxCollider box = host.AddComponent<BoxCollider>();
-            box.center = new Vector3(0f, 0.45f, 0f);
-            box.size = new Vector3(1.10f, 0.34f, 0.06f);
+            box.center = new Vector3(0f, MarkerLift, 0f);
+            box.size = new Vector3(MarkerWidth, MarkerHeight, 0.06f);
 
             RemoveScaffold(cube);
 
@@ -262,6 +341,21 @@ namespace SchoolTwin.EditorTools
                 return;
             }
             p.stringValue = value ?? "";
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(target);
+        }
+
+        private static void SetFloat(UnityEngine.Object target, string fieldName, float value)
+        {
+            if (target == null) return;
+            SerializedObject so = new SerializedObject(target);
+            SerializedProperty p = so.FindProperty(fieldName);
+            if (p == null)
+            {
+                Debug.LogWarning("[Twin] 字段不存在：" + target.GetType().Name + "." + fieldName);
+                return;
+            }
+            p.floatValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(target);
         }

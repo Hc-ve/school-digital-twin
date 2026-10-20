@@ -5395,15 +5395,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -16.86
+      value: -11.685
       objectReference: {fileID: 0}
     - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 6.11
+      value: 6.361
       objectReference: {fileID: 0}
     - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 38.75
+      value: 38.97
       objectReference: {fileID: 0}
     - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
       propertyPath: m_LocalRotation.w
@@ -24895,7 +24895,7 @@ Transform:
   m_GameObject: {fileID: 553038447}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: 1, z: -0, w: -0.00000004371139}
-  m_LocalPosition: {x: -12.89, y: 5.15, z: 38.9}
+  m_LocalPosition: {x: -14.9, y: 5.26, z: 39.62}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -24920,8 +24920,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.1, y: 0.34, z: 0.06}
-  m_Center: {x: 0, y: 0.45, z: 0}
+  m_Size: {x: 0.62, y: 0.19, z: 0.06}
+  m_Center: {x: 0, y: 0.24, z: 0}
 --- !u!114 &553038450
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -24936,9 +24936,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _anchor: {fileID: 0}
   _titleOverride: 
-  _widthMeters: 1.1
-  _heightMeters: 0.34
-  _lift: 0.45
+  _widthMeters: 0.62
+  _heightMeters: 0.19
+  _lift: 0.24
   _billboard: 1
   _showValues: 1
   _refreshInterval: 0.1
@@ -91123,7 +91123,7 @@ Transform:
   m_GameObject: {fileID: 1926408448}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: 1, z: -0, w: -0.00000004371139}
-  m_LocalPosition: {x: -20.94, y: 5.15, z: 38.9}
+  m_LocalPosition: {x: -18.9, y: 5.26, z: 39.62}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -91148,8 +91148,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.1, y: 0.34, z: 0.06}
-  m_Center: {x: 0, y: 0.45, z: 0}
+  m_Size: {x: 0.62, y: 0.19, z: 0.06}
+  m_Center: {x: 0, y: 0.24, z: 0}
 --- !u!114 &1926408451
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -91164,9 +91164,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _anchor: {fileID: 0}
   _titleOverride: 
-  _widthMeters: 1.1
-  _heightMeters: 0.34
-  _lift: 0.45
+  _widthMeters: 0.62
+  _heightMeters: 0.19
+  _lift: 0.24
   _billboard: 1
   _showValues: 1
   _refreshInterval: 0.1

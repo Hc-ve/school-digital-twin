@@ -38,12 +38,12 @@ namespace SchoolTwin.Twin
         [SerializeField] private string _titleOverride = "";
 
         [Header("外观")]
-        [Tooltip("标记的世界尺寸（米）。1.1m 宽在 3~4 米外看得清")]
-        [SerializeField] private float _widthMeters = 1.10f;
-        [SerializeField] private float _heightMeters = 0.34f;
+        [Tooltip("标记的世界尺寸（米）。0.62m 宽约等于一块门牌，贴墙挂不抢戏")]
+        [SerializeField] private float _widthMeters = 0.62f;
+        [SerializeField] private float _heightMeters = 0.19f;
 
         [Tooltip("向上偏移（米），避免和墙/设备重叠")]
-        [SerializeField] private float _lift = 0.45f;
+        [SerializeField] private float _lift = 0.24f;
 
         [Tooltip("始终正对相机。关掉则固定朝向（由摆放时的旋转决定）")]
         [SerializeField] private bool _billboard = true;
@@ -58,6 +58,14 @@ namespace SchoolTwin.Twin
         private const int CanvasHeight = 68;
         private const int FontTitle = 15;
         private const int FontValue = 19;
+
+        /// <summary>
+        /// 牌子底色。**必须几乎不透明**：半透明压在明亮的窗户上会糊成一片灰，
+        /// 看起来像渲染 bug 而不是「牌子上写了字」。这两处原本各写了一份字面量，
+        /// 合成一份 —— 同一件事不要留两个来源。
+        /// </summary>
+        private static readonly Color BgTop = new Color(0.06f, 0.08f, 0.12f, 0.93f);
+        private static readonly Color BgBottom = new Color(0.04f, 0.05f, 0.08f, 0.96f);
 
         private RectTransform _canvasRect;
         private TwinRoundedRect _bg;
@@ -127,8 +135,7 @@ namespace SchoolTwin.Twin
 
             // ---- 背景 ----
             _bg = TwinUIFactory.Rounded(_canvasRect, "Bg", 10f,
-                new Color(0.06f, 0.08f, 0.12f, 0.78f),
-                new Color(0.04f, 0.05f, 0.08f, 0.86f),
+                BgTop, BgBottom,
                 new Color(1f, 1f, 1f, 0.16f), 1f, false);
             TwinUIFactory.Stretch(_bg.rectTransform);
 
@@ -188,8 +195,7 @@ namespace SchoolTwin.Twin
                 if (_bar != null) _bar.color = color;
                 if (_bg != null)
                 {
-                    _bg.SetFill(new Color(0.06f, 0.08f, 0.12f, 0.78f),
-                                new Color(0.04f, 0.05f, 0.08f, 0.86f));
+                    _bg.SetFill(BgTop, BgBottom);
                     _bg.SetBorder(TwinStatusPalette.Of(status, 0.45f), 1f);
                 }
             }
