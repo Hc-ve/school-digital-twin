@@ -33,14 +33,29 @@ namespace SchoolTwin.EditorTools
         private const string IdTemp = "Class2-1/Sensor/Temp_01";
         private const string IdCo2 = "Class2-1/Sensor/CO2_01";
 
-        // 北墙内表面实测 z≈39.85（窗帘 Blinds01c 在 39.82、室外机 Conditioner01 在 40.27）。
+        // 北墙内表面实测 z≈39.85（窗帘 Blinds01c 在 39.82、室外机 Conditioner01 在 40.27），
+        // 但窗套比墙面更靠里，牌子放 39.70 会插进窗套 —— 退到 39.50。
         // 窗户中心 x=-21.41 / -17.42 / -13.42（窗帘位置），牌子挂到**两窗正中间**：
-        // x=-19.42 / -15.42，贴墙 z=39.70，关掉 billboard 后不会转进墙里。
+        // x=-19.42 / -15.42。
         // 空调位置是用户在 Scene 视图里手调过的，以场景为准 —— 重新跑 Apply 会覆盖，慎用。
         private static readonly Vector3 AcPos = new Vector3(-11.685f, 6.361f, 38.97f);
-        private static readonly Vector3 TempPos = new Vector3(-19.42f, 5.50f, 39.70f);
-        private static readonly Vector3 Co2Pos = new Vector3(-15.42f, 5.50f, 39.70f);
-        private const float WallYaw = 180f;
+        private static readonly Vector3 TempPos = new Vector3(-19.42f, 5.50f, 39.50f);
+        private static readonly Vector3 Co2Pos = new Vector3(-15.42f, 5.50f, 39.50f);
+
+        private const float AcYaw = 180f;
+
+        /// <summary>
+        /// 标记牌的朝向。**必须是 0，不是 180**。
+        ///
+        /// UGUI Canvas 的**可见面是 -Z 侧** —— 证据就是原来那段 billboard 代码：
+        ///   dir = canvasPos - cameraPos;  canvas.rotation = LookRotation(dir)
+        /// LookRotation 让 +Z 指向 dir（背离相机），而那样渲染是正确的，
+        /// 说明相机看到的是 -Z 面。
+        ///
+        /// 所以牌子要面向教室（相机在 -Z 方向），物体的 -Z 就得朝 -Z —— 即 yaw = 0。
+        /// 写成 180 会让正面朝墙、相机看到背面，表现为**文字左右镜像**。
+        /// </summary>
+        private const float MarkerYaw = 0f;
 
         // 标记牌世界尺寸：0.72m 宽 ≈ 一块门牌。1.1m 在 2 米内会把窗户整块挡住。
         private const float MarkerWidth = 0.72f;
@@ -194,7 +209,7 @@ namespace SchoolTwin.EditorTools
 
             host.name = "AC_Class2-1";
             host.transform.position = pos;
-            host.transform.rotation = Quaternion.Euler(0f, WallYaw, 0f);
+            host.transform.rotation = Quaternion.Euler(0f, AcYaw, 0f);
             host.transform.localScale = Vector3.one;   // 不继承方块的 0.6
 
             TwinAnchor anchor = host.GetComponent<TwinAnchor>();
@@ -225,7 +240,7 @@ namespace SchoolTwin.EditorTools
             GameObject host = new GameObject("TwinMarker_" + twinId.Replace('/', '_'));
             host.transform.SetParent(parent, false);
             host.transform.position = pos;
-            host.transform.rotation = Quaternion.Euler(0f, WallYaw, 0f);
+            host.transform.rotation = Quaternion.Euler(0f, MarkerYaw, 0f);
             host.transform.localScale = Vector3.one;
 
             TwinAnchor anchor = host.AddComponent<TwinAnchor>();
