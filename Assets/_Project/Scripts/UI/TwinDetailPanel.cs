@@ -212,8 +212,11 @@ namespace SchoolTwin.UI
         {
             float manual = Mathf.Clamp(_uiScale, 0.5f, 3f);
 
-            // 垂直空间是唯一的动态约束：内容顶出屏幕时压回来
-            float hardCap = Mathf.Max(0.75f, MaxScaleByVerticalSpace());
+            // 两个方向的硬约束都要满足，取更紧的那个：
+            //   · 垂直：内容（卡片 + 告警面板）不能顶出屏幕下沿
+            //   · 水平：卡片不能顶出屏幕右沿（以前漏了这条，右侧会被切）
+            float hardCap = Mathf.Max(0.75f,
+                Mathf.Min(MaxScaleByVerticalSpace(), MaxScaleByHorizontalSpace()));
 
             return Mathf.Clamp(Mathf.Min(manual, hardCap), 0.75f, 3f);
         }
@@ -236,6 +239,15 @@ namespace SchoolTwin.UI
         private float ViewportHeight()
         {
             if (Screen.height <= 0) return 1080f;
+
+            // 首选：直接问画布「一个 UI 单位等于多少屏幕像素」，再反推。
+            // 这比下面按 referenceResolution + matchWidthOrHeight 手算更可靠 ——
+            // 手算要求我们把 CanvasScaler 的匹配语义完全复刻一遍，一旦场景里
+            // 参考分辨率/匹配值被改过（本工程就被改成 1000×720、匹配值 0），
+            // 手算和 Unity 实际结果一旦不一致，面板尺寸就会跟着算错。
+            Canvas canvas = _uiRoot != null ? _uiRoot.GetComponentInParent<Canvas>() : null;
+            if (canvas != null && canvas.scaleFactor > 0.0001f)
+                return Screen.height / canvas.scaleFactor;
 
             CanvasScaler scaler = _uiRoot != null
                 ? _uiRoot.GetComponentInParent<CanvasScaler>()
@@ -292,6 +304,25 @@ namespace SchoolTwin.UI
 
             // room = fixedAt1 * s  →  s = room / fixedAt1
             return room / fixedAt1;
+        }
+
+        /// <summary>
+        /// 水平方向的硬上限：卡片再宽也不能把左右边距吃掉。
+        ///
+        /// 【为什么必须单独算】`MaxScaleByVerticalSpace()` 只看高度。
+        /// 画布一窄（窄窗口、扁长 Game 视图、参考分辨率调小），
+        /// 卡片会横向顶出屏幕，而垂直方向算出来「还放得下」→ 完全没有约束，
+        /// 表现就是「右侧面板被切掉一点」。这个约束补上这条漏洞。
+        /// </summary>
+        private float MaxScaleByHorizontalSpace()
+        {
+            float avail = TwinUIFactory.VisibleWidth(_uiRoot);
+            if (avail <= 0f) return 3f;
+
+            float room = avail - BaseScreenMargin * 2f;
+            if (room <= 0f) return 0.75f;
+
+            return room / BaseCardWidth;
         }
 
         /// <summary>把基准尺寸按实际缩放展开成实际尺寸。BuildUI 之前必须调用。</summary>
@@ -402,6 +433,8 @@ namespace SchoolTwin.UI
         private float _nextAlarmRefresh;
         private float _cardAlpha = 1f;
         private bool _built;
+        /// <summary>布局自检只打一次日志，别刷屏。</summary>
+        private bool _loggedLayout;
         /// <summary>上一次排版时选中点位是否已有数据。用于捕捉「等待数据 → 有数据」的转变。</summary>
         private bool _hasData;
 
@@ -590,6 +623,8 @@ namespace SchoolTwin.UI
                 _cardAlpha = Mathf.Lerp(_cardAlpha, target, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
                 _cardGroup.alpha = _cardAlpha;
             }
+
+            LogLayoutOnce();   // 打完一次就永久短路，开销可以忽略
         }
 
         // ================================================================ 环境准备
@@ -813,6 +848,40 @@ namespace SchoolTwin.UI
 
             TwinUIFactory.AnchorTopRight(_card, _scaledScreenMargin, _scaledScreenMargin,
                 _scaledCardWidth, cardHeight);
+        }
+
+        /// <summary>
+        /// 布局自检：把「画布以为的尺寸」和「屏幕实际可见的尺寸」都打出来。
+        ///
+        /// 【为什么要打】面板被屏幕边缘切掉时，光看代码判断不出是尺寸算错还是定位偏了。
+        /// 有这一行就能直接看出：
+        ///   · 画布 rect 与可见尺寸不一致 → 画布没按当前分辨率刷新（定位会偏）
+        ///   · 卡片 x + w 超过可见宽度     → 尺寸约束没生效
+        /// 只打一次，不影响性能。
+        /// </summary>
+        private void LogLayoutOnce()
+        {
+            if (_loggedLayout || _uiRoot == null) return;
+
+            Canvas canvas = _uiRoot.GetComponentInParent<Canvas>();
+            // 画布的 scaleFactor 要到第一次布局之后才算得出来，
+            // 太早打出来是一堆 0，反而误导 —— 等它有效再打。
+            if (canvas == null || canvas.scaleFactor <= 0.0001f) return;
+            if (_card == null || _card.sizeDelta.y <= 0f) return;
+
+            _loggedLayout = true;
+
+            float visW = TwinUIFactory.VisibleWidth(_uiRoot);
+            float visH = ViewportHeight();
+            float cardX = _card.anchoredPosition.x;
+            float cardY = -_card.anchoredPosition.y;
+
+            Debug.Log(string.Format(
+                "[TwinUI] 布局自检  画布rect={0}  可见={1:0.#}×{2:0.#}  scaleFactor={3:0.###}  " +
+                "缩放={4:0.###}  卡片 x={5:0.#} y={6:0.#} w={7:0.#} h={8:0.#}  " +
+                "右边距={9:0.#}（x+w 应 ≤ 可见宽-{9:0.#}）",
+                _uiRoot.rect, visW, visH, canvas.scaleFactor, _activeScale,
+                cardX, cardY, _card.sizeDelta.x, _card.sizeDelta.y, _scaledScreenMargin));
         }
 
         private List<TwinMetricDefinition> CollectMetrics(TwinAnchor anchor, List<TwinMetricDefinition> buffer)

@@ -138,15 +138,52 @@ namespace SchoolTwin.UI
             rt.sizeDelta = Vector2.zero;
         }
 
-        /// <summary>锚到父节点右上角（用于卡片、面板自身定位）。</summary>
+        /// <summary>
+        /// 锚到「屏幕右上角」——但**不再**用 `anchor=(1,1) + pivot=(1,1)`。
+        ///
+        /// 【为什么改】2026-10-20 用户截图反馈「右边面板感觉被挡住了一点」。
+        /// 逐像素量下来是：卡片右缘正好压在画面右缘（右边框、右上圆角都看不到，
+        /// 量程条与每行末尾的字被切掉），同时标题行整体跑到画面顶部之外。
+        /// 也就是卡片的右上角被顶到了**屏幕右上角之外**。
+        ///
+        /// 卡片内部所有元素用的都是 `Place()`（`anchor=(0,1)+pivot=(0,1)`，从左上角量），
+        /// 位置一直是对的；只有卡片与告警面板这两块外框用 `anchor=(1,1)`，而它们偏了。
+        /// 既然「从左上角量」这条路已被验证可靠，外框就改走同一条路：
+        ///     x = 可见宽度 - 右边距 - 宽度     （从左边量）
+        ///     y = 上边距
+        ///
+        /// 另一个关键点：可见宽度取 **`Screen.width / canvas.scaleFactor`**，
+        /// 不取父节点 `rect.width`。父 rect 有可能比真正可见的区域大
+        /// （画布还没按当前分辨率刷新时就是这样），照它算会把卡片推出屏幕 ——
+        /// 这正是「右侧被切」的直接原因。
+        /// </summary>
         public static void AnchorTopRight(RectTransform rt, float marginRight, float marginTop, float width, float height)
         {
             if (rt == null) return;
-            rt.anchorMin = new Vector2(1f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(1f, 1f);
-            rt.anchoredPosition = new Vector2(-marginRight, -marginTop);
-            rt.sizeDelta = new Vector2(width, height);
+
+            float avail = VisibleWidth(rt);
+            float x = avail > 0f ? avail - marginRight - width : marginRight;
+            if (x < marginRight) x = marginRight;   // 窗口再窄也不许往左溢出
+
+            Place(rt, x, marginTop, width, height);
+        }
+
+        /// <summary>
+        /// 画布坐标系里的「屏幕可见宽度」。
+        ///
+        /// 用 `Screen.width / canvas.scaleFactor` 反推，而不是读父节点的 `rect.width`：
+        /// 前者是「屏幕上真正有多少」，后者是「画布以为有多少」，两者不一定相等。
+        /// </summary>
+        public static float VisibleWidth(RectTransform rt)
+        {
+            if (rt == null) return 0f;
+
+            Canvas canvas = rt.GetComponentInParent<Canvas>();
+            if (canvas != null && canvas.scaleFactor > 0.0001f)
+                return Screen.width / canvas.scaleFactor;
+
+            RectTransform parent = rt.parent as RectTransform;
+            return parent != null ? parent.rect.width : 0f;
         }
 
         // ================================================================ 文本
