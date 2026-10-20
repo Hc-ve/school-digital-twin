@@ -6132,6 +6132,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 427500, guid: 6e17dbb9cc1686d45a12d7c945a8cb1a, type: 3}
   m_PrefabInstance: {fileID: 133099397}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &133827506 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 199420, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
+  m_PrefabInstance: {fileID: 608583562}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &134412268
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -27128,6 +27133,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Door07a (7)
       objectReference: {fileID: 0}
+    - target: {fileID: 199420, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 424166, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
       propertyPath: m_RootOrder
       value: 11
@@ -27175,7 +27184,13 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 199420, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1503526791}
+    - targetCorrespondingSourceObject: {fileID: 199420, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1503526790}
   m_SourcePrefab: {fileID: 100100000, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
 --- !u!1001 &611109446
 PrefabInstance:
@@ -70137,9 +70152,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _twinId: Class2-1/Light/Main_01
-  _displayName: 
-  _zone: 
-  _category: 
+  _displayName: "2-1\u73ED \u4E3B\u7167\u660E"
+  _zone: Class2-1
+  _category: Light
   _visualTarget: {fileID: 0}
   _visualTargetPath: 
   _staleAfterSeconds: 3
@@ -71271,6 +71286,59 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 424166, guid: dd642d046532d6449b5c8884a203ada2, type: 3}
   m_PrefabInstance: {fileID: 608583562}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1503526790
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 133827506}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1503526791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 133827506}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-1/Door/Entrance_01
+  _displayName: "2-1\u73ED \u524D\u95E8"
+  _zone: Class2-1
+  _category: Door
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &1503663439 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
@@ -72363,15 +72431,13 @@ GameObject:
   - component: {fileID: 1531466404}
   - component: {fileID: 1531466403}
   - component: {fileID: 1531466402}
-  - component: {fileID: 1531466401}
-  - component: {fileID: 1531466400}
   m_Layer: 0
   m_Name: TwinPoint_Class2-1_Door_Entrance_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1531466399
 Transform:
   m_ObjectHideFlags: 0
@@ -72388,59 +72454,6 @@ Transform:
   - {fileID: 1090698565}
   m_Father: {fileID: 1781111432}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1531466400
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1531466398}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _anchor: {fileID: 0}
-  _metric: 
-  _renderers: []
-  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
-  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
-  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
-  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
-  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
-  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
-  _lerpSpeed: 8
-  _refreshInterval: 0.1
-  _applyEmission: 1
-  _emissionIntensity: 0.7
-  _blinkAlarm: 1
-  _blinkOffline: 1
-  _blinkPeriod: 0.9
-  _blinkFloor: 0.45
-  _blinkRefreshInterval: 0.033
-  _blinkLerpSpeed: 60
---- !u!114 &1531466401
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1531466398}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: Class2-1/Door/Entrance_01
-  _displayName: "2-1\u73ED \u524D\u95E8"
-  _zone: Class2-1
-  _category: Door
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!23 &1531466402
 MeshRenderer:
   m_ObjectHideFlags: 0
