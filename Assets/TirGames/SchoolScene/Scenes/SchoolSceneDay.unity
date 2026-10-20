@@ -5377,6 +5377,139 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 439582, guid: d950e1006ba2b91409cd769e3561cff4, type: 3}
   m_PrefabInstance: {fileID: 115380168}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &115772247
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1781111432}
+    m_Modifications:
+    - target: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_Name
+      value: AC_Class2-1
+      objectReference: {fileID: 0}
+    - target: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -16.86
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 6.11
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 38.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.00000004371139
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 115772251}
+    - targetCorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 115772250}
+  m_SourcePrefab: {fileID: 100100000, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+--- !u!4 &115772248 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+  m_PrefabInstance: {fileID: 115772247}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &115772249 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+  m_PrefabInstance: {fileID: 115772247}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &115772250
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 115772249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &115772251
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 115772249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-1/AC/Unit_01
+  _displayName: "2-1\u73ED \u7A7A\u8C03\u673A\u7EC4"
+  _zone: Class2-1
+  _category: AC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &117661253 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 455766, guid: 8d6099b6ac5989c44b7302551a6397d2, type: 3}
@@ -15359,6 +15492,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -20891,6 +21027,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -24728,6 +24867,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 466368, guid: fd42e5b9b263821408c2aa5b5e320747, type: 3}
   m_PrefabInstance: {fileID: 552770470}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &553038447
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 553038448}
+  - component: {fileID: 553038451}
+  - component: {fileID: 553038450}
+  - component: {fileID: 553038449}
+  m_Layer: 0
+  m_Name: TwinMarker_Class2-1_Sensor_CO2_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &553038448
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 553038447}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 1, z: -0, w: -0.00000004371139}
+  m_LocalPosition: {x: -12.89, y: 5.15, z: 38.9}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1781111432}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &553038449
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 553038447}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.1, y: 0.34, z: 0.06}
+  m_Center: {x: 0, y: 0.45, z: 0}
+--- !u!114 &553038450
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 553038447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 1.1
+  _heightMeters: 0.34
+  _lift: 0.45
+  _billboard: 1
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &553038451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 553038447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-1/Sensor/CO2_01
+  _displayName: "2-1\u73ED CO\u2082 \u4F20\u611F\u5668"
+  _zone: Class2-1
+  _category: Sensor
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &553371166 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 442136, guid: 2d1712a91217ae849a8a264eec9b51d1, type: 3}
@@ -33784,6 +34020,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -39381,6 +39620,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -65251,15 +65493,13 @@ GameObject:
   - component: {fileID: 1370463248}
   - component: {fileID: 1370463247}
   - component: {fileID: 1370463246}
-  - component: {fileID: 1370463245}
-  - component: {fileID: 1370463244}
   m_Layer: 0
   m_Name: TwinPoint_Class2-1_AC_Unit_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1370463243
 Transform:
   m_ObjectHideFlags: 0
@@ -65276,59 +65516,6 @@ Transform:
   - {fileID: 2004147650}
   m_Father: {fileID: 1781111432}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1370463244
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1370463242}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _anchor: {fileID: 0}
-  _metric: 
-  _renderers: []
-  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
-  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
-  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
-  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
-  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
-  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
-  _lerpSpeed: 8
-  _refreshInterval: 0.1
-  _applyEmission: 1
-  _emissionIntensity: 0.7
-  _blinkAlarm: 1
-  _blinkOffline: 1
-  _blinkPeriod: 0.9
-  _blinkFloor: 0.45
-  _blinkRefreshInterval: 0.033
-  _blinkLerpSpeed: 60
---- !u!114 &1370463245
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1370463242}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: Class2-1/AC/Unit_01
-  _displayName: "2-1\u73ED \u7A7A\u8C03\u673A\u7EC4"
-  _zone: Class2-1
-  _category: AC
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!23 &1370463246
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -66025,15 +66212,13 @@ GameObject:
   - component: {fileID: 1392306007}
   - component: {fileID: 1392306006}
   - component: {fileID: 1392306005}
-  - component: {fileID: 1392306004}
-  - component: {fileID: 1392306003}
   m_Layer: 0
   m_Name: TwinPoint_Class2-1_Sensor_Temp_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1392306002
 Transform:
   m_ObjectHideFlags: 0
@@ -66050,59 +66235,6 @@ Transform:
   - {fileID: 2053736634}
   m_Father: {fileID: 1781111432}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1392306003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1392306001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _anchor: {fileID: 0}
-  _metric: 
-  _renderers: []
-  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
-  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
-  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
-  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
-  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
-  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
-  _lerpSpeed: 8
-  _refreshInterval: 0.1
-  _applyEmission: 1
-  _emissionIntensity: 0.7
-  _blinkAlarm: 1
-  _blinkOffline: 1
-  _blinkPeriod: 0.9
-  _blinkFloor: 0.45
-  _blinkRefreshInterval: 0.033
-  _blinkLerpSpeed: 60
---- !u!114 &1392306004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1392306001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: Class2-1/Sensor/Temp_01
-  _displayName: "2-1\u73ED \u6E29\u6E7F\u5EA6\u4F20\u611F\u5668"
-  _zone: Class2-1
-  _category: Sensor
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!23 &1392306005
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -70133,6 +70265,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -71311,6 +71446,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -77051,15 +77189,13 @@ GameObject:
   - component: {fileID: 1627343753}
   - component: {fileID: 1627343752}
   - component: {fileID: 1627343751}
-  - component: {fileID: 1627343750}
-  - component: {fileID: 1627343749}
   m_Layer: 0
   m_Name: TwinPoint_Class2-1_Sensor_CO2_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1627343748
 Transform:
   m_ObjectHideFlags: 0
@@ -77076,59 +77212,6 @@ Transform:
   - {fileID: 1293799911}
   m_Father: {fileID: 1781111432}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1627343749
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1627343747}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _anchor: {fileID: 0}
-  _metric: 
-  _renderers: []
-  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
-  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
-  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
-  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
-  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
-  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
-  _lerpSpeed: 8
-  _refreshInterval: 0.1
-  _applyEmission: 1
-  _emissionIntensity: 0.7
-  _blinkAlarm: 1
-  _blinkOffline: 1
-  _blinkPeriod: 0.9
-  _blinkFloor: 0.45
-  _blinkRefreshInterval: 0.033
-  _blinkLerpSpeed: 60
---- !u!114 &1627343750
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1627343747}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: Class2-1/Sensor/CO2_01
-  _displayName: "2-1\u73ED CO\u2082 \u4F20\u611F\u5668"
-  _zone: Class2-1
-  _category: Sensor
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!23 &1627343751
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -84099,6 +84182,9 @@ Transform:
   - {fileID: 1370463243}
   - {fileID: 1531466399}
   - {fileID: 2085740709}
+  - {fileID: 115772248}
+  - {fileID: 1926408449}
+  - {fileID: 553038448}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1781439052 stripped
@@ -89759,6 +89845,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
@@ -91006,6 +91095,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 487398, guid: 5213401e7705ca84d98ac41cde4a70af, type: 3}
   m_PrefabInstance: {fileID: 1807262776}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1926408448
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1926408449}
+  - component: {fileID: 1926408452}
+  - component: {fileID: 1926408451}
+  - component: {fileID: 1926408450}
+  m_Layer: 0
+  m_Name: TwinMarker_Class2-1_Sensor_Temp_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1926408449
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1926408448}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 1, z: -0, w: -0.00000004371139}
+  m_LocalPosition: {x: -20.94, y: 5.15, z: 38.9}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1781111432}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1926408450
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1926408448}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.1, y: 0.34, z: 0.06}
+  m_Center: {x: 0, y: 0.45, z: 0}
+--- !u!114 &1926408451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1926408448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 1.1
+  _heightMeters: 0.34
+  _lift: 0.45
+  _billboard: 1
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &1926408452
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1926408448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-1/Sensor/Temp_01
+  _displayName: "2-1\u73ED \u6E29\u6E7F\u5EA6\u4F20\u611F\u5668"
+  _zone: Class2-1
+  _category: Sensor
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1927001019
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -99763,6 +99949,9 @@ MonoBehaviour:
   _refreshInterval: 0.1
   _applyEmission: 1
   _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
   _blinkAlarm: 1
   _blinkOffline: 1
   _blinkPeriod: 0.9
