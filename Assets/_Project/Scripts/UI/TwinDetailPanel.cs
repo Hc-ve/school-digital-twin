@@ -320,6 +320,32 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
+        /// Canvas 的「参考宽度」——UI 坐标系里水平方向有多少可用空间。
+        /// 和 <see cref="ViewportHeight"/> 同一个来源（问画布的 scaleFactor），不手算。
+        /// </summary>
+        private float ViewportWidth()
+        {
+            if (Screen.width <= 0) return 1920f;
+
+            Canvas canvas = _uiRoot != null ? _uiRoot.GetComponentInParent<Canvas>() : null;
+            if (canvas != null && canvas.scaleFactor > 0.0001f)
+                return Screen.width / canvas.scaleFactor;
+
+            CanvasScaler scaler = _uiRoot != null
+                ? _uiRoot.GetComponentInParent<CanvasScaler>()
+                : null;
+            if (scaler == null || scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+                return Screen.width;
+
+            Vector2 refRes = scaler.referenceResolution;
+            float sx = Screen.width / Mathf.Max(1f, refRes.x);
+            float sy = Screen.height / Mathf.Max(1f, refRes.y);
+            float factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+            if (factor <= 0.0001f) return 1920f;
+            return Screen.width / factor;
+        }
+
+        /// <summary>
         /// 在「最坏情况内容」下，缩放最大能到多少才不把面板顶出屏幕。
         ///
         /// 最坏情况 = 指标行占满 MaxMetricRows（6 行）+ 告警面板占满 _maxAlarmRows。
@@ -972,7 +998,12 @@ namespace SchoolTwin.UI
 
         /// <summary>
         /// 告警历史浮层挂在面板自己身上（和切换条同一个思路：不依赖 Inspector 配置）。
-        /// 浮层自己会管 Canvas 之外的一切，这里只负责「把它建出来、并给对缩放」。
+        ///
+        /// 【它为什么要知道自己「右边界在哪」】浮层如果按画布居中放，
+        /// 宽度一旦超过「画布中线到卡片左边缘」的距离，右半边就会压到详情卡片上
+        /// —— 2026-10-21 实测就压了约 184 单位，时长列直接画在卡片上面。
+        /// 所以改成**锚在卡片左侧**：右上角对齐卡片的右上角，再往左让开卡片宽度 + 间隙。
+        /// 这个量和画布多宽无关，纯锚点语义。
         /// </summary>
         private void EnsureHistoryPanel()
         {
@@ -980,7 +1011,15 @@ namespace SchoolTwin.UI
 
             if (_historyPanel == null) _historyPanel = GetComponent<TwinAlarmHistoryPanel>();
             if (_historyPanel == null) _historyPanel = gameObject.AddComponent<TwinAlarmHistoryPanel>();
-            _historyPanel.Build(_uiRoot, _activeScale);
+
+            // 让开：屏幕右缘边距 + 微调量 + 卡片宽 + 面板间隙
+            float rightInset = _scaledScreenMargin + _scaledExtraRight + _scaledCardWidth + _scaledPanelGap;
+            float topInset = _scaledScreenMargin + _scaledExtraTop;
+
+            // 卡片左侧还剩多少横向空间。窄窗口下浮层要跟着收窄，否则会顶出画布左缘。
+            float maxWidth = Mathf.Max(300f, ViewportWidth() - rightInset - _scaledScreenMargin);
+
+            _historyPanel.Build(_uiRoot, _activeScale, rightInset, topInset, maxWidth);
         }
 
         /// <summary>

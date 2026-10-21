@@ -9,16 +9,20 @@ namespace SchoolTwin.UI
     /// <summary>
     /// 告警历史浮层（按 H 开关）：把 <see cref="TwinAlarmHistory"/> 记下的时间线画出来。
     ///
-    /// ── 为什么是「居中浮层」而不是「右栏再加一块」──────────────────
-    /// 右栏已经挤满了：详情卡片 + 告警面板在 1000×456 的视口里几乎占满，
-    /// 再加一块必然触发垂直上限（_uiScale 早就被压到下限 0.75 了）。
-    /// 历史是**按需查看**的信息，不该常驻占位 —— 所以做成浮层，
-    /// 开关一次不影响任何现有布局。
+    /// ── 为什么是「浮层」而不是「右栏再加一块」──────────────────────
+    /// 右栏已经挤满了：详情卡片 + 告警面板在视口里几乎占满，
+    /// 再加一块必然触发垂直上限（`_uiScale` 早就被压到下限 0.75 了）。
+    /// 历史是**按需查看**的信息，不该常驻占位 —— 做成浮层，开关一次不影响任何现有布局。
     ///
-    /// ── 位置为什么用锚点而不是算坐标 ────────────────────────────────
-    /// `anchor=0.5 + pivot=0.5` 的语义就是「我的中心对准父节点中心」，
-    /// 与父节点多大、屏幕多大完全无关。P4-5 已经证明「按屏幕像素反推坐标」必错，
-    /// 这里一开始就不走那条路。
+    /// ── 位置：锚在「详情卡片的左侧」，不是画布居中 ─────────────────
+    /// 2026-10-21 第一版用的是「画布正中」，结果右半边压到详情卡片上，
+    /// 时长列直接画在卡片上面（实测重叠约 184 单位）。
+    /// 原因：卡片占掉画布右侧约 40%，**画布中线离卡片左边缘比半个浮层还近**，
+    /// 所以任何「居中 + 有点宽度」的浮层都必然压上去 —— 这不是宽度没调好，是定位方式错了。
+    ///
+    /// 改成 `anchor=(1,1) + pivot=(1,1) + anchoredPosition=(-rightInset, -topInset)`：
+    /// 语义是「我的右上角，对齐父节点右上角往左/往下各让一段」，
+    /// 让开的量 = 屏幕边距 + 卡片宽 + 间隙。与画布多宽完全无关，永远不会算错。
     ///
     /// ── 刷新策略 ──────────────────────────────────────────────────
     /// 隐藏时 Update 直接 return（零开销）。显示时 0.25s 刷一次：
@@ -42,12 +46,19 @@ namespace SchoolTwin.UI
         private const float BaseRowH = 30f;
         private const float BaseBottomPad = 16f;
         private const float BaseEmptyH = 26f;
+        private const float MinWidth = 320f;
 
         private const int FsTitle = 17;
         private const int FsSub = 12;
         private const int FsRow = 13;
 
         private float _scale = 1f;
+        private float _rightInset;
+        private float _topInset;
+        private float _maxWidth = 9999f;
+        /// <summary>实际宽度（已按可用空间收窄）。列宽全部由它推出来。</summary>
+        private float _width;
+
         private bool _visible;
         private float _nextRefresh;
 
@@ -55,7 +66,6 @@ namespace SchoolTwin.UI
         private Text _title;
         private Text _sub;
         private Text _empty;
-        private RectTransform _rowsRoot;
         private readonly List<Row> _rows = new List<Row>(8);
 
         private readonly List<TwinAlarmHistory.AlarmRecord> _buffer =
@@ -76,16 +86,28 @@ namespace SchoolTwin.UI
         public bool IsVisible { get { return _visible; } }
 
         /// <summary>由 <see cref="TwinDetailPanel"/> 在构建界面时调用（可重复调用）。</summary>
-        public void Build(RectTransform root, float scale)
+        /// <param name="rightInset">面板右上角距父节点右缘的距离（让开详情卡片）。</param>
+        /// <param name="topInset">面板上缘距父节点上缘的距离。</param>
+        /// <param name="maxWidth">可用横向空间；超出就收窄，避免顶出画布左缘。</param>
+        public void Build(RectTransform root, float scale, float rightInset, float topInset, float maxWidth)
         {
             if (root == null) return;
 
+            bool same = _panel != null
+                        && Mathf.Approximately(_scale, scale)
+                        && Mathf.Approximately(_rightInset, rightInset)
+                        && Mathf.Approximately(_topInset, topInset)
+                        && Mathf.Approximately(_maxWidth, maxWidth);
+            if (same) return;
+
             // 父面板重建 UI 时会把我们连同节点一起销毁，此时缓存的引用是「假 null」
             // （C# 引用非 null，但 Unity 的 == 返回 true）。所以这里必须用 == null 判断。
-            if (_panel != null && _scale == scale) return;
-
             Teardown();
+
             _scale = scale;
+            _rightInset = rightInset;
+            _topInset = topInset;
+            _maxWidth = maxWidth;
             BuildFresh(root);
         }
 
@@ -115,23 +137,24 @@ namespace SchoolTwin.UI
             _title = null;
             _sub = null;
             _empty = null;
-            _rowsRoot = null;
             _rows.Clear();
         }
 
         private void BuildFresh(RectTransform root)
         {
             float s = _scale;
-            float w = BaseWidth * s;
             float headerH = BaseHeaderH * s;
             float rowH = BaseRowH * s;
             float bottomPad = BaseBottomPad * s;
             int rows = Mathf.Max(1, _maxRows);
 
+            // 先按基准宽度算，再用「卡片左侧还剩多少」收窄
+            _width = Mathf.Min(BaseWidth * s, Mathf.Max(MinWidth, _maxWidth));
+            float w = _width;
             float h = headerH + rows * rowH + bottomPad;
 
             _panel = (RectTransform)TwinUIFactory.Node("AlarmHistoryPanel", root).transform;
-            TwinUIFactory.AnchorCenter(_panel, 0f, 0f, w, h);
+            TwinUIFactory.AnchorTopRight(_panel, _rightInset, _topInset, w, h);
 
             // 背景要能挡住点击，否则会点到浮层底下的告警行
             TwinRoundedRect bg = TwinUIFactory.Rounded(_panel, "Bg", 14f * s,
@@ -157,8 +180,6 @@ namespace SchoolTwin.UI
 
             Image divider = TwinUIFactory.Block(_panel, "Divider", TwinStatusPalette.Divider, false);
             TwinUIFactory.Place(divider.rectTransform, pad, headerH - 1f, w - pad * 2f, 1f);
-
-            _rowsRoot = _panel;   // 行直接挂在面板下，用绝对坐标摆放
 
             _empty = TwinUIFactory.Label(_panel, "Empty", Mathf.Max(8, Mathf.RoundToInt(FsRow * s)),
                 TextAnchor.UpperLeft, TwinStatusPalette.TextMuted);
@@ -197,7 +218,6 @@ namespace SchoolTwin.UI
 
             TwinAlarmHistory history = TwinAlarmHistory.Instance;
             float now = Time.realtimeSinceStartup;
-            float s = _scale;
 
             int total = history != null ? history.TotalCount : 0;
             int ongoing = history != null ? history.OngoingCount : 0;
@@ -215,13 +235,13 @@ namespace SchoolTwin.UI
             int shown = _buffer.Count;
             if (_empty != null) _empty.gameObject.SetActive(shown == 0);
 
-            for (int i = 0; i < shown; i++) FillRow(i, _buffer[i], now, s);
+            for (int i = 0; i < shown; i++) FillRow(i, _buffer[i], now);
             for (int i = shown; i < _rows.Count; i++) _rows[i].Root.gameObject.SetActive(false);
         }
 
-        private void FillRow(int index, TwinAlarmHistory.AlarmRecord rec, float now, float s)
+        private void FillRow(int index, TwinAlarmHistory.AlarmRecord rec, float now)
         {
-            Row row = EnsureRow(index, s);
+            Row row = EnsureRow(index);
             row.Root.gameObject.SetActive(true);
 
             Color color = TwinStatusPalette.Of(rec.PeakStatus);
@@ -249,22 +269,39 @@ namespace SchoolTwin.UI
             row.Duration.color = live ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextMuted;
         }
 
-        private Row EnsureRow(int index, float s)
+        private Row EnsureRow(int index)
         {
             while (_rows.Count <= index)
             {
                 int i = _rows.Count;
-                float w = BaseWidth * s;
+                float s = _scale;
                 float pad = BasePad * s;
                 float headerH = BaseHeaderH * s;
                 float rowH = BaseRowH * s;
                 int fs = Mathf.Max(8, Mathf.RoundToInt(FsRow * s));
 
+                float innerW = _width - pad * 2f;
+
+                // 列宽**从右往左**算：时刻和时长是定宽的（定长字符串），
+                // 中间的名称吃掉剩下的全部空间。这样窗口一窄，先被挤的是名称列，
+                // 而不是让时长列被推出面板外 —— 那正是第一版压到卡片上的形态。
+                float clockX = 20f * s;
+                float clockW = 70f * s;
+                float nameX = clockX + clockW + 6f * s;
+
+                float durW = Mathf.Min(160f * s, innerW * 0.34f);
+                float durX = innerW - durW;
+
+                float statusW = 64f * s;
+                float statusX = durX - 6f * s - statusW;
+
+                float nameW = Mathf.Max(40f, statusX - 6f * s - nameX);
+
                 Row row = new Row();
 
-                GameObject go = TwinUIFactory.Node("HistRow" + i, _rowsRoot);
+                GameObject go = TwinUIFactory.Node("HistRow" + i, _panel);
                 row.Root = (RectTransform)go.transform;
-                TwinUIFactory.Place(row.Root, pad, headerH + i * rowH, w - pad * 2f, rowH);
+                TwinUIFactory.Place(row.Root, pad, headerH + i * rowH, innerW, rowH);
 
                 row.Bg = TwinUIFactory.Block(go.transform, "Bg", TwinStatusPalette.Transparent, false);
                 TwinUIFactory.Stretch(row.Bg.rectTransform);
@@ -273,24 +310,21 @@ namespace SchoolTwin.UI
                 row.Dot = TwinUIFactory.Block(go.transform, "Dot", TwinStatusPalette.Unknown, false);
                 TwinUIFactory.Place(row.Dot.rectTransform, 2f * s, (rowH - dotSize) * 0.5f, dotSize, dotSize);
 
-                // 四列固定宽度：时刻 / 名称 / 状态 / 时长。
-                // 用固定列宽而不是自适应，是为了让 8 行上下对齐 —— 时间线一旦错位就没法扫读。
                 row.Clock = TwinUIFactory.Label(go.transform, "Clock", fs, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(row.Clock.rectTransform, 18f * s, 0f, 58f * s, rowH);
+                TwinUIFactory.Place(row.Clock.rectTransform, clockX, 0f, clockW, rowH);
 
                 row.Name = TwinUIFactory.Label(go.transform, "Name", fs, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextPrimary);
-                TwinUIFactory.Place(row.Name.rectTransform, 80f * s, 0f, 310f * s, rowH);
+                TwinUIFactory.Place(row.Name.rectTransform, nameX, 0f, nameW, rowH);
 
                 row.Status = TwinUIFactory.Label(go.transform, "Status", fs, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(row.Status.rectTransform, 392f * s, 0f, 70f * s, rowH);
+                TwinUIFactory.Place(row.Status.rectTransform, statusX, 0f, statusW, rowH);
 
                 row.Duration = TwinUIFactory.Label(go.transform, "Duration", fs, TextAnchor.MiddleRight,
                     TwinStatusPalette.TextMuted);
-                TwinUIFactory.Place(row.Duration.rectTransform, 464f * s, 0f,
-                    BaseWidth * s - pad * 2f - 464f * s, rowH);
+                TwinUIFactory.Place(row.Duration.rectTransform, durX, 0f, durW, rowH);
 
                 _rows.Add(row);
             }
