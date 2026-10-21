@@ -557,8 +557,11 @@ namespace SchoolTwin.UI
         private TwinAlarmHistoryPanel _historyPanel;
         private TwinAlarmHistory _history;
 
+        // ---- 点位清单浮窗（按 T 开关）----
+        private TwinPointListPanel _pointListPanel;
+
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
-        private readonly List<TwinAlarmRow> _alarmRows = new List<TwinAlarmRow>(8);
+        private readonly List<TwinClickRow> _alarmRows = new List<TwinClickRow>(8);
         private readonly List<TwinMetricDefinition> _metricDefBuf = new List<TwinMetricDefinition>(6);
 
         /// <summary>
@@ -776,6 +779,7 @@ namespace SchoolTwin.UI
             // 但 Destroy 是延迟到帧末的 —— 必须在这里立刻让它「忘掉」旧节点，
             // 否则同一帧内的 Build() 会以为节点还在、直接返回，重建后浮层永远不再出现。
             if (_historyPanel != null) _historyPanel.Detach();
+            if (_pointListPanel != null) _pointListPanel.Detach();
 
             // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
             // 结果是新 Text 一片空白。
@@ -1280,6 +1284,9 @@ namespace SchoolTwin.UI
             // ---------------- 告警历史浮层（默认隐藏，按 H 打开）----------------
             EnsureHistoryPanel();
 
+            // ---------------- 点位清单浮窗（默认隐藏，按 T 打开）----------------
+            EnsurePointListPanel();
+
             // 缩放手柄压到最上层：它现在在告警区下面，被行背景盖住的话就抓不到了。
             // 位置上两者不重叠（手柄在整窗最底部那条留白里），但层级别赌。
             if (_cardGrip != null) _cardGrip.SetAsLastSibling();
@@ -1309,6 +1316,31 @@ namespace SchoolTwin.UI
             float maxWidth = Mathf.Max(300f, ViewportWidth() - rightInset - _scaledScreenMargin);
 
             _historyPanel.Build(_uiRoot, _activeScale, rightInset, topInset, maxWidth);
+        }
+
+        /// <summary>
+        /// 点位清单浮窗挂在面板自己身上（和告警历史、切换条同一个思路：不依赖 Inspector 配置）。
+        ///
+        /// 【为什么放左侧】右侧已经被详情卡片占了，卡片左边一点是告警历史浮层，
+        /// 屏幕左侧除了底部的数据源切换条之外是空的 —— 而且列表本来就不该压在
+        /// 三维画面上最该看的那块（画面中央）。
+        /// </summary>
+        private void EnsurePointListPanel()
+        {
+            if (_pointListPanel == null) _pointListPanel = GetComponent<TwinPointListPanel>();
+            if (_pointListPanel == null) _pointListPanel = gameObject.AddComponent<TwinPointListPanel>();
+
+            float s = _activeScale;
+            float margin = _scaledScreenMargin;
+
+            // 横向：最多占画布一半，右半边留给详情卡片
+            float maxWidth = Mathf.Max(300f, ViewportWidth() * 0.5f);
+
+            // 纵向：让开屏幕上下边距 + 底部的数据源切换条（它也在左下角）
+            float maxHeight = Mathf.Max(200f,
+                ViewportHeight() - margin * 2f - (BaseSourceBarHeight + 12f) * s);
+
+            _pointListPanel.Build(_uiRoot, s, margin, maxWidth, maxHeight, this);
         }
 
         /// <summary>
@@ -1713,7 +1745,7 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>告警行按当前宽度重排（和指标行同理：卡片宽度变了，行宽也要跟着变）。</summary>
-        private void LayoutAlarmRow(TwinAlarmRow row, int index, float w)
+        private void LayoutAlarmRow(TwinClickRow row, int index, float w)
         {
             if (row == null) return;
 
@@ -2149,7 +2181,7 @@ namespace SchoolTwin.UI
 
             for (int i = 0; i < shown; i++)
             {
-                TwinAlarmRow row = EnsureAlarmRow(i);
+                TwinClickRow row = EnsureAlarmRow(i);
                 row.gameObject.SetActive(true);
 
                 AlarmEntry entry = _alarmTop[i];
@@ -2262,7 +2294,7 @@ namespace SchoolTwin.UI
             if (_alarmTop.Count > capacity) _alarmTop.RemoveAt(_alarmTop.Count - 1);
         }
 
-        private TwinAlarmRow EnsureAlarmRow(int index)
+        private TwinClickRow EnsureAlarmRow(int index)
         {
             while (_alarmRows.Count <= index)
             {
@@ -2283,8 +2315,8 @@ namespace SchoolTwin.UI
                 Text label = TwinUIFactory.Label(go.transform, "Label", _scaledFsAlarmRow, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextSecondary);
 
-                TwinAlarmRow row = go.AddComponent<TwinAlarmRow>();
-                row.Owner = this;
+                TwinClickRow row = go.AddComponent<TwinClickRow>();
+                row.OnClick = FocusOn;
                 row.Background = bg;
                 row.Dot = dot;
                 row.Label = label;
