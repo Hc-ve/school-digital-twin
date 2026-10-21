@@ -479,6 +479,10 @@ namespace SchoolTwin.UI
         private string _cachedSourceState;
         private string _cachedPlaybackText;
 
+        // ---- 告警历史浮层（按 H 开关）----
+        private TwinAlarmHistoryPanel _historyPanel;
+        private TwinAlarmHistory _history;
+
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
         private readonly List<TwinAlarmRow> _alarmRows = new List<TwinAlarmRow>(8);
         private readonly List<TwinMetricDefinition> _metricDefBuf = new List<TwinMetricDefinition>(6);
@@ -681,6 +685,11 @@ namespace SchoolTwin.UI
             _sourceHint = null;
             _sourceHintUntil = 0f;
 
+            // 告警历史浮层：它的节点挂在 _uiRoot 下，会跟着一起被销毁，
+            // 但 Destroy 是延迟到帧末的 —— 必须在这里立刻让它「忘掉」旧节点，
+            // 否则同一帧内的 Build() 会以为节点还在、直接返回，重建后浮层永远不再出现。
+            if (_historyPanel != null) _historyPanel.Detach();
+
             // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
             // 结果是新 Text 一片空白。
             _cachedTitle = null;
@@ -688,6 +697,9 @@ namespace SchoolTwin.UI
             _cachedChip = null;
             _cachedHint = null;
             _cachedFooter = null;
+            _cachedAlarmTitle = null;
+            _cachedAlarmEmpty = null;
+            _cachedAlarmMore = null;
 
             _built = false;
             _cardAlpha = 0f;
@@ -953,6 +965,40 @@ namespace SchoolTwin.UI
 
             // ---------------- 底部数据源切换条 ----------------
             BuildSourceBar();
+
+            // ---------------- 告警历史浮层（默认隐藏，按 H 打开）----------------
+            EnsureHistoryPanel();
+        }
+
+        /// <summary>
+        /// 告警历史浮层挂在面板自己身上（和切换条同一个思路：不依赖 Inspector 配置）。
+        /// 浮层自己会管 Canvas 之外的一切，这里只负责「把它建出来、并给对缩放」。
+        /// </summary>
+        private void EnsureHistoryPanel()
+        {
+            EnsureHistory();
+
+            if (_historyPanel == null) _historyPanel = GetComponent<TwinAlarmHistoryPanel>();
+            if (_historyPanel == null) _historyPanel = gameObject.AddComponent<TwinAlarmHistoryPanel>();
+            _historyPanel.Build(_uiRoot, _activeScale);
+        }
+
+        /// <summary>
+        /// 取（必要时创建）告警历史组件。
+        ///
+        /// 【为什么允许自己 AddComponent】场景里没配它的时候，面板照样要有「持续时长」和
+        /// 「累计次数」——否则这两个功能取决于用户记不记得去 Inspector 勾一个组件，
+        /// 属于典型的「漏了不报错、只是看起来没反应」。
+        /// </summary>
+        private TwinAlarmHistory EnsureHistory()
+        {
+            if (_history != null) return _history;
+
+            _history = TwinAlarmHistory.Instance;
+            if (_history == null) _history = GetComponent<TwinAlarmHistory>();
+            if (_history == null) _history = FindObjectOfType<TwinAlarmHistory>();
+            if (_history == null) _history = gameObject.AddComponent<TwinAlarmHistory>();
+            return _history;
         }
 
         /// <summary>
@@ -1575,6 +1621,8 @@ namespace SchoolTwin.UI
             _sb.Append(age < 0f ? "尚未收到" : age.ToString("0.0") + " 秒前");
             _sb.Append("   ·   质量 ").Append(TwinStatusPalette.QualityLabel(WorstQuality(_selected)));
             _sb.Append("   ·   指标 ").Append(_selected.MetricCount).Append(" 项");
+            // H 键的入口必须写在一眼能看到的地方 —— 藏在文档里的快捷键等于没有。
+            _sb.Append("   ·   H 历史");
             SetCached(_footer, ref _cachedFooter, _sb.ToString());
         }
 
@@ -1680,10 +1728,21 @@ namespace SchoolTwin.UI
                 if (row.Dot != null) row.Dot.color = color;
                 if (row.Label != null) row.Label.color = TwinStatusPalette.TextPrimary;
 
+                // 分隔符从「两个空格」收到「一个空格」：加了持续时长以后行文本变长，
+                // Legacy Text 是 HorizontalWrapMode.Overflow —— 它不会自动换行，
+                // 而是直接画到卡片外面去。省下来的宽度就是给时长用的。
                 _sbAlarm.Length = 0;
-                _sbAlarm.Append(TwinStatusPalette.Label(entry.Status)).Append("  ·  ")
-                        .Append(entry.Anchor.DisplayName).Append("   ")
+                _sbAlarm.Append(TwinStatusPalette.Label(entry.Status)).Append(" · ")
+                        .Append(entry.Anchor.DisplayName).Append("  ")
                         .Append(DescribeAlarm(entry.Anchor, entry.Status));
+
+                // 持续时长：32 个点位一起跑时，「报了多久」比「报了什么」更需要一眼看到。
+                // 只有确实已经开始计时时才追加 —— 异常刚发生的那一两拍历史里还没记录，
+                // 这时写「持续 0秒」反而会让人以为是假数字。
+                float ongoing;
+                if (_history != null && _history.TryGetOngoingSeconds(entry.Anchor, out ongoing))
+                    _sbAlarm.Append(" · 持续 ").Append(TwinAlarmHistory.FormatDuration(ongoing));
+
                 SetCached(row.Label, ref row.LastText, _sbAlarm.ToString());
             }
 
@@ -1704,8 +1763,15 @@ namespace SchoolTwin.UI
                 // 若只显示「(37)」会让人以为是 37/37，看不出「37 / 500」的全局比例。
                 _sbAlarm.Length = 0;
                 _sbAlarm.Append("告警与异常");
-                if (hasAlarm) _sbAlarm.Append("  (").Append(_alarmTotal).Append(')');
-                if (_twinTotal > 0) _sbAlarm.Append("  ·  共 ").Append(_twinTotal).Append(" 点位");
+                if (hasAlarm) _sbAlarm.Append(" (").Append(_alarmTotal).Append(')');
+                if (_twinTotal > 0) _sbAlarm.Append(" · 共 ").Append(_twinTotal).Append(" 点位");
+
+                // 累计次数是「这段运行里一共出过几次异常」，和上面的「当前有几个」是两个维度：
+                // 前者看的是**折腾程度**（32 个点位全正常但累计 40 次 = 现场很不稳），
+                // 后者看的是**此刻**。只显示一个都会误判。
+                int historyTotal = _history != null ? _history.TotalCount : 0;
+                if (historyTotal > 0) _sbAlarm.Append(" · 累计 ").Append(historyTotal).Append(" 次");
+
                 SetCached(_alarmTitle, ref _cachedAlarmTitle, _sbAlarm.ToString());
 
                 _alarmTitle.color = hasAlarm

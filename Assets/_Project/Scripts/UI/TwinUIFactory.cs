@@ -202,6 +202,21 @@ namespace SchoolTwin.UI
             rt.sizeDelta = new Vector2(width, height);
         }
 
+        /// <summary>
+        /// 锚到父节点正中（浮层用，例如告警历史面板）。
+        /// 同样只用锚点表达位置：`anchor=0.5 + pivot=0.5` 的含义是「我的中心对准父节点中心」，
+        /// 与父节点多大无关，所以不需要、也不应该去算父节点的宽高。
+        /// </summary>
+        public static void AnchorCenter(RectTransform rt, float offsetX, float offsetY, float width, float height)
+        {
+            if (rt == null) return;
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(offsetX, offsetY);
+            rt.sizeDelta = new Vector2(width, height);
+        }
+
         // ================================================================ 文本
         public static Text Label(Transform parent, string name, int fontSize, TextAnchor anchor, Color color)
         {
