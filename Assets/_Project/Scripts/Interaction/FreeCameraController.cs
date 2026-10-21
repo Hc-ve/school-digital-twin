@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using SchoolTwin.Twin;
 
 namespace SchoolTwin.Interaction
 {
@@ -59,6 +60,9 @@ namespace SchoolTwin.Interaction
         private Vector3 _lastMousePosition;
         private bool _transitioning;
         private Coroutine _transition;
+
+        /// <summary>算「房间在哪边」时的临时缓冲（GetByZone 会往里写），预分配避免点击产生 GC。</summary>
+        private readonly List<TwinAnchor> _zoneBuf = new List<TwinAnchor>(16);
 
         public bool IsTransitioning { get { return _transitioning; } }
         public int ViewpointCount { get { return _viewpoints == null ? 0 : _viewpoints.Count; } }
@@ -188,9 +192,24 @@ namespace SchoolTwin.Interaction
         }
 
         /// <summary>
-        /// 平滑飞到目标附近并看向它 —— 供告警列表「点击定位」使用。
+        /// 平滑飞到目标附近并看向它 —— 供告警列表 / 点位清单「点击定位」使用。
         /// 刻意复用已有的 TransitionTo 协程，不引入第二套运动逻辑，
         /// 这样缓动曲线、与手动操作的互斥（_transitioning）都自动一致。
+        ///
+        /// ── 退开方向不能用「当前相机方向」（踩过）─────────────────────
+        /// 第一版是 `position = target + normalize(相机 - 目标) * distance`，
+        /// 即「从当前相机这边退开」。相机在别的房间、隔着墙的时候，
+        /// 这个方向就是「穿墙过去」，落点常常在墙体内部或另一侧 ——
+        /// 表现为**画面贴着一片灰墙，被定位的东西根本不在视野里**。
+        ///
+        /// 现在改成**从本房间的内部退开**：用同一分区内其它点位的重心当「房间在哪边」，
+        /// 相机落在「目标 → 房间中心」这条线的延长线上，一定在房间里面。
+        ///
+        /// ── 相机高度也不能简单往上抬 ─────────────────────────────────
+        /// 原来固定 `+ distance * 0.3`（6 米就抬 1.8 米）。天花板上的空调/灯具
+        /// 本身就在 y≈6.1~6.9，再抬就顶出天花板了 —— 又变成看一片墙。
+        /// 现在把相机高度夹在「本房间最低点位 ~ 最高点位」之间，
+        /// 挂在天花板上的就在它下方一点看，落在地面上的就稍微抬高一点。
         /// </summary>
         public void FocusOn(Transform target, float distance = 6f)
         {
@@ -198,19 +217,121 @@ namespace SchoolTwin.Interaction
 
             distance = Mathf.Max(0.5f, distance);
 
-            // 从「相机 → 目标」的反方向退开一段距离，避免直接怼进物体内部
-            Vector3 direction = transform.position - target.position;
-            if (direction.sqrMagnitude < 0.0001f) direction = Vector3.forward;
-            direction = direction.normalized;
+            Vector3 focus = target.position;
+            Vector3 dir;
+            float camY;
+            float d = distance;
+            ResolveApproach(target, focus, ref d, out dir, out camY);
 
             Viewpoint vp = new Viewpoint();
             vp.Name = "定位：" + target.name;
             vp.Anchor = null;
-            vp.Position = target.position + direction * distance + Vector3.up * (distance * 0.3f);
-            vp.Euler = Quaternion.LookRotation(target.position - vp.Position, Vector3.up).eulerAngles;
+            vp.Position = new Vector3(focus.x + dir.x * d, camY, focus.z + dir.z * d);
+            vp.Euler = Quaternion.LookRotation(focus - vp.Position, Vector3.up).eulerAngles;
 
             if (_transition != null) StopCoroutine(_transition);
             _transition = StartCoroutine(TransitionTo(vp));
+        }
+
+        /// <summary>
+        /// 算出「从哪边靠近目标」、「退多远」以及「相机该多高」。
+        ///
+        /// 方向优先级：
+        ///   ① 同一分区内其它点位的重心 → 那个方向一定在房间里；
+        ///   ② 分区里只有这一个点位时，用全部点位的重心（楼中心）当「内侧」；
+        ///   ③ 都拿不到就退回「从当前相机方向水平退开」；
+        ///   ④ 还不行就朝世界 +Z（只要不是零向量，LookRotation 就不会出问题）。
+        ///
+        /// 距离也会被本房间的「半径」夹住 —— 6 米对教室够，对主任室那种小房间就穿墙了。
+        /// </summary>
+        private void ResolveApproach(Transform target, Vector3 focus, ref float distance,
+                                     out Vector3 dir, out float camY)
+        {
+            dir = Vector3.zero;
+            camY = focus.y;
+
+            float minY = focus.y;
+            float maxY = focus.y;
+
+            TwinAnchor anchor = target.GetComponentInParent<TwinAnchor>();
+            TwinRuntime runtime = TwinRuntime.Instance;
+            TwinRegistry registry = runtime != null ? runtime.Registry : null;
+
+            if (anchor != null && registry != null)
+            {
+                registry.GetByZone(anchor.Zone, _zoneBuf);   // 内部会先 Clear
+
+                Vector3 sum = Vector3.zero;
+                int n = 0;
+                for (int i = 0; i < _zoneBuf.Count; i++)
+                {
+                    TwinAnchor a = _zoneBuf[i];
+                    if (a == null) continue;
+
+                    Vector3 p = a.transform.position;
+                    sum += p;
+                    n++;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                }
+
+                if (n > 0)
+                {
+                    Vector3 center = sum / n;
+                    dir = new Vector3(center.x - focus.x, 0f, center.z - focus.z);
+
+                    // 房间半径 = 重心到最远点位的水平距离。退开距离不许超过它太多，
+                    // 否则小房间（主任室、教研室）会被推到墙外面去。
+                    float radius = 0f;
+                    for (int i = 0; i < _zoneBuf.Count; i++)
+                    {
+                        TwinAnchor a = _zoneBuf[i];
+                        if (a == null) continue;
+                        Vector3 p = a.transform.position;
+                        Vector2 flat = new Vector2(p.x - center.x, p.z - center.z);
+                        if (flat.sqrMagnitude > radius) radius = flat.sqrMagnitude;
+                    }
+                    radius = Mathf.Sqrt(radius);
+
+                    float maxD = Mathf.Max(2.5f, radius * 1.3f);
+                    if (distance > maxD) distance = maxD;
+                }
+
+                // 目标本身就在房间中央（重心≈目标）或分区里只有它一个 → 用楼中心兜底
+                if (dir.sqrMagnitude < 0.25f)
+                {
+                    IReadOnlyList<TwinAnchor> all = registry.All;
+                    Vector3 sumAll = Vector3.zero;
+                    int nAll = 0;
+                    for (int i = 0; i < all.Count; i++)
+                    {
+                        TwinAnchor a = all[i];
+                        if (a == null) continue;
+                        sumAll += a.transform.position;
+                        nAll++;
+                    }
+                    if (nAll > 1)
+                    {
+                        Vector3 center = sumAll / nAll;
+                        dir = new Vector3(center.x - focus.x, 0f, center.z - focus.z);
+                    }
+                }
+            }
+
+            if (dir.sqrMagnitude < 0.25f)
+            {
+                dir = transform.position - focus;
+                dir.y = 0f;
+            }
+            if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
+            dir.Normalize();
+
+            // 相机高度：比目标略高 0.35（看门/暖气时像人站着），
+            // 但夹在「本房间最低 ~ 最高点位」之间，避免顶穿天花板。
+            // 分区里只有一个点位时上下限会打架（lo > hi），那时就别夹了，跟目标同高。
+            float lo = minY + 0.5f;
+            float hi = maxY - 0.2f;
+            camY = hi > lo ? Mathf.Clamp(focus.y + 0.35f, lo, hi) : focus.y;
         }
 
         private IEnumerator TransitionTo(Viewpoint vp)
