@@ -51,8 +51,18 @@ namespace SchoolTwin.UI
         [Range(0.75f, 3f)]
         [SerializeField] private float _uiScale = 1.25f;
 
-        [Tooltip("面板距屏幕边缘的留白（未缩放）。实际值 = 该值 × 整体缩放")]
+        [Tooltip("面板距屏幕边缘的留白（未缩放）。实际值 = 该值 × 整体缩放，且不低于代码里的下限")]
         [SerializeField] private float _screenMargin = 20f;
+
+        [Header("位置微调（正数 = 更靠左 / 更靠下）")]
+        [Tooltip("面板再往**左**挪多少（未缩放，会乘整体缩放）。\n" +
+                 "用于避开 Game 视图右上角被工具栏 / 状态栏压住的情况。")]
+        [SerializeField] private float _extraRight = 16f;
+
+        [Tooltip("面板再往**下**挪多少（未缩放，会乘整体缩放）。\n" +
+                 "卡片标题（设备名）被顶部挡住时调大这个值。")]
+        [SerializeField] private float _extraTop = 28f;
+
         [Tooltip("留空则自动向系统申请含中文字形的字体（微软雅黑等）")]
         [SerializeField] private Font _fontOverride;
 
@@ -159,6 +169,9 @@ namespace SchoolTwin.UI
 
         private float _scaledCardWidth;
         private float _scaledScreenMargin;
+        /// <summary>位置微调展开后的实际值（已乘整体缩放）。</summary>
+        private float _scaledExtraRight;
+        private float _scaledExtraTop;
         private float _scaledPad;
         private float _scaledTitleY;
         private float _scaledSubtitleY;
@@ -306,8 +319,8 @@ namespace SchoolTwin.UI
 
             float panelAt1 = cardAt1 + alarmAt1 + BasePanelGap;
 
-            // 还有上边距、下边距（各 BaseScreenMargin）
-            float fixedAt1 = panelAt1 + BaseScreenMargin * 2f;
+            // 还有上边距（含下移量）、下边距（各 BaseScreenMargin）
+            float fixedAt1 = panelAt1 + BaseScreenMargin * 2f + Mathf.Max(0f, _extraTop);
 
             if (fixedAt1 <= 0f) return 3f;
 
@@ -336,7 +349,8 @@ namespace SchoolTwin.UI
             float avail = _uiRoot != null ? _uiRoot.rect.width : 0f;
             if (avail <= 0f) return 3f;
 
-            float room = avail - BaseScreenMargin * 2f;
+            // 左边距 + 右边距（含左移量）
+            float room = avail - BaseScreenMargin * 2f - Mathf.Max(0f, _extraRight);
             if (room <= 0f) return 0.75f;
 
             return room / BaseCardWidth;
@@ -352,6 +366,8 @@ namespace SchoolTwin.UI
             // 取 max：Inspector 里调大有效，调小于下限无效（否则会贴边，看着像被切）
             float baseMargin = Mathf.Max(_screenMargin, BaseScreenMargin);
             _scaledScreenMargin = baseMargin * s;
+            _scaledExtraRight = _extraRight * s;
+            _scaledExtraTop = _extraTop * s;
             _scaledPad = BasePad * s;
             _scaledTitleY = BaseTitleY * s;
             _scaledSubtitleY = BaseSubtitleY * s;
@@ -924,7 +940,9 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(_footer.rectTransform, _scaledPad, footerY,
                 _scaledCardWidth - _scaledPad * 2f, _scaledFooterHeight);
 
-            TwinUIFactory.AnchorTopRight(_card, _scaledScreenMargin, _scaledScreenMargin,
+            TwinUIFactory.AnchorTopRight(_card,
+                _scaledScreenMargin + _scaledExtraRight,
+                _scaledScreenMargin + _scaledExtraTop,
                 _scaledCardWidth, cardHeight);
         }
 
@@ -959,11 +977,12 @@ namespace SchoolTwin.UI
 
             Debug.Log(string.Format(
                 "[TwinUI] 布局自检  Screen={0}×{1}  scaleFactor={2:0.###}  " +
-                "画布rect={3}  画布世界右缘={4:0.#}  缩放={5:0.###}  " +
-                "卡片 rect={6}  卡片世界右缘={7:0.#} 上缘={8:0.#}  " +
-                "越界=右{9:0.#}/上{10:0.#}",
+                "画布rect={3}  画布世界右缘={4:0.#}  缩放={5:0.###}  边距={6:0.#}(左移{7:0.#}/下移{8:0.#})  " +
+                "卡片 rect={9}  卡片世界右缘={10:0.#} 上缘={11:0.#}  " +
+                "越界=右{12:0.#}/上{13:0.#}",
                 Screen.width, Screen.height, canvas.scaleFactor,
                 _uiRoot.rect, vc[2].x, _activeScale,
+                _scaledScreenMargin, _scaledExtraRight, _scaledExtraTop,
                 _card.rect, cc[2].x, cc[1].y,
                 cc[2].x - vc[2].x, cc[1].y - vc[1].y));
         }
@@ -1501,8 +1520,10 @@ namespace SchoolTwin.UI
                 if (overflow) height += _scaledFsAlarmMore + 8f;
             }
 
-            float top = _scaledScreenMargin + (_card != null ? _card.sizeDelta.y : 0f) + _scaledPanelGap;
-            TwinUIFactory.AnchorTopRight(_alarmPanel, _scaledScreenMargin, top, _scaledCardWidth, height);
+            float top = _scaledScreenMargin + _scaledExtraTop
+                        + (_card != null ? _card.sizeDelta.y : 0f) + _scaledPanelGap;
+            TwinUIFactory.AnchorTopRight(_alarmPanel,
+                _scaledScreenMargin + _scaledExtraRight, top, _scaledCardWidth, height);
 
             if (_alarmMore != null)
             {
