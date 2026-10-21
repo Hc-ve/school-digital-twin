@@ -371,19 +371,20 @@ namespace SchoolTwin.UI
             float reserve = 24f;
 
             // --- 分子：s = 1 时的面板总高 ---
-            // 卡片：metricsTop + 6 行 + 间隙 + div2 + footer + 底部留白
+            // 卡片上半段：metricsTop + 6 行 + 间隙 + div2 + footer + 页脚下留白
             int slots = Mathf.Max(1, MaxMetricRows);
             float cardAt1 = BaseMetricsTop
                             + slots * BaseRowHeight + (slots - 1) * BaseRowGap
-                            + 8f + 1f + 6f + BaseFooterHeight + 14f;
+                            + 8f + 1f + 6f + BaseFooterHeight + 10f;
 
-            // 告警面板：标题区 + N 行 + 「还有更多」行 + 底部留白
+            // 告警区（在卡片里）：标题区 + N 行 + 「还有更多」行 + 底部预留（合并后只留 4）
             int rows = Mathf.Max(1, _maxAlarmRows);
             float alarmAt1 = BaseAlarmRowsTop
                              + rows * BaseAlarmRowHeight + (rows - 1) * BaseAlarmRowGap
-                             + 14f + FsAlarmMore + 8f;
+                             + 4f + FsAlarmMore + 8f;
 
-            float panelAt1 = cardAt1 + alarmAt1 + BasePanelGap;
+            // 两块已合并成一张卡片：上半段 + 区间间隙 + 告警区 + 整窗底部留白
+            float panelAt1 = cardAt1 + 16f + alarmAt1 + 26f;
 
             // 还有上边距（含下移量）、下边距（各 BaseScreenMargin）
             float fixedAt1 = panelAt1 + BaseScreenMargin * 2f + Mathf.Max(0f, _extraTop);
@@ -523,10 +524,15 @@ namespace SchoolTwin.UI
         private int _pickStamp = -1;
         /// <summary>最近一次算出来的「内容需要多高」。高度下限就是它，永远不裁内容。</summary>
         private float _cardContentH;
-        /// <summary>告警面板当前高度。用来给卡片高度设上限，免得把告警面板顶出屏幕。</summary>
+        /// <summary>卡片上半段（标题 + 指标 + 页脚）的高度。告警区接在它下面。</summary>
+        private float _cardBodyH;
+        /// <summary>告警区当前高度。它现在是窗口的下半段，整窗高度 = 上半段 + 间隙 + 它 + 底部留白。</summary>
         private float _alarmPanelH;
+        /// <summary>当前显示了几条告警行。宽度变化要重排告警区时靠它（不用再去问 RefreshAlarms）。</summary>
+        private int _alarmShownRows;
 
         private RectTransform _alarmPanel;
+        private Image _alarmDivider;
         private Text _alarmTitle;
         private Text _alarmEmpty;
         private Text _alarmMore;
@@ -737,8 +743,11 @@ namespace SchoolTwin.UI
             _cardGrip = null;
             _cardResize = null;
             _cardContentH = 0f;
+            _cardBodyH = 0f;
             _alarmPanelH = 0f;
+            _alarmShownRows = 0;
             _alarmPanel = null;
+            _alarmDivider = null;
             _alarmTitle = null;
             _alarmEmpty = null;
             _alarmMore = null;
@@ -827,8 +836,10 @@ namespace SchoolTwin.UI
             // 面板隐藏时 Update 早就 return 了，不需要额外判断可见性。
             RefreshSourceBar(false);
 
-            // 卡片轻微淡入：选中时更实，未选中时压暗一点，避免静止时太抢眼
-            float target = _selected != null ? 1f : 0.72f;
+            // 卡片轻微淡入：选中时更实，未选中时压暗一点，避免静止时太抢眼。
+            // 【告警区合并进来之后要加一个例外】有告警时不许压暗 ——
+            // 整窗都淡下去的话，「哪里在报警」这个最要紧的信息反而看不清了。
+            float target = (_selected != null || _alarmTotal > 0) ? 1f : 0.72f;
             if (_cardGroup != null && Mathf.Abs(_cardAlpha - target) > 0.002f)
             {
                 _cardAlpha = Mathf.Lerp(_cardAlpha, target, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
@@ -853,8 +864,8 @@ namespace SchoolTwin.UI
         {
             if (!_visible || !_built) return;
 
+            // 只夹卡片：告警区现在是卡片的子节点，跟着一起走，单独夹会把它从卡片里拽出去
             ClampIntoCanvas(_card);
-            ClampIntoCanvas(_alarmPanel);
         }
 
         private void ClampIntoCanvas(RectTransform rt)
@@ -997,8 +1008,10 @@ namespace SchoolTwin.UI
             float w = CardWidth;
             float h = Mathf.Max(_cardContentH, _cardUserH);
 
-            float maxH = ViewportHeight() - (_scaledScreenMargin + _scaledExtraTop)
-                         - _scaledPanelGap - _alarmPanelH;
+            // 整窗不许超出画布上下边距。告警区合并进卡片之后，这里不再是
+            // 「别把下面那块顶出屏幕」，而是「别把自己顶出屏幕」—— 兜底而已，
+            // 正常情况下 FitAlarmCapacity 已经按剩余高度裁好行数了。
+            float maxH = ViewportHeight() - (_scaledScreenMargin + _scaledExtraTop) - _scaledScreenMargin;
             if (maxH > _cardContentH) h = Mathf.Min(h, maxH);
 
             // 缩放手柄的下限也要跟着内容走，否则用户能把卡片拉到「内容被切掉」的尺寸
@@ -1240,27 +1253,25 @@ namespace SchoolTwin.UI
             _cardResize.MinSize = new Vector2(_scaledCardMinWidth, _scaledRowHeight);
             _cardResize.OnChanged = OnCardGeometryChanged;
 
-            // ---------------- 告警面板 ----------------
-            _alarmPanel = (RectTransform)TwinUIFactory.Node("AlarmPanel", _uiRoot).transform;
-            TwinRoundedRect alarmBg = TwinUIFactory.Rounded(_alarmPanel, "Bg", 14f * _activeScale,
-                TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
-                TwinStatusPalette.PanelBorder, 1f, true);
-            TwinUIFactory.Stretch(alarmBg.rectTransform);
+            // ---------------- 告警区（卡片内部的下半段）----------------
+            //
+            // 【以前它是 _uiRoot 下另一块独立面板】两块各有一个背景、各摆各的，
+            // 视觉上挨着、看起来是一体的，但一拖动卡片就露馅了 —— 告警区原地不动。
+            // 现在它挂在 _card 里：一个背景、一个拖动条、一个 ×、一个缩放手柄，
+            // 真正是一块面板。告警区不再有自己的背景（卡片背景已经盖住这块），
+            // 只在两者之间加一条分隔线。
+            _alarmDivider = TwinUIFactory.Block(_card, "AlarmDivider", TwinStatusPalette.Divider, false);
+
+            _alarmPanel = (RectTransform)TwinUIFactory.Node("AlarmPanel", _card).transform;
 
             _alarmTitle = TwinUIFactory.Label(_alarmPanel, "AlarmTitle", _scaledFsAlarmTitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextSecondary, FontStyle.Bold);
-            TwinUIFactory.Place(_alarmTitle.rectTransform, _scaledPad, _scaledAlarmTitleY,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmTitle + 8f);
 
             _alarmEmpty = TwinUIFactory.Label(_alarmPanel, "AlarmEmpty", _scaledFsAlarmEmpty, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_alarmEmpty.rectTransform, _scaledPad, _scaledAlarmRowsTop,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmEmpty + 8f);
 
             _alarmMore = TwinUIFactory.Label(_alarmPanel, "AlarmMore", _scaledFsAlarmMore, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, _scaledAlarmRowsTop,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmMore + 6f);
             _alarmMore.gameObject.SetActive(false);
 
             // ---------------- 底部数据源切换条 ----------------
@@ -1268,6 +1279,10 @@ namespace SchoolTwin.UI
 
             // ---------------- 告警历史浮层（默认隐藏，按 H 打开）----------------
             EnsureHistoryPanel();
+
+            // 缩放手柄压到最上层：它现在在告警区下面，被行背景盖住的话就抓不到了。
+            // 位置上两者不重叠（手柄在整窗最底部那条留白里），但层级别赌。
+            if (_cardGrip != null) _cardGrip.SetAsLastSibling();
         }
 
         /// <summary>
@@ -1614,9 +1629,9 @@ namespace SchoolTwin.UI
             float divider2Y = _scaledMetricsTop + metricsBlock + 8f * _activeScale;
             float footerY = divider2Y + 1f + 6f * _activeScale;
 
-            // 底部留 26 而不是 14：右下角缩放手柄要占一块地方，
-            // 留少了手柄会压在页脚文字上（页脚是左对齐的，右边多半是空的，但别赌）。
-            float cardHeight = footerY + _scaledFooterHeight + 26f * _activeScale;
+            // 上半段到页脚为止，下面接告警区。
+            // 页脚下只留 10 —— 真正的底部留白（26）在整个窗口最下面，给缩放手柄腾位置。
+            _cardBodyH = footerY + _scaledFooterHeight + 10f * _activeScale;
 
             TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, divider2Y,
                 w - _scaledPad * 2f, 1f);
@@ -1626,7 +1641,91 @@ namespace SchoolTwin.UI
             for (int i = 0; i < _metricRows.Count; i++)
                 LayoutMetricRow(_metricRows[i], i, w);
 
-            ApplyCardGeometry(cardHeight);
+            // 告警区接在 _cardBodyH 下面，宽度也依赖 CardWidth —— 一起重摆
+            LayoutAlarmSection();
+            UpdateCardTotalHeight();
+        }
+
+        /// <summary>上半段（标题+指标+页脚）和告警区之间的间距。</summary>
+        private float AlarmGap() { return 16f * _activeScale; }
+
+        /// <summary>
+        /// 整窗高度 = 上半段 + 间隙 + 告警区 + 底部留白。
+        ///
+        /// 【为什么合成一个数】两块合并成一块之后，「窗口有多高」只有一个答案。
+        /// 拆成两个数分别传给 ApplyCardGeometry 的话，一处改了另一处忘了，窗口就会比内容矮。
+        /// </summary>
+        private void UpdateCardTotalHeight()
+        {
+            ApplyCardGeometry(_cardBodyH + AlarmGap() + _alarmPanelH + 26f * _activeScale);
+        }
+
+        /// <summary>
+        /// 告警区排版：面板本体 / 分隔线 / 标题 / 空态 / 每一行 / 「还有更多」。
+        ///
+        /// 宽度跟着卡片走（它现在在卡片里面），高度由行数算出来。
+        /// </summary>
+        private void LayoutAlarmSection()
+        {
+            if (_alarmPanel == null || _card == null) return;
+
+            float s = _activeScale;
+            float w = CardWidth;
+            float inner = w - _scaledPad * 2f;
+            int rows = _alarmShownRows;
+            bool overflow = rows > 0 && _alarmTotal > rows;
+
+            if (rows <= 0)
+            {
+                // 底部只留 4：合并之后整窗的底部留白（26，给缩放手柄）在卡片那边，
+                // 这里再留 14 就变成两层留白，最下面会空出一大块。
+                _alarmPanelH = _scaledAlarmRowsTop + _scaledFsAlarmEmpty + 8f + 4f * s;
+            }
+            else
+            {
+                _alarmPanelH = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
+                               + (rows - 1) * _scaledAlarmRowGap + 4f * s;
+                if (overflow) _alarmPanelH += _scaledFsAlarmMore + 8f;
+            }
+
+            float top = _cardBodyH + AlarmGap();
+            TwinUIFactory.Place(_alarmPanel, 0f, top, w, _alarmPanelH);
+            TwinUIFactory.Place(_alarmDivider.rectTransform, _scaledPad, top - AlarmGap() * 0.5f, inner, 1f);
+
+            TwinUIFactory.Place(_alarmTitle.rectTransform, _scaledPad, _scaledAlarmTitleY,
+                inner, _scaledFsAlarmTitle + 8f);
+            TwinUIFactory.Place(_alarmEmpty.rectTransform, _scaledPad, _scaledAlarmRowsTop,
+                inner, _scaledFsAlarmEmpty + 8f);
+
+            for (int i = 0; i < _alarmRows.Count; i++) LayoutAlarmRow(_alarmRows[i], i, w);
+
+            if (_alarmMore != null)
+            {
+                _alarmMore.gameObject.SetActive(overflow);
+                if (overflow)
+                {
+                    float y = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
+                              + (rows - 1) * _scaledAlarmRowGap + 2f;
+                    TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, y,
+                        inner, _scaledFsAlarmMore + 6f);
+                }
+            }
+        }
+
+        /// <summary>告警行按当前宽度重排（和指标行同理：卡片宽度变了，行宽也要跟着变）。</summary>
+        private void LayoutAlarmRow(TwinAlarmRow row, int index, float w)
+        {
+            if (row == null) return;
+
+            float s = _activeScale;
+            float inner = w - _scaledPad * 2f;
+            float top = _scaledAlarmRowsTop + index * (_scaledAlarmRowHeight + _scaledAlarmRowGap);
+
+            TwinUIFactory.Place((RectTransform)row.transform, _scaledPad, top, inner, _scaledAlarmRowHeight);
+
+            if (row.Label != null)
+                TwinUIFactory.Place(row.Label.rectTransform, 24f * s, 0f,
+                    inner - 32f * s, _scaledAlarmRowHeight);
         }
 
         /// <summary>
@@ -2169,12 +2268,8 @@ namespace SchoolTwin.UI
             {
                 int i = _alarmRows.Count;
                 float s = _activeScale;
-                float width = _scaledCardWidth - _scaledPad * 2f;
 
                 GameObject go = TwinUIFactory.Node("AlarmRow" + i, _alarmPanel);
-                TwinUIFactory.Place((RectTransform)go.transform, _scaledPad,
-                    _scaledAlarmRowsTop + i * (_scaledAlarmRowHeight + _scaledAlarmRowGap),
-                    width, _scaledAlarmRowHeight);
 
                 // 行背景必须是 raycastTarget，否则收不到点击
                 Image bg = TwinUIFactory.Block(go.transform, "Bg", TwinStatusPalette.Transparent, true);
@@ -2187,7 +2282,6 @@ namespace SchoolTwin.UI
 
                 Text label = TwinUIFactory.Label(go.transform, "Label", _scaledFsAlarmRow, TextAnchor.MiddleLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(label.rectTransform, 24f * s, 0f, width - 32f * s, _scaledAlarmRowHeight);
 
                 TwinAlarmRow row = go.AddComponent<TwinAlarmRow>();
                 row.Owner = this;
@@ -2195,6 +2289,9 @@ namespace SchoolTwin.UI
                 row.Dot = dot;
                 row.Label = label;
                 _alarmRows.Add(row);
+
+                // 位置和宽度统一走 LayoutAlarmRow（卡片可拉伸，宽度会变）
+                LayoutAlarmRow(row, i, CardWidth);
             }
             return _alarmRows[index];
         }
@@ -2216,20 +2313,19 @@ namespace SchoolTwin.UI
             float s = _activeScale;
             float viewport = ViewportHeight();
 
-            // 当前实际卡片高度（与 LayoutCardGeometry 用同一套公式，底部留白 26 也是）
+            // 上半段高度（与 LayoutCardGeometry 用同一套公式）
             int slots = Mathf.Max(1, _hasData ? _metricRows.Count : 1);
             float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
             float divider2Y = _scaledMetricsTop + metricsBlock + 8f * s;
             float footerY = divider2Y + 1f + 6f * s;
-            float cardH = footerY + _scaledFooterHeight + 26f * s;
-            if (_selected == null) cardH = _scaledMetricsTop + _scaledRowHeight * 2f + 26f * s;
-            // 用户把卡片拉高过 → 按他拉的实际高度算，否则会多塞几行、把告警面板顶出屏幕
-            if (_cardUserH > cardH) cardH = _cardUserH;
+            float bodyH = footerY + _scaledFooterHeight + 10f * s;
+            if (_selected == null) bodyH = _scaledMetricsTop + _scaledRowHeight * 2f + 10f * s;
 
-            float avail = viewport - _scaledScreenMargin - cardH - _scaledPanelGap - _scaledScreenMargin;
+            // 上下边距 + 上半段 + 间隙 + 底部留白，剩下的才是告警区能用的高度
+            float avail = viewport - _scaledScreenMargin * 2f - bodyH - AlarmGap() - 26f * s;
 
-            // 面板自身固定开销：标题区 + 1 行 + 底部预留 + 「还有更多」提示行
-            float overhead = _scaledAlarmRowsTop + _scaledAlarmRowHeight + 14f * s
+            // 告警区自身固定开销：标题区 + 1 行 + 底部预留（合并后只留 4）+ 「还有更多」提示行
+            float overhead = _scaledAlarmRowsTop + _scaledAlarmRowHeight + 4f * s
                              + _scaledFsAlarmMore + 8f;
 
             float rowStep = _scaledAlarmRowHeight + _scaledAlarmRowGap;
@@ -2238,51 +2334,30 @@ namespace SchoolTwin.UI
             return Mathf.Clamp(fit, 1, desired);
         }
 
+        /// <summary>
+        /// 告警区每次刷新（4Hz）走这里：记住行数 → 重排 → 重算整窗高度。
+        ///
+        /// 【为什么先记行数再重排】<see cref="LayoutAlarmSection"/> 是纯几何方法，
+        /// 它按 <see cref="_alarmShownRows"/> 摆；这样宽度变化时（用户拉窗口）
+        /// 也能单独调它一次，不用等下一次告警刷新。
+        /// </summary>
         private void PlaceAlarmPanel(int rows)
         {
             if (_alarmPanel == null) return;
 
-            float s = _activeScale;
+            _alarmShownRows = Mathf.Max(0, rows);
+
+            LayoutAlarmSection();
+
             bool overflow = rows > 0 && _alarmTotal > rows;
-            float height;
-            if (rows <= 0)
+            if (_alarmMore != null && overflow)
             {
-                height = _scaledAlarmRowsTop + _scaledFsAlarmEmpty + 8f + 14f * s;
-            }
-            else
-            {
-                height = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
-                         + (rows - 1) * _scaledAlarmRowGap + 14f * s;
-                if (overflow) height += _scaledFsAlarmMore + 8f;
+                _sbAlarm.Length = 0;
+                _sbAlarm.Append("… 另有 ").Append(_alarmTotal - rows).Append(" 个异常点位");
+                SetCached(_alarmMore, ref _cachedAlarmMore, _sbAlarm.ToString());
             }
 
-            // 【顺序很重要】先把告警面板高度告诉卡片，让卡片先把自己的高度夹到位，
-            // 再拿卡片的最终高度去摆告警面板。反过来做的话，告警面板会用「上一帧的卡片高度」，
-            // 卡片一变高它就滞后一帧 —— 表现为卡片拉高的瞬间告警面板闪一下。
-            bool alarmHeightChanged = !Mathf.Approximately(height, _alarmPanelH);
-            _alarmPanelH = height;
-            if (alarmHeightChanged && _cardUserH > 0f && _card != null)
-                ApplyCardGeometry(_cardContentH);
-
-            float top = _scaledScreenMargin + _scaledExtraTop
-                        + (_card != null ? _card.sizeDelta.y : 0f) + _scaledPanelGap;
-            TwinUIFactory.AnchorTopRight(_alarmPanel,
-                _scaledScreenMargin + _scaledExtraRight, top, _scaledCardWidth, height);
-
-            if (_alarmMore != null)
-            {
-                _alarmMore.gameObject.SetActive(overflow);
-                if (overflow)
-                {
-                    float y = _scaledAlarmRowsTop + rows * _scaledAlarmRowHeight
-                              + (rows - 1) * _scaledAlarmRowGap + 2f;
-                    TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, y,
-                        _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmMore + 6f);
-                    _sbAlarm.Length = 0;
-                    _sbAlarm.Append("… 另有 ").Append(_alarmTotal - rows).Append(" 个异常点位");
-                    SetCached(_alarmMore, ref _cachedAlarmMore, _sbAlarm.ToString());
-                }
-            }
+            UpdateCardTotalHeight();
         }
 
         private string DescribeAlarm(TwinAnchor anchor, TwinStatus status)
@@ -2353,7 +2428,7 @@ namespace SchoolTwin.UI
             if (visible) _cardClosed = false;
 
             if (_card != null) _card.gameObject.SetActive(visible);
-            if (_alarmPanel != null) _alarmPanel.gameObject.SetActive(visible);
+            // 告警区在 _card 里面，跟着一起显示/隐藏，不用单独处理
         }
 
         // ================================================================ 工具
