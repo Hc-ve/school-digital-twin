@@ -468,8 +468,9 @@ namespace SchoolTwin.UI
         private float _nextAlarmRefresh;
         private float _cardAlpha = 1f;
         private bool _built;
-        /// <summary>布局自检只打一次日志，别刷屏。</summary>
-        private bool _loggedLayout;
+        /// <summary>上次打布局自检时的屏幕尺寸。分辨率变了就重打一次。</summary>
+        private int _loggedW = -1;
+        private int _loggedH = -1;
         /// <summary>夹边用的画布引用。缓存一份，避免每帧 GetComponentInParent。</summary>
         private Canvas _canvasRef;
         /// <summary>上一次排版时选中点位是否已有数据。用于捕捉「等待数据 → 有数据」的转变。</summary>
@@ -957,7 +958,7 @@ namespace SchoolTwin.UI
         /// </summary>
         private void LogLayoutOnce()
         {
-            if (_loggedLayout || _uiRoot == null) return;
+            if (_uiRoot == null) return;
 
             Canvas canvas = _uiRoot.GetComponentInParent<Canvas>();
             // 画布的 scaleFactor 要到第一次布局之后才算得出来，
@@ -965,7 +966,12 @@ namespace SchoolTwin.UI
             if (canvas == null || canvas.scaleFactor <= 0.0001f) return;
             if (_card == null || _card.sizeDelta.y <= 0f) return;
 
-            _loggedLayout = true;
+            // 【为什么不是「只打一次」】用户在 Play 里拖 Game 视图大小后，
+            // 一辈子只打一次的日志就和现场对不上了，会被拿去当证据得出错误结论
+            // （2026-10-21 就因此误判过一次）。改成「分辨率变了就重打」。
+            if (_loggedW == Screen.width && _loggedH == Screen.height) return;
+            _loggedW = Screen.width;
+            _loggedH = Screen.height;
 
             // 世界坐标包围盒：这是「事实」，不依赖任何坐标系换算假设。
             // 卡片右上角 x 若大于画布右上角 x，就是真的出界了。
