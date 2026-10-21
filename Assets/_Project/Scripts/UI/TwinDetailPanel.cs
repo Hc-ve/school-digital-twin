@@ -95,7 +95,19 @@ namespace SchoolTwin.UI
         /// 加宽比加高划算 —— 宽不占垂直空间，不会被 MaxScaleByVerticalSpace 压。
         /// </summary>
         private const float BaseCardWidth = 470f;
-        private const float BaseScreenMargin = 20f;
+
+        /// <summary>
+        /// 面板距屏幕边缘的**下限**（基准单位，会乘 _activeScale）。
+        ///
+        /// 【为什么要有下限】场景里 `_screenMargin` 序列化的是 20，
+        /// 在 s=0.75 时只有 15 个单位。实测 682px 宽的画布下，15 单位 = **10.2px** ——
+        /// 圆角和边框几乎贴着屏幕边缘，看起来就是「面板被切了一点」。
+        ///
+        /// 所以取 `max(_screenMargin, BaseScreenMargin)`：Inspector 里调大仍然生效，
+        /// 但调小于这个值不再起作用（低于它就不好看了）。
+        /// 32 × 0.75 ≈ 24 单位 ≈ 屏宽的 2.4%。
+        /// </summary>
+        private const float BaseScreenMargin = 32f;
         private const float BasePad = 18f;
         private const float BaseTitleY = 16f;
         private const float BaseSubtitleY = 50f;
@@ -337,7 +349,9 @@ namespace SchoolTwin.UI
             _activeScale = s;   // 存下来，给圆角、游标这类零散计算复用
 
             _scaledCardWidth = BaseCardWidth * s;
-            _scaledScreenMargin = _screenMargin > 0f ? _screenMargin * s : BaseScreenMargin * s;
+            // 取 max：Inspector 里调大有效，调小于下限无效（否则会贴边，看着像被切）
+            float baseMargin = Mathf.Max(_screenMargin, BaseScreenMargin);
+            _scaledScreenMargin = baseMargin * s;
             _scaledPad = BasePad * s;
             _scaledTitleY = BaseTitleY * s;
             _scaledSubtitleY = BaseSubtitleY * s;
