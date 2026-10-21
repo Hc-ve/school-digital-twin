@@ -311,12 +311,17 @@ namespace SchoolTwin.UI
         ///
         /// 【为什么必须单独算】`MaxScaleByVerticalSpace()` 只看高度。
         /// 画布一窄（窄窗口、扁长 Game 视图、参考分辨率调小），
-        /// 卡片会横向顶出屏幕，而垂直方向算出来「还放得下」→ 完全没有约束，
-        /// 表现就是「右侧面板被切掉一点」。这个约束补上这条漏洞。
+        /// 卡片会横向顶出屏幕，而垂直方向算出来「还放得下」→ 完全没有约束。
+        ///
+        /// 【为什么用父 rect 而不是 Screen.width / scaleFactor】卡片是用
+        /// `anchor=(1,1)` 摆在父节点里的，宽度约束必须和它用同一个坐标系（父 rect）。
+        /// 拿屏幕像素反推的宽度去约束一个按父 rect 摆放的元素，两者不一致时就会算错 ——
+        /// 2026-10-21 那次「面板跑到画面外」就是这么来的。
+        /// 父 rect 万一本身就不贴合屏幕，交给 `ClampIntoCanvas()` 兜底。
         /// </summary>
         private float MaxScaleByHorizontalSpace()
         {
-            float avail = TwinUIFactory.VisibleWidth(_uiRoot);
+            float avail = _uiRoot != null ? _uiRoot.rect.width : 0f;
             if (avail <= 0f) return 3f;
 
             float room = avail - BaseScreenMargin * 2f;
@@ -435,6 +440,8 @@ namespace SchoolTwin.UI
         private bool _built;
         /// <summary>布局自检只打一次日志，别刷屏。</summary>
         private bool _loggedLayout;
+        /// <summary>夹边用的画布引用。缓存一份，避免每帧 GetComponentInParent。</summary>
+        private Canvas _canvasRef;
         /// <summary>上一次排版时选中点位是否已有数据。用于捕捉「等待数据 → 有数据」的转变。</summary>
         private bool _hasData;
 
@@ -625,6 +632,63 @@ namespace SchoolTwin.UI
             }
 
             LogLayoutOnce();   // 打完一次就永久短路，开销可以忽略
+        }
+
+        /// <summary>
+        /// 每帧末尾把卡片与告警面板夹回画布可见区域内。
+        ///
+        /// 【为什么必须有这一层】靠算坐标定位（不管是按父 rect 算，还是按
+        /// `Screen.width / scaleFactor` 算）都依赖一个前提：算出来的数和父节点的坐标系一致。
+        /// 这个前提一旦不成立，面板就会跑到画面外，而且错得很远 —— 已经踩过两次。
+        ///
+        /// 夹边不依赖任何前提：直接比较**世界坐标下的包围盒**，
+        /// 「卡片右边缘在不在画布右边缘以内」是事实判断，不是推算。
+        /// 正常情况下它一次都不会动（越界量为 0），只在真越界时纠偏。
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (!_visible || !_built) return;
+
+            ClampIntoCanvas(_card);
+            ClampIntoCanvas(_alarmPanel);
+        }
+
+        private void ClampIntoCanvas(RectTransform rt)
+        {
+            if (rt == null) return;
+
+            if (_canvasRef == null && _uiRoot != null)
+                _canvasRef = _uiRoot.GetComponentInParent<Canvas>();
+            if (_canvasRef == null) return;
+
+            RectTransform cv = _canvasRef.transform as RectTransform;
+            if (cv == null) return;
+
+            // GetWorldCorners 顺序固定：0=左下 1=左上 2=右上 3=右下
+            Vector3[] cc = new Vector3[4];
+            Vector3[] vc = new Vector3[4];
+            rt.GetWorldCorners(cc);
+            cv.GetWorldCorners(vc);
+
+            float dx = 0f;
+            float dy = 0f;
+
+            // 横向：优先保证右边不越界（面板是靠右摆的），左边越界只在极端窄窗口出现
+            if (cc[2].x > vc[2].x + 0.5f) dx = vc[2].x - cc[2].x;
+            else if (cc[0].x < vc[0].x - 0.5f) dx = vc[0].x - cc[0].x;
+
+            // 纵向：优先保证顶部不越界（标题行最要紧）
+            if (cc[1].y > vc[1].y + 0.5f) dy = vc[1].y - cc[1].y;
+            else if (cc[3].y < vc[3].y - 0.5f)
+            {
+                // 底部越界时上移，但上移量不能把顶边顶出去
+                float up = vc[3].y - cc[3].y;
+                float room = Mathf.Max(0f, cc[1].y - vc[1].y);
+                dy = Mathf.Min(up, room);
+            }
+
+            if (Mathf.Abs(dx) > 0.5f || Mathf.Abs(dy) > 0.5f)
+                rt.position += new Vector3(dx, dy, 0f);
         }
 
         // ================================================================ 环境准备
@@ -871,17 +935,23 @@ namespace SchoolTwin.UI
 
             _loggedLayout = true;
 
-            float visW = TwinUIFactory.VisibleWidth(_uiRoot);
-            float visH = ViewportHeight();
-            float cardX = _card.anchoredPosition.x;
-            float cardY = -_card.anchoredPosition.y;
+            // 世界坐标包围盒：这是「事实」，不依赖任何坐标系换算假设。
+            // 卡片右上角 x 若大于画布右上角 x，就是真的出界了。
+            RectTransform cv = canvas.transform as RectTransform;
+            Vector3[] cc = new Vector3[4];
+            Vector3[] vc = new Vector3[4];
+            _card.GetWorldCorners(cc);
+            if (cv != null) cv.GetWorldCorners(vc);
 
             Debug.Log(string.Format(
-                "[TwinUI] 布局自检  画布rect={0}  可见={1:0.#}×{2:0.#}  scaleFactor={3:0.###}  " +
-                "缩放={4:0.###}  卡片 x={5:0.#} y={6:0.#} w={7:0.#} h={8:0.#}  " +
-                "右边距={9:0.#}（x+w 应 ≤ 可见宽-{9:0.#}）",
-                _uiRoot.rect, visW, visH, canvas.scaleFactor, _activeScale,
-                cardX, cardY, _card.sizeDelta.x, _card.sizeDelta.y, _scaledScreenMargin));
+                "[TwinUI] 布局自检  Screen={0}×{1}  scaleFactor={2:0.###}  " +
+                "画布rect={3}  画布世界右缘={4:0.#}  缩放={5:0.###}  " +
+                "卡片 rect={6}  卡片世界右缘={7:0.#} 上缘={8:0.#}  " +
+                "越界=右{9:0.#}/上{10:0.#}",
+                Screen.width, Screen.height, canvas.scaleFactor,
+                _uiRoot.rect, vc[2].x, _activeScale,
+                _card.rect, cc[2].x, cc[1].y,
+                cc[2].x - vc[2].x, cc[1].y - vc[1].y));
         }
 
         private List<TwinMetricDefinition> CollectMetrics(TwinAnchor anchor, List<TwinMetricDefinition> buffer)
