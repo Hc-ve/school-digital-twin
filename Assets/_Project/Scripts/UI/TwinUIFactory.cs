@@ -187,8 +187,22 @@ namespace SchoolTwin.UI
             rt.sizeDelta = new Vector2(width, height);
         }
 
-        // ================================================================ 文本
+        /// <summary>
+        /// 锚到父节点左下角（底部控制条用）。
+        /// 和 <see cref="AnchorTopRight"/> 同一个道理：位置由锚点语义表达，
+        /// 不按屏幕像素反推，所以父节点多大都不会算错。
+        /// </summary>
+        public static void AnchorBottomLeft(RectTransform rt, float marginLeft, float marginBottom, float width, float height)
+        {
+            if (rt == null) return;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.zero;
+            rt.pivot = Vector2.zero;
+            rt.anchoredPosition = new Vector2(marginLeft, marginBottom);
+            rt.sizeDelta = new Vector2(width, height);
+        }
 
+        // ================================================================ 文本
         public static Text Label(Transform parent, string name, int fontSize, TextAnchor anchor, Color color)
         {
             return Label(parent, name, fontSize, anchor, color, FontStyle.Normal, HorizontalWrapMode.Overflow);

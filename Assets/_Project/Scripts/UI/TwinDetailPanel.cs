@@ -149,6 +149,20 @@ namespace SchoolTwin.UI
         private const float BaseChipWidth = 86f;
         private const float BaseChipHeight = 28f;
 
+        // ---- 底部数据源切换条 ----
+        //
+        // 为什么放左下角：右上角是详情卡片、右下角是告警面板，
+        // 左下是唯一一块「一直空着、又不会挡住 3D 场景点选」的区域。
+        // 它是**系统级**控件（切数据源），和「当前选中哪个点位」无关，
+        // 所以单独成条，不塞进卡片里。
+        private const float BaseSourceBarWidth = 540f;
+        private const float BaseSourceBarHeight = 38f;
+        private const float BaseSourceBtnWidth = 66f;
+        private const float BaseSourceBtnHeight = 26f;
+        private const float BaseSourceBtnGap = 6f;
+        private const int FsSourceBtn = 15;
+        private const int FsSourceState = 13;
+
         // ---- 字号（未缩放）----
         //
         // 【为什么这里整体比最初版本大一圈】最初版本是 19/13/12/11 这一档，
@@ -211,6 +225,8 @@ namespace SchoolTwin.UI
         private int _scaledFsChip;
         private int _scaledFsSubtitle;
         private int _scaledFsHint;
+        private int _scaledFsSourceBtn;
+        private int _scaledFsSourceState;
         private int _scaledFsFooter;
         private int _scaledFsAlarmTitle;
         private int _scaledFsAlarmEmpty;
@@ -408,6 +424,8 @@ namespace SchoolTwin.UI
             _scaledFsChip = ScaleFont(FsChip, s);
             _scaledFsSubtitle = ScaleFont(FsSubtitle, s);
             _scaledFsHint = ScaleFont(FsHint, s);
+            _scaledFsSourceBtn = ScaleFont(FsSourceBtn, s);
+            _scaledFsSourceState = ScaleFont(FsSourceState, s);
             _scaledFsFooter = ScaleFont(FsFooter, s);
             _scaledFsAlarmTitle = ScaleFont(FsAlarmTitle, s);
             _scaledFsAlarmEmpty = ScaleFont(FsAlarmEmpty, s);
@@ -444,6 +462,22 @@ namespace SchoolTwin.UI
         private Text _alarmTitle;
         private Text _alarmEmpty;
         private Text _alarmMore;
+
+        // ---- 底部数据源切换条 ----
+        private RectTransform _sourceBar;
+        private TwinSourceSwitcher _switcher;
+        private readonly Image[] _sourceBtnBg = new Image[3];
+        private readonly Text[] _sourceBtnText = new Text[3];
+        private Image _recordBg;
+        private Text _recordText;
+        private Image _sourceDot;
+        private Text _sourceState;
+        private float _nextSourceRefresh;
+        private string _sourceHint;
+        private float _sourceHintUntil;
+        private string _cachedRecordText;
+        private string _cachedSourceState;
+        private string _cachedPlaybackText;
 
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
         private readonly List<TwinAlarmRow> _alarmRows = new List<TwinAlarmRow>(8);
@@ -630,6 +664,23 @@ namespace SchoolTwin.UI
             _metricRows.Clear();
             _alarmRows.Clear();
 
+            // 切换条：_switcher 是挂在面板自己身上的组件，不随 UI 销毁，所以只清 UI 引用
+            _sourceBar = null;
+            for (int i = 0; i < 3; i++)
+            {
+                _sourceBtnBg[i] = null;
+                _sourceBtnText[i] = null;
+            }
+            _recordBg = null;
+            _recordText = null;
+            _sourceDot = null;
+            _sourceState = null;
+            _cachedRecordText = null;
+            _cachedSourceState = null;
+            _cachedPlaybackText = null;
+            _sourceHint = null;
+            _sourceHintUntil = 0f;
+
             // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
             // 结果是新 Text 一片空白。
             _cachedTitle = null;
@@ -674,6 +725,10 @@ namespace SchoolTwin.UI
                 _nextAlarmRefresh = now + Mathf.Max(0.05f, _alarmRefreshInterval);
                 RefreshAlarms();
             }
+
+            // 数据源状态自己带 0.25s 节流，放这里最省事：
+            // 面板隐藏时 Update 早就 return 了，不需要额外判断可见性。
+            RefreshSourceBar(false);
 
             // 卡片轻微淡入：选中时更实，未选中时压暗一点，避免静止时太抢眼
             float target = _selected != null ? 1f : 0.72f;
@@ -895,6 +950,227 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(_alarmMore.rectTransform, _scaledPad, _scaledAlarmRowsTop,
                 _scaledCardWidth - _scaledPad * 2f, _scaledFsAlarmMore + 6f);
             _alarmMore.gameObject.SetActive(false);
+
+            // ---------------- 底部数据源切换条 ----------------
+            BuildSourceBar();
+        }
+
+        /// <summary>
+        /// 底部数据源切换条：Mock / MQTT / 回放 + 录制开关 + 当前状态。
+        ///
+        /// 【为什么值得单独做一条】这个项目最核心的承诺是「换数据源，场景侧一行不改」。
+        /// 但在此之前要演示它，只能去 Inspector 里勾 / 取消勾选组件 ——
+        /// 观众看到的是「他在改设置」，看不到「同一套场景、同一套锚点、同一套面板，
+        /// 换个数据来源照样跑」。做成按钮，这件事就变成一次点击。
+        /// </summary>
+        private void BuildSourceBar()
+        {
+            if (_uiRoot == null) return;
+
+            EnsureSwitcher();
+
+            float s = _activeScale;
+            float barW = BaseSourceBarWidth * s;
+            float barH = BaseSourceBarHeight * s;
+
+            _sourceBar = (RectTransform)TwinUIFactory.Node("SourceBar", _uiRoot).transform;
+            TwinRoundedRect bg = TwinUIFactory.Rounded(_sourceBar, "Bg", 12f * s,
+                TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
+                TwinStatusPalette.PanelBorder, 1f, false);
+            TwinUIFactory.Stretch(bg.rectTransform);
+            TwinUIFactory.AnchorBottomLeft(_sourceBar, _scaledScreenMargin, _scaledScreenMargin, barW, barH);
+
+            Text caption = TwinUIFactory.Label(_sourceBar, "Caption", _scaledFsSourceBtn, TextAnchor.MiddleLeft,
+                TwinStatusPalette.TextSecondary);
+            TwinUIFactory.Place(caption.rectTransform, 14f * s, 0f, 56f * s, barH);
+            caption.text = "数据源";
+
+            // ---- 三个切换按钮 ----
+            float btnW = BaseSourceBtnWidth * s;
+            float btnH = BaseSourceBtnHeight * s;
+            float btnY = (barH - btnH) * 0.5f;
+            float btnX = 74f * s;
+
+            for (int i = 0; i < 3; i++)
+            {
+                int index = i;
+                Image img = TwinUIFactory.Block(_sourceBar, "Src" + i, TwinStatusPalette.Track, true);
+                TwinUIFactory.Place(img.rectTransform, btnX + i * (btnW + BaseSourceBtnGap * s), btnY, btnW, btnH);
+
+                // 不用 Button 自带的 ColorTint：选中态要的是「整块高亮 + 文字变白」，
+                // 交给下面的刷新循环统一算，避免两处都在改同一个颜色。
+                Button btn = img.gameObject.AddComponent<Button>();
+                btn.targetGraphic = img;
+                btn.transition = Selectable.Transition.None;
+                btn.onClick.AddListener(delegate { OnSourceButton(index); });
+
+                Text label = TwinUIFactory.Label(img.transform, "Text", _scaledFsSourceBtn,
+                    TextAnchor.MiddleCenter, TwinStatusPalette.TextSecondary);
+                TwinUIFactory.Stretch(label.rectTransform);
+
+                _sourceBtnBg[i] = img;
+                _sourceBtnText[i] = label;
+            }
+            _sourceBtnText[0].text = "Mock";
+            _sourceBtnText[1].text = "MQTT";
+            _sourceBtnText[2].text = "回放";
+
+            // ---- 录制开关 ----
+            float recX = btnX + 3f * (btnW + BaseSourceBtnGap * s) + 8f * s;
+            float recW = 86f * s;
+            _recordBg = TwinUIFactory.Block(_sourceBar, "Record", TwinStatusPalette.Track, true);
+            TwinUIFactory.Place(_recordBg.rectTransform, recX, btnY, recW, btnH);
+
+            Button recBtn = _recordBg.gameObject.AddComponent<Button>();
+            recBtn.targetGraphic = _recordBg;
+            recBtn.transition = Selectable.Transition.None;
+            recBtn.onClick.AddListener(OnRecordButton);
+
+            _recordText = TwinUIFactory.Label(_recordBg.transform, "Text", _scaledFsSourceBtn,
+                TextAnchor.MiddleCenter, TwinStatusPalette.TextSecondary);
+            TwinUIFactory.Stretch(_recordText.rectTransform);
+
+            // ---- 右侧状态：一个色点 + 一行字 ----
+            float dotSize = 8f * s;
+            _sourceDot = TwinUIFactory.Block(_sourceBar, "StateDot", TwinStatusPalette.Unknown, false);
+            TwinUIFactory.Place(_sourceDot.rectTransform, recX + recW + 12f * s,
+                (barH - dotSize) * 0.5f, dotSize, dotSize);
+
+            float stateX = recX + recW + 12f * s + dotSize + 8f * s;
+            _sourceState = TwinUIFactory.Label(_sourceBar, "StateText", _scaledFsSourceState,
+                TextAnchor.MiddleLeft, TwinStatusPalette.TextMuted);
+            TwinUIFactory.Place(_sourceState.rectTransform, stateX, 0f,
+                Mathf.Max(0f, barW - stateX - 10f * s), barH);
+
+            _cachedRecordText = null;
+            _cachedSourceState = null;
+            _cachedPlaybackText = null;
+
+            RefreshSourceBar(true);
+        }
+
+        private void EnsureSwitcher()
+        {
+            if (_switcher != null) return;
+            _switcher = FindObjectOfType<TwinSourceSwitcher>();
+            // 场景里没有就挂一个：切换器的所有依赖都能自己找到，不需要任何 Inspector 配置
+            if (_switcher == null) _switcher = gameObject.AddComponent<TwinSourceSwitcher>();
+        }
+
+        private void OnSourceButton(int index)
+        {
+            if (_switcher == null) return;
+            TwinSourceSwitcher.SourceKind kind = (TwinSourceSwitcher.SourceKind)index;
+            bool ok = _switcher.SwitchTo(kind);
+
+            if (!ok)
+            {
+                // 切不过去要说清原因，否则用户只会觉得按钮坏了。
+                // 这条提示要「压住」状态文本几秒，否则紧接着的刷新会立刻把它覆盖掉
+                // （RefreshSourceBar 每 0.25s 会把 _sourceState 重写成当前状态）。
+                if (kind == TwinSourceSwitcher.SourceKind.Playback)
+                {
+                    ShowSourceHint("无录像 · 先录制");
+                }
+                else
+                {
+                    ShowSourceHint("未接入该数据源");
+                }
+            }
+            else
+            {
+                ShowSourceHint("切到 " + TwinSourceSwitcher.ShortName(kind));
+            }
+
+            RefreshSourceBar(true);
+        }
+
+        private void ShowSourceHint(string text)
+        {
+            _sourceHint = text;
+            _sourceHintUntil = Time.unscaledTime + 3f;
+        }
+
+        private void OnRecordButton()
+        {
+            if (_switcher == null) return;
+            _switcher.ToggleRecord();
+            RefreshSourceBar(true);
+        }
+
+        /// <summary>刷新切换条（0.25s 一次；按钮点击时强制刷新）。</summary>
+        private void RefreshSourceBar(bool force)
+        {
+            if (_sourceBar == null || _switcher == null) return;
+
+            float now = Time.unscaledTime;
+            if (!force && now < _nextSourceRefresh) return;
+            _nextSourceRefresh = now + 0.25f;
+
+            _switcher.RefreshRecordingFlag(force);
+
+            TwinSourceSwitcher.SourceKind cur = _switcher.CurrentKind;
+            bool hasRecording = _switcher.HasRecording;
+
+            for (int i = 0; i < 3; i++)
+            {
+                bool on = (int)cur == i;
+                bool usable = i != 2 || hasRecording;   // 没有录像时「回放」置灰
+
+                Color bg = on
+                    ? new Color(0.20f, 0.55f, 0.95f, 0.85f)
+                    : new Color(1f, 1f, 1f, usable ? 0.10f : 0.04f);
+                if (_sourceBtnBg[i] != null && _sourceBtnBg[i].color != bg) _sourceBtnBg[i].color = bg;
+
+                if (_sourceBtnText[i] != null)
+                {
+                    Color tc = on ? TwinStatusPalette.TextPrimary
+                                  : (usable ? TwinStatusPalette.TextSecondary : TwinStatusPalette.TextMuted);
+                    if (_sourceBtnText[i].color != tc) _sourceBtnText[i].color = tc;
+                }
+            }
+
+            // 「回放」按钮上直接标出有没有录像 —— 比只在点了之后才提示更早一步
+            SetCached(_sourceBtnText[2], ref _cachedPlaybackText, hasRecording ? "回放" : "回放·空");
+
+            bool recording = _switcher.IsRecording;
+            if (_recordBg != null)
+            {
+                Color rbg = recording
+                    ? new Color(0.85f, 0.22f, 0.22f, 0.85f)
+                    : new Color(1f, 1f, 1f, 0.10f);
+                if (_recordBg.color != rbg) _recordBg.color = rbg;
+            }
+            SetCached(_recordText, ref _cachedRecordText, recording ? "● 录制中" : "○ 录制");
+            if (_recordText != null)
+            {
+                Color rt = recording ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextSecondary;
+                if (_recordText.color != rt) _recordText.color = rt;
+            }
+
+            if (_sourceDot != null)
+            {
+                Color dot = StateColor(_switcher.CurrentState);
+                if (_sourceDot.color != dot) _sourceDot.color = dot;
+            }
+
+            SetCached(_sourceState, ref _cachedSourceState,
+                _sourceHint != null && Time.unscaledTime < _sourceHintUntil
+                    ? _sourceHint
+                    : _switcher.StatusText);
+        }
+
+        /// <summary>数据源状态 → 颜色。和点位状态共用一套调色板，颜色语义不会打架。</summary>
+        private static Color StateColor(DataSourceState state)
+        {
+            switch (state)
+            {
+                case DataSourceState.Running: return TwinStatusPalette.Normal;
+                case DataSourceState.Connecting:
+                case DataSourceState.Degraded: return TwinStatusPalette.Warning;
+                case DataSourceState.Faulted: return TwinStatusPalette.Alarm;
+                default: return TwinStatusPalette.Offline;
+            }
         }
 
         // ================================================================ 选中变化 → 重建静态部分
