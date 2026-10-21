@@ -123,10 +123,20 @@ namespace SchoolTwin.UI
         private const float BaseSubtitleY = 50f;
         private const float BaseDivider1Y = 80f;
         private const float BaseMetricsTop = 90f;
-        private const float BaseRowHeight = 62f;
+        private const float BaseRowHeight = 90f;
         private const float BaseRowGap = 7f;
         private const float BaseBarY = 30f;
         private const float BaseBarHeight = 9f;
+
+        // 迷你趋势线：一行 62 → 90，多出来的 28 全给趋势线。
+        // 为什么放在量程条和提示文字**下面**：上面三行（名称/数值、量程条、阈值提示）
+        // 已经被占满，只有这里还有整行宽度的空白，且不与任何文字抢位置。
+        // 20 单位 × 0.75 只有 15px，太扁看不出形状 —— 给到 24。
+        private const float BaseSparkY = 62f;
+        private const float BaseSparkHeight = 24f;
+
+        /// <summary>趋势线采样间隔（秒）。60 秒窗口按 5Hz 存 300 个点。</summary>
+        private const float SparkSampleInterval = 0.2f;
         private const float BaseFooterHeight = 18f;
         private const float BaseAlarmTitleY = 18f;
         private const float BaseAlarmRowsTop = 48f;
@@ -186,6 +196,8 @@ namespace SchoolTwin.UI
         private float _scaledAlarmRowHeight;
         private float _scaledAlarmRowGap;
         private float _scaledBarHeight;
+        private float _scaledSparkY;
+        private float _scaledSparkHeight;
         private float _scaledPanelGap;
         private float _scaledChipWidth;
         private float _scaledChipHeight;
@@ -382,6 +394,8 @@ namespace SchoolTwin.UI
             _scaledAlarmRowHeight = BaseAlarmRowHeight * s;
             _scaledAlarmRowGap = BaseAlarmRowGap * s;
             _scaledBarHeight = BaseBarHeight * s;
+            _scaledSparkY = BaseSparkY * s;
+            _scaledSparkHeight = BaseSparkHeight * s;
             _scaledPanelGap = BasePanelGap * s;
             _scaledChipWidth = BaseChipWidth * s;
             _scaledChipHeight = BaseChipHeight * s;
@@ -496,6 +510,10 @@ namespace SchoolTwin.UI
             public Image Track;
             public Image Marker;
             public Image[] Bands;
+            /// <summary>最近 60 秒的迷你趋势线。按量程归一化，和量程条同一个纵轴含义。</summary>
+            public TwinSparkline Spark;
+            /// <summary>上一次压入趋势线采样的时间（unscaledTime）。</summary>
+            public float LastPushTime;
 
             public string MetricName = "";
             public string Unit = "";
@@ -1086,6 +1104,13 @@ namespace SchoolTwin.UI
                     TwinStatusPalette.TextMuted);
                 TwinUIFactory.Place(row.Hint.rectTransform, 0f, _scaledBarY + 12f * s, width, _scaledFsMetricHint + 5f);
 
+                // 趋势线最后建 —— 它铺满整行宽度，但要留在文字下层不挡字。
+                // 实际上它画在 y=62 以下的空白区，和上面三行不重叠。
+                GameObject sparkGo = TwinUIFactory.Node("Spark", go.transform);
+                row.Spark = sparkGo.AddComponent<TwinSparkline>();
+                TwinUIFactory.Place((RectTransform)sparkGo.transform, 0f, _scaledSparkY,
+                    width, _scaledSparkHeight);
+
                 _metricRows.Add(row);
             }
             return _metricRows[index];
@@ -1103,6 +1128,13 @@ namespace SchoolTwin.UI
             row.AlarmHigh = def.AlarmHigh;
 
             SetCached(row.Name, ref row.LastNameText, MetricLabel(def.Metric));
+
+            // 趋势线的纵轴跟量程条一致；换了指标就清空历史（否则会拿旧指标的数据画新线）
+            if (row.Spark != null)
+            {
+                row.Spark.SetRange(def.Min, def.Max);
+                row.Spark.Clear();
+            }
 
             BuildBands(row);
             row.LastValueText = null;   // 强制下一帧刷新数值与提示
@@ -1205,17 +1237,32 @@ namespace SchoolTwin.UI
             // 状态会随数据变，胶囊必须跟着走（见 RefreshChip 的注释）
             RefreshChip();
 
+            // 趋势线的时间轴要一直往前走：即使这个指标这一刻没有新数据，
+            // 线也得继续往左滚，否则「数据停了」会看起来像「数据没变」。
+            float now = Time.unscaledTime;
+
             for (int i = 0; i < _metricRows.Count; i++)
             {
                 MetricRow row = _metricRows[i];
                 if (row.Root == null || !row.Root.gameObject.activeSelf) continue;
                 if (string.IsNullOrEmpty(row.MetricName)) continue;
 
+                if (row.Spark != null) row.Spark.Tick(now);
+
                 TwinValue value;
                 if (!_selected.TryGetValue(row.MetricName, out value))
                 {
                     SetCached(row.Value, ref row.LastValueText, "--");
                     continue;
+                }
+
+                // 趋势线采样：RefreshValues 是 10Hz，但曲线没必要 10Hz 存 ——
+                // 60 秒窗口按 5Hz 存 300 个点，顶点数减半，肉眼完全看不出差别。
+                // 用 unscaledTime 而不是缩放时间：暂停/慢放时曲线不该跟着停。
+                if (row.Spark != null && now - row.LastPushTime >= SparkSampleInterval)
+                {
+                    row.LastPushTime = now;
+                    row.Spark.Push(now, value.Value);
                 }
 
                 // 数值文字按该指标自己的状态着色
