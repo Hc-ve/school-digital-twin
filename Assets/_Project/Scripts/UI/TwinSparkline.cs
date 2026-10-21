@@ -16,8 +16,11 @@ namespace SchoolTwin.UI
     /// 看起来像出事了。按量程归一化，纵轴含义和下面的量程条一致，
     /// 线的位置本身就能读出「在正常区的哪一段」。
     ///
-    /// 【时间轴是滚动的】横轴固定是「最近 WindowSeconds 秒」，
-    /// 老数据从左边溢出消失，所以线是向左滚的，不需要手动清空。
+    /// 【时间轴是滚动的，但刚打开时先把已有的铺满】
+    /// 横轴上限是「最近 WindowSeconds 秒」。但如果一开始就按满窗画，
+    /// 刚采到 3 秒数据时，3 个点只占右边缘几个像素 —— 看起来就是「没画」。
+    /// 所以跨度取「已有数据的时间跨度」，上限才是 WindowSeconds：
+    /// 开头几秒铺满整条宽度，采满一窗之后才开始正常向左滚动。
     ///
     /// 性能：每帧重算一次顶点（默认 120 个采样点 → 约 500 个顶点），
     /// 只在可见时由 TwinDetailPanel 以 10Hz 触发，开销可忽略。
@@ -31,16 +34,16 @@ namespace SchoolTwin.UI
         [SerializeField] private int _capacity = 320;
 
         [Tooltip("线条粗细（UI 单位）")]
-        [SerializeField] private float _lineWidth = 1.6f;
+        [SerializeField] private float _lineWidth = 2f;
 
         [Tooltip("线条颜色")]
-        [SerializeField] private Color _lineColor = new Color(0.45f, 0.78f, 1f, 0.95f);
+        [SerializeField] private Color _lineColor = new Color(0.55f, 0.84f, 1f, 1f);
 
         [Tooltip("线条下方的填充色（半透明，别调太实，否则会盖住背景）")]
-        [SerializeField] private Color _fillColor = new Color(0.45f, 0.78f, 1f, 0.10f);
+        [SerializeField] private Color _fillColor = new Color(0.45f, 0.78f, 1f, 0.14f);
 
         [Tooltip("底部基线颜色")]
-        [SerializeField] private Color _baseColor = new Color(1f, 1f, 1f, 0.10f);
+        [SerializeField] private Color _baseColor = new Color(1f, 1f, 1f, 0.16f);
 
         private struct Sample
         {
@@ -53,6 +56,10 @@ namespace SchoolTwin.UI
         private float _min;
         private float _max = 1f;
         private float _now;
+        private bool _loggedFirstDraw;
+
+        /// <summary>当前缓存了多少个采样点。用于诊断「线是空的」到底是没数据还是没画。</summary>
+        public int SampleCount { get { return _samples.Count; } }
 
         protected override void Awake()
         {
@@ -86,6 +93,16 @@ namespace SchoolTwin.UI
             s.T = time;
             s.V = value;
             _samples.Add(s);
+
+            // 第一次攒够两个点、真正能画出线的时候打一行日志。
+            // 「趋势线是空的」有两种完全不同的原因（没数据 / 没画出来），
+            // 有这一行就能一次分清，不用再靠猜。
+            if (!_loggedFirstDraw && _samples.Count >= 2)
+            {
+                _loggedFirstDraw = true;
+                Debug.Log("[TwinUI] 趋势线开始出图（该指标已采到 2 个点）。" +
+                          "若此时仍看不到线，问题在绘制而不在数据。");
+            }
         }
 
         /// <summary>
@@ -98,12 +115,13 @@ namespace SchoolTwin.UI
         {
             _now = time;
 
-            // 丢掉滑出时间窗的老点（保留最后一个窗口外的点，免得线头断在左边缘）
-            float left = _now - _windowSeconds;
-            int drop = 0;
-            while (drop + 1 < _samples.Count && _samples[drop + 1].T < left) drop++;
-            if (drop > 0) _samples.RemoveRange(0, drop);
-
+            // 【这里故意不丢老点】
+            // 早先的写法是「丢掉滑出 60 秒的点」，看着合理，实际有两个坑：
+            //   ① 数据一停，老点被一路丢到只剩 1 个 → `_samples.Count < 2` → 整条线消失。
+            //      而「数据停了」恰恰是最该看见的时刻，线消失等于把信息藏了。
+            //   ② 丢点会让 `_samples[0].T` 跟着往前跳，跨度算法每次重新开始，画面会抖。
+            // 内存由 `_capacity`（320 点 ≈ 64 秒）兜住，`Push` 里已经负责丢最老的，
+            // 所以这里什么都不用做 —— 只推进时间，让整条线自己往左滚。
             SetVerticesDirty();
         }
 
@@ -119,10 +137,19 @@ namespace SchoolTwin.UI
 
             if (_samples.Count < 2) return;
 
-            float left = _now - _windowSeconds;
-            float span = Mathf.Max(0.0001f, _max - _min);
+            // 【为什么时间窗不是固定的 60 秒】固定窗口下，刚开始只有几秒数据时，
+            // 所有采样点都挤在右边缘几个像素里 —— 看起来就是「什么都没画」。
+            // 改成「跨度 = 已有数据的时间跨度」（上限 60 秒）：
+            //   · 刚采到 3 秒数据 → 这 3 秒铺满整条宽度，立刻能看出形状
+            //   · 采满 60 秒后 → 开始正常向左滚动
+            //   · 数据断了 → _now 继续往前走，跨度被撑大，线自然向左压缩变短，
+            //     一眼就能看出「数据停了」，而不是冻住假装没变。
+            float t0 = _samples[0].T;
+            float span = Mathf.Clamp(_now - t0, 1f, _windowSeconds);
+            float left = _now - span;
 
-            // 先算好每个点的屏幕位置（超窗的点夹到边缘外一点点，让线段自然截断）
+            float range = Mathf.Max(0.0001f, _max - _min);
+
             int n = _samples.Count;
             Vector2 prev = Vector2.zero;
             bool hasPrev = false;
@@ -130,9 +157,9 @@ namespace SchoolTwin.UI
             for (int i = 0; i < n; i++)
             {
                 Sample s = _samples[i];
-                float tx = (s.T - left) / _windowSeconds;
-                if (tx < -0.05f) continue;          // 太老，不画
-                float vy = Mathf.Clamp01((s.V - _min) / span);
+                float tx = (s.T - left) / span;
+                if (tx < -0.02f) continue;          // 太老，不画
+                float vy = Mathf.Clamp01((s.V - _min) / range);
 
                 Vector2 p;
                 p.x = r.xMin + Mathf.Clamp01(tx) * r.width;
