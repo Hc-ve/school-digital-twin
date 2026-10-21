@@ -789,6 +789,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (7)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 70
@@ -824,13 +828,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 14050086}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 14050085}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &14050083 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 14050082}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &14050084 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 14050082}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &14050085
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 14050084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &14050086
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 14050084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassComputer/Heat/Radiator_01
+  _displayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u6696\u6C14"
+  _zone: ClassComputer
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1 &14720444
 GameObject:
   m_ObjectHideFlags: 0
@@ -1904,6 +1975,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 439582, guid: d950e1006ba2b91409cd769e3561cff4, type: 3}
   m_PrefabInstance: {fileID: 41470142}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &44116021
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 44116022}
+  - component: {fileID: 44116025}
+  - component: {fileID: 44116024}
+  - component: {fileID: 44116023}
+  m_Layer: 0
+  m_Name: TwinMarker_ClassTeachers_Light_Main_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &44116022
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 44116021}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.66534424, y: 2.1690464, z: 2.146553}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 930269721}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &44116023
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 44116021}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.72, y: 0.22, z: 0.06}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &44116024
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 44116021}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 0.72
+  _heightMeters: 0.22
+  _lift: 0
+  _billboard: 0
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &44116025
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 44116021}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassTeachers/Light/Main_01
+  _displayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u7167\u660E"
+  _zone: ClassTeachers
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &45875574
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3206,6 +3374,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2055258054}
     m_Modifications:
+    - target: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
       propertyPath: m_RootOrder
       value: 9
@@ -3241,13 +3413,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 72929565}
+    - targetCorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 72929564}
   m_SourcePrefab: {fileID: 100100000, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
 --- !u!4 &72929562 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 440982, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
   m_PrefabInstance: {fileID: 72929561}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &72929563 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157086, guid: 8b837b2bcf000dd4ca67acb23e92307a, type: 3}
+  m_PrefabInstance: {fileID: 72929561}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &72929564
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 72929563}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &72929565
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 72929563}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-2/AC/Unit_01
+  _displayName: "1-2\u73ED \u7A7A\u8C03\u673A\u7EC4"
+  _zone: Class1-2
+  _category: AC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &73839486
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -8864,6 +9103,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Monitor01 (3)
       objectReference: {fileID: 0}
+    - target: {fileID: 183928, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 437680, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
       propertyPath: m_RootOrder
       value: 22
@@ -8899,13 +9142,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 183928, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 197942260}
+    - targetCorrespondingSourceObject: {fileID: 183928, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 197942259}
   m_SourcePrefab: {fileID: 100100000, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
 --- !u!4 &197942257 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 437680, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
   m_PrefabInstance: {fileID: 197942256}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &197942258 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 183928, guid: 2dfcb9f27f150a44cb92844048173f7c, type: 3}
+  m_PrefabInstance: {fileID: 197942256}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &197942259
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 197942258}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &197942260
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 197942258}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassTeachers/PC/Room_01
+  _displayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u673A\u623F\u7535\u8111"
+  _zone: ClassTeachers
+  _category: PC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &199943838
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -13882,6 +14192,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (10)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 1
@@ -13917,13 +14231,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 298339795}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 298339794}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &298339792 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 298339791}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &298339793 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 298339791}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &298339794
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 298339793}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &298339795
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 298339793}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Corridor1/Heat/Radiator_01
+  _displayName: "\u4E00\u5C42\u8D70\u5ECA \u6696\u6C14"
+  _zone: Corridor1
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &300411598
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -16324,6 +16705,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 402378, guid: e187d113ba611dc4bb74614c5a826e93, type: 3}
   m_PrefabInstance: {fileID: 1911755501}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &356404140
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 356404141}
+  - component: {fileID: 356404144}
+  - component: {fileID: 356404143}
+  - component: {fileID: 356404142}
+  m_Layer: 0
+  m_Name: TwinMarker_ClassComputer_Sensor_Temp_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &356404141
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 356404140}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.75413895, y: 1.9562082, z: 2.9755363}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1989053406}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &356404142
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 356404140}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.72, y: 0.22, z: 0.06}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &356404143
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 356404140}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 0.72
+  _heightMeters: 0.22
+  _lift: 0
+  _billboard: 0
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &356404144
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 356404140}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassComputer/Sensor/Temp_01
+  _displayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u73AF\u5883\u4F20\u611F\u5668"
+  _zone: ClassComputer
+  _category: Sensor
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &356823844
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -24477,6 +24955,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1700625350}
     m_Modifications:
+    - target: {fileID: 125026, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 428878, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
       propertyPath: m_RootOrder
       value: 32
@@ -24512,13 +24994,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125026, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 548438837}
+    - targetCorrespondingSourceObject: {fileID: 125026, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 548438836}
   m_SourcePrefab: {fileID: 100100000, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
 --- !u!4 &548438834 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 428878, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
   m_PrefabInstance: {fileID: 548438833}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &548438835 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125026, guid: 426eb5cef50f3cd4b8fbe95e29fb945c, type: 3}
+  m_PrefabInstance: {fileID: 548438833}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &548438836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 548438835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &548438837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 548438835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-3/AC/Unit_01
+  _displayName: "1-3\u73ED \u7A7A\u8C03\u673A\u7EC4"
+  _zone: Class1-3
+  _category: AC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &548549936
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -26489,6 +27038,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1206854717}
     m_Modifications:
+    - target: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 445738, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
       propertyPath: m_RootOrder
       value: 43
@@ -26524,13 +27077,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 589727517}
+    - targetCorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 589727516}
   m_SourcePrefab: {fileID: 100100000, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
 --- !u!4 &589727514 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 445738, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
   m_PrefabInstance: {fileID: 589727513}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &589727515 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+  m_PrefabInstance: {fileID: 589727513}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &589727516
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 589727515}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &589727517
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 589727515}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassDirector/AC/Unit_01
+  _displayName: "\u4E3B\u4EFB\u5BA4 \u7A7A\u8C03\u673A\u7EC4"
+  _zone: ClassDirector
+  _category: AC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1 &590190557
 GameObject:
   m_ObjectHideFlags: 0
@@ -27533,6 +28153,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: LightLum01_01 (6)
       objectReference: {fileID: 0}
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 69
@@ -27580,13 +28204,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 614446251}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 614446250}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &614446248 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 614446247}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &614446249 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 614446247}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &614446250
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 614446249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &614446251
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 614446249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Corridor2/Light/Main_01
+  _displayName: "\u4E8C\u5C42\u8D70\u5ECA \u7167\u660E"
+  _zone: Corridor2
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &615401458 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 402378, guid: e187d113ba611dc4bb74614c5a826e93, type: 3}
@@ -30640,6 +31331,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 408776, guid: 17ae40443a7e6e34bb6c3eefebc45957, type: 3}
   m_PrefabInstance: {fileID: 593322092}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &667119049
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 667119050}
+  - component: {fileID: 667119053}
+  - component: {fileID: 667119052}
+  - component: {fileID: 667119051}
+  m_Layer: 0
+  m_Name: TwinMarker_Class1-2_Sensor_Temp_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &667119050
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667119049}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -3.9746666, y: 1.0912952, z: 2.4846535}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2055258054}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &667119051
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667119049}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.72, y: 0.22, z: 0.06}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &667119052
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667119049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 0.72
+  _heightMeters: 0.22
+  _lift: 0
+  _billboard: 0
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &667119053
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 667119049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-2/Sensor/Temp_01
+  _displayName: "1-2\u73ED \u73AF\u5883\u4F20\u611F\u5668"
+  _zone: Class1-2
+  _category: Sensor
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &668524740
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -32831,6 +33619,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 18
@@ -32874,13 +33666,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 719635192}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 719635191}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &719635189 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 719635188}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &719635190 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 719635188}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &719635191
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 719635190}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &719635192
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 719635190}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-2/Heat/Radiator_01
+  _displayName: "2-2\u73ED \u6696\u6C14"
+  _zone: Class2-2
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &719893642 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 406810, guid: cda5269e9a50046489d7b868e1c386e9, type: 3}
@@ -39854,6 +40713,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 1
@@ -39889,13 +40752,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 871583298}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 871583297}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &871583295 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 871583294}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &871583296 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 871583294}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &871583297
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 871583296}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &871583298
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 871583296}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassDirector/Heat/Radiator_01
+  _displayName: "\u4E3B\u4EFB\u5BA4 \u6696\u6C14"
+  _zone: ClassDirector
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &871622829
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -42789,6 +43719,7 @@ Transform:
   - {fileID: 1431673299}
   - {fileID: 549390013}
   - {fileID: 1115375336}
+  - {fileID: 44116022}
   m_Father: {fileID: 2056473783}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &934991335
@@ -43677,6 +44608,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 8
@@ -43712,13 +44647,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 948168929}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 948168928}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &948168926 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 948168925}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &948168927 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 948168925}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &948168928
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 948168927}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &948168929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 948168927}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-3/Heat/Radiator_01
+  _displayName: "1-3\u73ED \u6696\u6C14"
+  _zone: Class1-3
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &948530768
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44316,6 +45318,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 16
@@ -44351,13 +45357,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 959178422}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 959178421}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &959178419 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 959178418}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &959178420 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 959178418}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &959178421
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 959178420}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &959178422
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 959178420}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-4/Heat/Radiator_01
+  _displayName: "1-4\u73ED \u6696\u6C14"
+  _zone: Class1-4
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &963047724
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44420,6 +45493,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1532661214}
     m_Modifications:
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 45
@@ -44467,13 +45544,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 963715590}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 963715589}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &963715587 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 963715586}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &963715588 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 963715586}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &963715589
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963715588}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &963715590
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963715588}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class2-2/Light/Main_01
+  _displayName: "2-2\u73ED \u7167\u660E"
+  _zone: Class2-2
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &966074646
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44659,6 +45803,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1532661214}
     m_Modifications:
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 51
@@ -44706,13 +45854,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 969422734}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 969422733}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &969422731 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 969422730}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &969422732 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 969422730}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &969422733
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 969422732}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &969422734
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 969422732}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-2/Light/Main_01
+  _displayName: "1-2\u73ED \u7167\u660E"
+  _zone: Class1-2
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &973223524
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -45605,6 +46820,8 @@ MonoBehaviour:
   _toggleKey: 285
   _uiScale: 1.25
   _screenMargin: 20
+  _extraRight: 16
+  _extraTop: 28
   _fontOverride: {fileID: 0}
   _valueRefreshInterval: 0.1
   _alarmRefreshInterval: 0.25
@@ -48904,6 +50121,103 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 412568, guid: 6d52ebd0b4c45324ea0a32256d88db6d, type: 3}
   m_PrefabInstance: {fileID: 1365501609}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1015017048
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1015017049}
+  - component: {fileID: 1015017052}
+  - component: {fileID: 1015017051}
+  - component: {fileID: 1015017050}
+  m_Layer: 0
+  m_Name: TwinMarker_ClassComputer_Light_Main_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1015017049
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015017048}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -0.94586563, y: 1.9562082, z: 2.9755363}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1989053406}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1015017050
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015017048}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.72, y: 0.22, z: 0.06}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1015017051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015017048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 0.72
+  _heightMeters: 0.22
+  _lift: 0
+  _billboard: 0
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &1015017052
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1015017048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassComputer/Light/Main_01
+  _displayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u7167\u660E"
+  _zone: ClassComputer
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1015345576
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -50053,6 +51367,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 6
@@ -50088,13 +51406,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1036486753}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1036486752}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &1036486750 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 1036486749}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1036486751 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 1036486749}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1036486752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1036486751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1036486753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1036486751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-2/Heat/Radiator_01
+  _displayName: "1-2\u73ED \u6696\u6C14"
+  _zone: Class1-2
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1038683792
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -50395,6 +51780,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (37)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 1
@@ -50438,13 +51827,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1046557078}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1046557077}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &1046557075 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 1046557074}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1046557076 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 1046557074}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1046557077
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1046557076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1046557078
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1046557076}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Corridor2/Heat/Radiator_01
+  _displayName: "\u4E8C\u5C42\u8D70\u5ECA \u6696\u6C14"
+  _zone: Corridor2
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1047671905
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -58037,6 +59493,7 @@ Transform:
   - {fileID: 1636831721}
   - {fileID: 1471029103}
   - {fileID: 1560761022}
+  - {fileID: 1705337063}
   m_Father: {fileID: 2056473783}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1207595817
@@ -65599,6 +67056,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: LightLum01_01 (12)
       objectReference: {fileID: 0}
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 6
@@ -65646,13 +67107,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1372561174}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1372561173}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &1372561171 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 1372561170}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1372561172 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 1372561170}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1372561173
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1372561172}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1372561174
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1372561172}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Corridor1/Light/Main_01
+  _displayName: "\u4E00\u5C42\u8D70\u5ECA \u7167\u660E"
+  _zone: Corridor1
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1374931617
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -68211,6 +69739,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Monitor04 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 443876, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
       propertyPath: m_RootOrder
       value: 0
@@ -68254,13 +69786,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1437272968}
+    - targetCorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1437272967}
   m_SourcePrefab: {fileID: 100100000, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
 --- !u!4 &1437272965 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 443876, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
   m_PrefabInstance: {fileID: 1437272964}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1437272966 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+  m_PrefabInstance: {fileID: 1437272964}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1437272967
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437272966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1437272968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437272966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassComputer/PC/Room_01
+  _displayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u673A\u623F\u7535\u8111"
+  _zone: ClassComputer
+  _category: PC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1 &1438587367
 GameObject:
   m_ObjectHideFlags: 0
@@ -75346,6 +76945,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Alarm01 (2)
       objectReference: {fileID: 0}
+    - target: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 431540, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
       propertyPath: m_RootOrder
       value: 11
@@ -75389,13 +76992,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1592684058}
+    - targetCorrespondingSourceObject: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1592684057}
   m_SourcePrefab: {fileID: 100100000, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
 --- !u!4 &1592684055 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 431540, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
   m_PrefabInstance: {fileID: 1592684054}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1592684056 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
+  m_PrefabInstance: {fileID: 1592684054}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1592684057
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1592684056}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1592684058
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1592684056}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Corridor1/Alarm/Fire_01
+  _displayName: "\u4E00\u5C42\u8D70\u5ECA \u70DF\u611F"
+  _zone: Corridor1
+  _category: Alarm
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1 &1594174808
 GameObject:
   m_ObjectHideFlags: 0
@@ -79083,6 +80753,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2107567408}
     m_Modifications:
+    - target: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 445738, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
       propertyPath: m_RootOrder
       value: 24
@@ -79118,13 +80792,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1676409148}
+    - targetCorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1676409147}
   m_SourcePrefab: {fileID: 100100000, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
 --- !u!4 &1676409145 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 445738, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
   m_PrefabInstance: {fileID: 1676409144}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1676409146 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 166960, guid: 2cb969dab2ae1814c9733bfd8ef52471, type: 3}
+  m_PrefabInstance: {fileID: 1676409144}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1676409147
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1676409146}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1676409148
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1676409146}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-4/AC/Unit_01
+  _displayName: "1-4\u73ED \u7A7A\u8C03\u673A\u7EC4"
+  _zone: Class1-4
+  _category: AC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1677019972
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -80412,6 +82153,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1532661214}
     m_Modifications:
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 57
@@ -80459,13 +82204,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1694427966}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1694427965}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &1694427963 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 1694427962}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1694427964 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 1694427962}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1694427965
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1694427964}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1694427966
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1694427964}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-4/Light/Main_01
+  _displayName: "1-4\u73ED \u7167\u660E"
+  _zone: Class1-4
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1695270792
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -81200,6 +83012,103 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: a126bff328a5ee54b9f010be9beca861, type: 3}
+--- !u!1 &1705337062
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1705337063}
+  - component: {fileID: 1705337066}
+  - component: {fileID: 1705337065}
+  - component: {fileID: 1705337064}
+  m_Layer: 0
+  m_Name: TwinMarker_ClassDirector_Light_Main_01
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1705337063
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705337062}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -4.0123634, y: 1.7083511, z: 3.0600433}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1206854717}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1705337064
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705337062}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.72, y: 0.22, z: 0.06}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1705337065
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705337062}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f28779f1c0714ab4ab76e606b9bba9d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _titleOverride: 
+  _widthMeters: 0.72
+  _heightMeters: 0.22
+  _lift: 0
+  _billboard: 0
+  _showValues: 1
+  _refreshInterval: 0.1
+--- !u!114 &1705337066
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705337062}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassDirector/Light/Main_01
+  _displayName: "\u4E3B\u4EFB\u5BA4 \u7167\u660E"
+  _zone: ClassDirector
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1705733803
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -81806,6 +83715,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Radiator01 (4)
       objectReference: {fileID: 0}
+    - target: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
       propertyPath: m_RootOrder
       value: 2
@@ -81841,13 +83754,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1719834035}
+    - targetCorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1719834034}
   m_SourcePrefab: {fileID: 100100000, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
 --- !u!4 &1719834032 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 421204, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
   m_PrefabInstance: {fileID: 1719834031}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1719834033 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 125674, guid: f53bd203aa5f19a4ba726756bec2eaf4, type: 3}
+  m_PrefabInstance: {fileID: 1719834031}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1719834034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1719834033}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1719834035
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1719834033}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassTeachers/Heat/Radiator_01
+  _displayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u6696\u6C14"
+  _zone: ClassTeachers
+  _category: Heat
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &1723772090
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -88683,6 +90663,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1532661214}
     m_Modifications:
+    - target: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 4294967291
+      objectReference: {fileID: 0}
     - target: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       propertyPath: m_RootOrder
       value: 63
@@ -88730,13 +90714,80 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1882229463}
+    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1882229462}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &1882229460 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 467702, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
   m_PrefabInstance: {fileID: 1882229459}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1882229461 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
+  m_PrefabInstance: {fileID: 1882229459}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1882229462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1882229461}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e6c109e8911c24c8bd65a2fcb2f46d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _anchor: {fileID: 0}
+  _metric: 
+  _renderers: []
+  _unknown: {r: 0.35, g: 0.38, b: 0.45, a: 1}
+  _normal: {r: 0.2, g: 0.8, b: 0.35, a: 1}
+  _warning: {r: 1, g: 0.72, b: 0.15, a: 1}
+  _alarm: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+  _stale: {r: 0.5, g: 0.5, b: 0.55, a: 1}
+  _offline: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  _lerpSpeed: 8
+  _refreshInterval: 0.1
+  _applyEmission: 1
+  _emissionIntensity: 0.7
+  _tintStrength: 0.3
+  _alarmTintStrength: 0.75
+  _tintOnlyWhenAbnormal: 1
+  _blinkAlarm: 1
+  _blinkOffline: 1
+  _blinkPeriod: 0.9
+  _blinkFloor: 0.45
+  _blinkRefreshInterval: 0.033
+  _blinkLerpSpeed: 60
+--- !u!114 &1882229463
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1882229461}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: Class1-3/Light/Main_01
+  _displayName: "1-3\u73ED \u7167\u660E"
+  _zone: Class1-3
+  _category: Light
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!4 &1882572647 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 406810, guid: cda5269e9a50046489d7b868e1c386e9, type: 3}
@@ -95126,6 +97177,8 @@ Transform:
   - {fileID: 683820066}
   - {fileID: 1210773911}
   - {fileID: 425812390}
+  - {fileID: 1015017049}
+  - {fileID: 356404141}
   m_Father: {fileID: 2056473783}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1989066417
@@ -98465,6 +100518,7 @@ Transform:
   - {fileID: 1919232660}
   - {fileID: 405997662}
   - {fileID: 1980683025}
+  - {fileID: 667119050}
   m_Father: {fileID: 2056473783}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &2055572900

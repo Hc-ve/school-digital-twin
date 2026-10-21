@@ -1204,7 +1204,7 @@ namespace SchoolTwin.UI
                     _selected.DisplayName, _scaledFsTitle,
                     _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace));
                 SetCached(_subtitle, ref _cachedSubtitle,
-                    _selected.TwinId + "   ·   " + _selected.Zone + " / " + _selected.Category);
+                    _selected.TwinId + "   ·   " + _selected.Zone + " / " + CategoryLabel(_selected.Category));
 
                 _chip.gameObject.SetActive(true);
                 RefreshChip();
@@ -1991,7 +1991,31 @@ namespace SchoolTwin.UI
                 case "Pressure": return "压力";
                 case "Flow": return "流量";
                 case "Level": return "液位";
+                // P4-6 扩点位新增：暖气 / 机房电脑 / 烟感
+                case "SupplyTemp": return "供水温度";
+                case "ValveOpen": return "阀门开度";
+                case "CPULoad": return "CPU 负载";
+                case "Smoke": return "烟雾浓度";
                 default: return string.IsNullOrEmpty(metric) ? "指标" : metric;
+            }
+        }
+
+        /// <summary>
+        /// 点位类别 → 中文。副标题里原本直接印 `Zone / Category`，
+        /// 扩点位后会出现 `Heat` / `PC` / `Alarm` 这种英文单词，对非技术观众不友好。
+        /// </summary>
+        private static string CategoryLabel(string category)
+        {
+            switch (category)
+            {
+                case "Sensor": return "传感器";
+                case "Light": return "照明";
+                case "AC": return "空调";
+                case "Door": return "门禁";
+                case "Heat": return "暖气";
+                case "PC": return "电脑";
+                case "Alarm": return "消防";
+                default: return string.IsNullOrEmpty(category) ? "设备" : category;
             }
         }
 
