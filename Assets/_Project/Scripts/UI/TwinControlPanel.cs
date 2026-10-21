@@ -133,7 +133,6 @@ namespace SchoolTwin.UI
         private RectTransform _treeContent;
         private ScrollRect _treeScroll;
 
-        private RectTransform _rightHead;
         private Text _rightTitle;
         private Image _batchOnBg, _batchOffBg, _okBg, _cancelBg;
         private Text _batchOnText, _batchOffText, _okText, _cancelText;
@@ -260,7 +259,6 @@ namespace SchoolTwin.UI
             _treeViewport = null;
             _treeContent = null;
             _treeScroll = null;
-            _rightHead = null;
             _rightTitle = null;
             _batchOnBg = null; _batchOffBg = null; _okBg = null; _cancelBg = null;
             _batchOnText = null; _batchOffText = null; _okText = null; _cancelText = null;
@@ -449,9 +447,6 @@ namespace SchoolTwin.UI
         private void BuildRightHeader()
         {
             float s = _scale;
-
-            Image head = TwinUIFactory.Block(_panel, "RightHead", TwinStatusPalette.Transparent, false);
-            _rightHead = head.rectTransform;
 
             _rightTitle = TwinUIFactory.Label(_panel, "RightTitle", Mathf.Max(8, Mathf.RoundToInt(FsRow * s)),
                 TextAnchor.MiddleLeft, TwinStatusPalette.TextPrimary, FontStyle.Bold);
@@ -726,8 +721,6 @@ namespace SchoolTwin.UI
             float rightX = pad + treeW + gap;
             float rightW = Mathf.Max(60f, w - pad - rightX);
             float headH = BaseRightHeadH * s;
-
-            TwinUIFactory.Place(_rightHead, rightX, bodyY, rightW, headH);
 
             float btnW = BaseBatchBtnW * s;
             float btnH = BaseBatchBtnH * s;
@@ -1254,7 +1247,9 @@ namespace SchoolTwin.UI
 
                 string zone = isAll ? null : _roomList[i - 1].Zone;
                 string name = isAll ? "全部房间" : _roomList[i - 1].RoomName;
-                int devices = isAll ? _devs.Count : CountDevicesOf(registry, zone);
+                // 「全部房间」那行的台数要算**全部**（且跟随楼层筛选），
+                // 不能用 _devs.Count —— 那是「当前选中项」的设备数，选中某间房时就对不上了
+                int devices = isAll ? CountAllDevices(registry) : CountDevicesOf(registry, zone);
 
                 if (!string.Equals(r.Name.text, name, StringComparison.Ordinal)) r.Name.text = name;
 
@@ -1284,6 +1279,23 @@ namespace SchoolTwin.UI
                 if (a == null || a.TwinId == null) continue;
                 if (a.TwinId.StartsWith("BAK", StringComparison.Ordinal)) continue;
                 if (string.Equals(a.Zone, zone, StringComparison.Ordinal)) n++;
+            }
+            return n;
+        }
+
+        /// <summary>「全部房间」那行的台数：全部点位，但跟随楼层筛选。</summary>
+        private int CountAllDevices(TwinRegistry registry)
+        {
+            if (registry == null) return 0;
+            int n = 0;
+            IReadOnlyList<TwinAnchor> all = registry.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                TwinAnchor a = all[i];
+                if (a == null || a.TwinId == null) continue;
+                if (a.TwinId.StartsWith("BAK", StringComparison.Ordinal)) continue;
+                if (_floorFilter != 0 && TwinSiteLayout.FloorOf(a.Zone) != _floorFilter) continue;
+                n++;
             }
             return n;
         }
@@ -1453,6 +1465,12 @@ namespace SchoolTwin.UI
                     _batchResultUntil = Time.unscaledTime + 8f;
                     _batchIds.Clear();
                     Debug.Log("[TwinPanel] " + _batchResult);
+
+                    // 立刻显示结果，不要「先闪一帧房间名、0.2 秒后才变结果」
+                    SetCached(_rightTitle, _batchResult);
+                    _rightTitle.color = _batchFail > 0 ? TwinStatusPalette.Warning : TwinStatusPalette.Normal;
+                    SetBatchButtonsVisible(false, false);
+                    return;
                 }
                 else
                 {
