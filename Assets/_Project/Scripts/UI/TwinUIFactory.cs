@@ -116,6 +116,27 @@ namespace SchoolTwin.UI
             return go;
         }
 
+        /// <summary>
+        /// 在新建的节点上挂一个 UGUI Graphic（Image / Text / 自定义 MaskableGraphic 都该走这里）。
+        ///
+        /// 【为什么必须先手动补 CanvasRenderer —— 这是本项目第二次踩】
+        /// `Graphic` 上写着 `[RequireComponent(typeof(CanvasRenderer))]`，
+        /// 但运行时 `AddComponent&lt;T&gt;()` 并不保证把它补上。少了 CanvasRenderer 的表现
+        /// **极其隐蔽**：不报错、不警告、Console 干净，
+        /// 因为 `Graphic.Rebuild()` 第一行 `if (canvasRenderer == null) return;` 就返回了，
+        /// `OnPopulateMesh()` 永远不会被调用 —— 画面上什么都没有，也没有任何线索。
+        ///
+        /// 本文件里 Label / Block / Rounded 三个方法各自写过一遍这段补丁，
+        /// 说明它不该靠每个调用点记得。2026-10-21 的趋势线就是因为漏了这一步，
+        /// 连续两轮「看不见线」都查不到原因（日志打在 Push 里，反而误导）。
+        /// </summary>
+        public static T Graphic<T>(Transform parent, string name) where T : Graphic
+        {
+            GameObject go = Node(name, parent);
+            if (go.GetComponent<CanvasRenderer>() == null) go.AddComponent<CanvasRenderer>();
+            return go.AddComponent<T>();
+        }
+
         /// <summary>按「父节点左上角原点」摆放：x 向右，y 向下。</summary>
         public static void Place(RectTransform rt, float x, float y, float width, float height)
         {

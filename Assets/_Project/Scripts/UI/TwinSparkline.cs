@@ -61,9 +61,33 @@ namespace SchoolTwin.UI
         private float _now;
         private bool _loggedFirstDraw;
         private bool _loggedBadRect;
+        private bool _loggedReady;
 
         /// <summary>当前缓存了多少个采样点。用于诊断「线是空的」到底是没数据还是没画。</summary>
         public int SampleCount { get { return _samples.Count; } }
+
+        /// <summary>
+        /// 【为什么要在挂载时打一行】趋势线「看不见」有两种完全不同的病：
+        ///   ① 缺 CanvasRenderer / 不在 Canvas 下 → Graphic.Rebuild() 第一行就返回，
+        ///      OnPopulateMesh() 永远不跑，**不报错也不打日志**，画面上什么都没有；
+        ///   ② 网格正常生成，但尺寸太小、颜色太淡 → 看着像空白。
+        /// 这一行把两者在启动瞬间就分开，不用再靠截图猜。
+        /// </summary>
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            if (_loggedReady) return;
+            _loggedReady = true;
+
+            bool hasRenderer = GetComponent<CanvasRenderer>() != null;
+            bool hasCanvas = canvas != null;
+            string verdict = (hasRenderer && hasCanvas)
+                ? "（组件链路正常，后面看『已生成网格』那行）"
+                : "（缺东西，网格永远不会生成）";
+            Debug.Log("[TwinUI] 趋势线挂载：" + name +
+                      "  CanvasRenderer=" + (hasRenderer ? "有" : "无") +
+                      "  canvas=" + (hasCanvas ? "有" : "无") + verdict);
+        }
 
         protected override void Awake()
         {

@@ -1109,9 +1109,12 @@ namespace SchoolTwin.UI
 
                 // 趋势线最后建 —— 它铺满整行宽度，但要留在文字下层不挡字。
                 // 实际上它画在 y=62 以下的空白区，和上面三行不重叠。
-                GameObject sparkGo = TwinUIFactory.Node("Spark", go.transform);
-                row.Spark = sparkGo.AddComponent<TwinSparkline>();
-                TwinUIFactory.Place((RectTransform)sparkGo.transform, 0f, _scaledSparkY,
+                //
+                // 必须走 TwinUIFactory.Graphic<T>：它会先补 CanvasRenderer。
+                // 直接 AddComponent 的话，Graphic 少一个 CanvasRenderer 也不报错，
+                // 只是 Rebuild() 第一行就返回、OnPopulateMesh() 永远不跑 —— 画面上什么都没有。
+                row.Spark = TwinUIFactory.Graphic<TwinSparkline>(go.transform, "Spark");
+                TwinUIFactory.Place((RectTransform)row.Spark.transform, 0f, _scaledSparkY,
                     width, _scaledSparkHeight);
 
                 _metricRows.Add(row);
