@@ -189,6 +189,12 @@ namespace SchoolTwin.UI
         private const int FsMetricHint = 13;
         private const int FsAlarmRow = 14;
 
+        // ---- 控制区（P12）----
+        private const int FsCtlBtn = 14;
+        private const int FsCtlStatus = 13;
+        /// <summary>控制区与上方指标块之间的间距。</summary>
+        private const float BaseCtlGap = 10f;
+
         private const int MaxMetricRows = 6;
         private const int MaxBands = 5;
 
@@ -244,6 +250,11 @@ namespace SchoolTwin.UI
         private int _scaledFsMetricValue;
         private int _scaledFsMetricHint;
         private int _scaledFsAlarmRow;
+
+        // ---- 控制区（P12）----
+        private int _scaledFsCtlBtn;
+        private int _scaledFsCtlStatus;
+        private float _scaledCtlGap;
 
         /// <summary>
         /// 求本次实际生效的缩放系数。
@@ -475,6 +486,9 @@ namespace SchoolTwin.UI
             _scaledFsMetricValue = ScaleFont(FsMetricValue, s);
             _scaledFsMetricHint = ScaleFont(FsMetricHint, s);
             _scaledFsAlarmRow = ScaleFont(FsAlarmRow, s);
+            _scaledFsCtlBtn = ScaleFont(FsCtlBtn, s);
+            _scaledFsCtlStatus = ScaleFont(FsCtlStatus, s);
+            _scaledCtlGap = BaseCtlGap * s;
         }
 
         /// <summary>字号缩放：取整（UGUI 的 fontSize 是 int），并保证不小于 8 免得看不清。</summary>
@@ -537,6 +551,10 @@ namespace SchoolTwin.UI
         private Text _alarmEmpty;
         private Text _alarmMore;
 
+        // ---- 控制区（P12）----
+        /// <summary>开关 / 温度按钮 + 命令状态。只有「可命令且已开放控制」的点位才显示。</summary>
+        private TwinControlRow _ctlRow;
+
         // ---- 底部数据源切换条 ----
         private RectTransform _sourceBar;
         private TwinSourceSwitcher _switcher;
@@ -559,6 +577,9 @@ namespace SchoolTwin.UI
 
         // ---- 点位清单浮窗（按 T 开关）----
         private TwinPointListPanel _pointListPanel;
+
+        // ---- 校园总控面板（按 G 开关，P14）----
+        private TwinControlPanel _controlPanel;
 
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
         private readonly List<TwinClickRow> _alarmRows = new List<TwinClickRow>(8);
@@ -758,6 +779,11 @@ namespace SchoolTwin.UI
             _metricRows.Clear();
             _alarmRows.Clear();
 
+            // 控制区节点跟着 _card 一起销毁，引用必须显式清 —— 否则重建后
+            // _ctlRow 指向已销毁的组件，Height/Bind 会读到旧值（表现为卡片高度不跟着变）。
+            if (_ctlRow != null) _ctlRow.Detach();
+            _ctlRow = null;
+
             // 切换条：_switcher 是挂在面板自己身上的组件，不随 UI 销毁，所以只清 UI 引用
             _sourceBar = null;
             for (int i = 0; i < 3; i++)
@@ -780,6 +806,7 @@ namespace SchoolTwin.UI
             // 否则同一帧内的 Build() 会以为节点还在、直接返回，重建后浮层永远不再出现。
             if (_historyPanel != null) _historyPanel.Detach();
             if (_pointListPanel != null) _pointListPanel.Detach();
+            if (_controlPanel != null) _controlPanel.Detach();
 
             // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
             // 结果是新 Text 一片空白。
@@ -1224,6 +1251,12 @@ namespace SchoolTwin.UI
             _footer = TwinUIFactory.Label(_card, "Footer", _scaledFsFooter, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
 
+            // ---- 控制区（P12）----
+            // 建在这里 = 后建的兄弟节点，射线优先级高于卡片背景和拖动条。
+            // 它属于这张卡片的排版（宽度跟着卡片走），所以放在 _card 里而不是独立面板。
+            EnsureControlRow();
+            LogControlRowState();
+
             // ---- 关闭按钮（右上角，胶囊右边）----
             // 建在这里而不是最前面：它是后建的兄弟节点，渲染与射线都压在拖动条和胶囊上面。
             Image closeImg = TwinUIFactory.Block(_card, "CardClose", TwinStatusPalette.Track, true);
@@ -1287,9 +1320,47 @@ namespace SchoolTwin.UI
             // ---------------- 点位清单浮窗（默认隐藏，按 T 打开）----------------
             EnsurePointListPanel();
 
+            // ---------------- 校园总控面板（默认隐藏，按 G 打开，P14）----------------
+            EnsureControlPanel();
+
             // 缩放手柄压到最上层：它现在在告警区下面，被行背景盖住的话就抓不到了。
             // 位置上两者不重叠（手柄在整窗最底部那条留白里），但层级别赌。
             if (_cardGrip != null) _cardGrip.SetAsLastSibling();
+        }
+
+        /// <summary>
+        /// 控制区。只有「可命令 + 已开放控制范围」的点位才显示，其余自动隐藏。
+        ///
+        /// 【为什么不能只判断 Category】P12 只开放 2-1班 的照明与空调。
+        /// 判断条件放在 TwinControlScope 里，UI 与设备代理共用同一份 ——
+        /// 两边各写一份的话，会出现「面板有按钮、设备不认」的错配。
+        /// </summary>
+        private void EnsureControlRow()
+        {
+            if (_card == null) return;
+            if (_ctlRow == null) _ctlRow = TwinControlRow.Create(_card);
+            // 先解绑（隐藏），等 ApplySelection 里再按当前选中绑上去
+            _ctlRow.Bind(null, _activeScale, _scaledFsCtlBtn, _scaledFsCtlStatus);
+        }
+
+        /// <summary>
+        /// 重建 UI 之后自检：控制区到底建出来了没有。
+        ///
+        /// 【为什么要专门查一次】`_ctlRow` 为 null 时的表现和「绑定失败」完全一样 ——
+        /// 卡片里就是没有按钮。区分这两件事靠猜的话，一次排查就是两轮编译。
+        /// 只在重建时打一次，不刷屏。
+        /// </summary>
+        private void LogControlRowState()
+        {
+            if (_ctlRow == null)
+            {
+                Debug.LogError("[TwinCtl] 控制区节点没建出来（_ctlRow == null）—— " +
+                               "TwinControlRow.Create 失败了，按钮永远不会出现。");
+            }
+            else
+            {
+                Debug.Log("[TwinCtl] 控制区节点已就绪（父节点：" + _ctlRow.transform.parent.name + "）");
+            }
         }
 
         /// <summary>
@@ -1341,6 +1412,26 @@ namespace SchoolTwin.UI
                 ViewportHeight() - margin * 2f - (BaseSourceBarHeight + 12f) * s);
 
             _pointListPanel.Build(_uiRoot, s, margin, maxWidth, maxHeight, this);
+        }
+
+        /// <summary>
+        /// 校园总控面板（P14）挂在面板自己身上 —— 和告警历史、点位清单、数据源切换条
+        /// 同一个思路：不依赖 Inspector 配置，漏配也不会静默少一块功能。
+        ///
+        /// 【为什么居中、且这么大】它管的是「面」：一个房间 5 台设备、一层楼 5 个房间，
+        /// 缩在角落里看不过来。居中压住三维画面是刻意的 —— 看总控的时候本来就不该
+        /// 同时看场景；按 G 或点 × 立刻回到卡片视图。
+        /// </summary>
+        private void EnsureControlPanel()
+        {
+            if (_controlPanel == null) _controlPanel = GetComponent<TwinControlPanel>();
+            if (_controlPanel == null) _controlPanel = gameObject.AddComponent<TwinControlPanel>();
+
+            // 面板自己会居中，这里只给「最多能用多大」
+            float maxWidth = Mathf.Max(560f, ViewportWidth() - _scaledScreenMargin * 2f);
+            float maxHeight = Mathf.Max(260f, ViewportHeight() - _scaledScreenMargin * 2f);
+
+            _controlPanel.Build(_uiRoot, _activeScale, _scaledScreenMargin, maxWidth, maxHeight);
         }
 
         /// <summary>
@@ -1638,6 +1729,10 @@ namespace SchoolTwin.UI
             }
 
             // ---- 几何：卡片高度、分隔线、页脚、手柄 ----
+            // 控制区要在排版之前绑定：它的高度（一行还是两行）会改变卡片总高。
+            if (_ctlRow != null)
+                _ctlRow.Bind(_selected, _activeScale, _scaledFsCtlBtn, _scaledFsCtlStatus);
+
             LayoutCardGeometry(shown);
         }
 
@@ -1658,7 +1753,13 @@ namespace SchoolTwin.UI
 
             int slots = Mathf.Max(1, shown);
             float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
-            float divider2Y = _scaledMetricsTop + metricsBlock + 8f * _activeScale;
+
+            // 控制区接在指标块下面。高度由它自己算（空调多一行温度调节），没绑定时是 0。
+            float ctlH = _ctlRow != null ? _ctlRow.Height : 0f;
+            float ctlBlock = ctlH > 0f ? ctlH + _scaledCtlGap : 0f;
+            float ctlTop = _scaledMetricsTop + metricsBlock + _scaledCtlGap;
+
+            float divider2Y = _scaledMetricsTop + metricsBlock + ctlBlock + 8f * _activeScale;
             float footerY = divider2Y + 1f + 6f * _activeScale;
 
             // 上半段到页脚为止，下面接告警区。
@@ -1672,6 +1773,9 @@ namespace SchoolTwin.UI
 
             for (int i = 0; i < _metricRows.Count; i++)
                 LayoutMetricRow(_metricRows[i], i, w);
+
+            if (ctlH > 0f && _ctlRow != null)
+                _ctlRow.Layout(_scaledPad, ctlTop, w - _scaledPad * 2f);
 
             // 告警区接在 _cardBodyH 下面，宽度也依赖 CardWidth —— 一起重摆
             LayoutAlarmSection();
@@ -2088,6 +2192,9 @@ namespace SchoolTwin.UI
             // H 键的入口必须写在一眼能看到的地方 —— 藏在文档里的快捷键等于没有。
             _sb.Append("   ·   H 历史");
             SetCached(_footer, ref _cachedFooter, _sb.ToString());
+
+            // 控制区：命令状态 + 回读值（0.1 秒一次，和指标数值同一个节奏）
+            if (_ctlRow != null) _ctlRow.Refresh();
         }
 
         private static string FormatValue(string unit, float value)

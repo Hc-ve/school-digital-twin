@@ -31,7 +31,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public static partial class TwinExpandPoints
     {
-        private const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
+        internal const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
         private const string CatalogPath = "Assets/_Project/ScriptableObjects/TwinCatalog_Mock.asset";
 
         // ================================================================ 业务表
@@ -489,7 +489,7 @@ namespace SchoolTwin.EditorTools
             return true;
         }
 
-        private static bool PrefabMatches(GameObject go, string prefabKey, bool exact)
+        internal static bool PrefabMatches(GameObject go, string prefabKey, bool exact)
         {
             string pf = PrefabOf(go);
             if (string.IsNullOrEmpty(pf)) return false;
@@ -580,7 +580,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ 工具
 
-        private static Dictionary<string, Transform> FindRooms()
+        internal static Dictionary<string, Transform> FindRooms()
         {
             Dictionary<string, Transform> map = new Dictionary<string, Transform>(StringComparer.Ordinal);
             Transform[] all = UnityEngine.Object.FindObjectsOfType<Transform>(true);
@@ -596,7 +596,7 @@ namespace SchoolTwin.EditorTools
         }
 
         /// <summary>这个 GameObject 来自哪个预制体（取文件名）。场景内建的返回「(场景内建)」。</summary>
-        private static string PrefabOf(GameObject go)
+        internal static string PrefabOf(GameObject go)
         {
             if (go == null) return "";
             GameObject src = PrefabUtility.GetCorrespondingObjectFromSource(go);
@@ -605,7 +605,7 @@ namespace SchoolTwin.EditorTools
             return string.IsNullOrEmpty(path) ? "(未知)" : System.IO.Path.GetFileNameWithoutExtension(path);
         }
 
-        private static Bounds RoomBounds(Transform room)
+        internal static Bounds RoomBounds(Transform room)
         {
             Renderer[] rs = room.GetComponentsInChildren<Renderer>(true);
             bool any = false;
@@ -630,7 +630,7 @@ namespace SchoolTwin.EditorTools
             return null;
         }
 
-        private static TwinAnchor FindAnchor(string twinId)
+        internal static TwinAnchor FindAnchor(string twinId)
         {
             TwinAnchor[] all = UnityEngine.Object.FindObjectsOfType<TwinAnchor>(true);
             for (int i = 0; i < all.Length; i++)
@@ -650,7 +650,7 @@ namespace SchoolTwin.EditorTools
             SetString(anchor, "_category", category);
         }
 
-        private static void ClearBatchingStatic(GameObject go)
+        internal static void ClearBatchingStatic(GameObject go)
         {
             Renderer[] rs = go.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < rs.Length; i++)
@@ -668,7 +668,7 @@ namespace SchoolTwin.EditorTools
         /// 不能拿 bounds.size / localScale —— 模型带旋转时那样算是错的，
         /// 必须把 8 个角点变换到局部空间再求 AABB。
         /// </summary>
-        private static void EnsureCollider(GameObject go)
+        internal static void EnsureCollider(GameObject go)
         {
             if (go.GetComponentInChildren<Collider>(true) != null) return;
 
@@ -701,7 +701,7 @@ namespace SchoolTwin.EditorTools
             box.size = local.size;
         }
 
-        private static void SetString(UnityEngine.Object target, string fieldName, string value)
+        internal static void SetString(UnityEngine.Object target, string fieldName, string value)
         {
             if (target == null) return;
             SerializedObject so = new SerializedObject(target);
@@ -716,7 +716,7 @@ namespace SchoolTwin.EditorTools
             EditorUtility.SetDirty(target);
         }
 
-        private static void SetFloat(UnityEngine.Object target, string fieldName, float value)
+        internal static void SetFloat(UnityEngine.Object target, string fieldName, float value)
         {
             if (target == null) return;
             SerializedObject so = new SerializedObject(target);
@@ -731,7 +731,7 @@ namespace SchoolTwin.EditorTools
             EditorUtility.SetDirty(target);
         }
 
-        private static void SetBool(UnityEngine.Object target, string fieldName, bool value)
+        internal static void SetBool(UnityEngine.Object target, string fieldName, bool value)
         {
             if (target == null) return;
             SerializedObject so = new SerializedObject(target);

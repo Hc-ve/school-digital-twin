@@ -62,7 +62,7 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 20
+      WarnLow: 0
       WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
@@ -86,8 +86,8 @@ MonoBehaviour:
       Unit: "\xB0C"
       Min: 16
       Max: 30
-      WarnLow: 18
-      WarnHigh: 26
+      WarnLow: 16
+      WarnHigh: 30
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05

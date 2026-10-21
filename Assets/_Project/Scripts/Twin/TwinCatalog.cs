@@ -23,6 +23,10 @@ namespace SchoolTwin.Twin
 
         [Tooltip("变化小于该值不触发刷新事件，避免高频抖动导致无意义的重绘")]
         public float Epsilon = 0.05f;
+
+        [Tooltip("回差（死区）。0 = 自动取警告带宽的 5%（温度 16~28 → 0.6°C）。" +
+                 "值在阈值附近抖动时，没有回差会产生连环告警")]
+        public float Hysteresis = 0f;
     }
 
     /// <summary>一个孪生点位 = 一个业务 ID + 它身上的若干指标。这是「点位映射表」的资产化形式。</summary>
@@ -37,7 +41,59 @@ namespace SchoolTwin.Twin
         [Tooltip("预留：真实数据接入时填 MQTT 主题 / HTTP 路径，Mock 阶段留空")]
         public string SourceTopic = "";
 
+        [Tooltip("设备模型（properties / actions / relations）。留空 = 按 Category 自动派生（推荐）")]
+        public TwinDeviceModel DeviceModel;
+
         public List<TwinMetricDefinition> Metrics = new List<TwinMetricDefinition>();
+
+        /// <summary>
+        /// 派生出来的模型缓存。
+        ///
+        /// 【为什么不用「没有就生成并写回 DeviceModel」】
+        /// TwinCatalog 是 ScriptableObject，在 Play 模式下给它赋字段会**把改动留在资产里**
+        /// （退出 Play 不还原），结果是每次进 Play 都会给 .asset 生成一大段派生数据，
+        /// git diff 全是噪音，而且派生数据和代码会互相漂移。
+        /// 所以派生结果只放内存，资产里保持 null。
+        /// </summary>
+        [System.NonSerialized] private TwinDeviceModel _derivedModel;
+
+        public TwinDeviceModel GetDeviceModel()
+        {
+            // 【为什么不能只判 null —— 这是本项目踩过的一个静默坑】
+            // DeviceModel 是 [Serializable] 的类字段。资产里没有这个键时，
+            // Unity 反序列化会**造一个空壳实例**（不是 null），于是 `!= null` 成立，
+            // 返回一个「零动作的空壳模型」→ CanCommand == false → 控制区把自己藏起来，
+            // 而且一声不响（Console 干净，只是按钮不见了）。
+            // 所以判据是「有没有内容」，不是「是不是 null」。
+            if (HasContent(DeviceModel))
+            {
+                TwinDeviceModels.ForceReadOnly(DeviceModel);
+                return DeviceModel;
+            }
+            if (_derivedModel == null) _derivedModel = TwinDeviceModels.For(Category, Zone, TwinId);
+            return _derivedModel;
+        }
+
+        /// <summary>
+        /// 资产里是否真的填过模型（有动作或有属性）。
+        ///
+        /// 对外暴露成只读属性，是为了让「盘点」能说清一句话：
+        /// 这个点位的模型是**从资产里来的**，还是**运行时按 Category 派生的**。
+        /// 光看 Inspector 分不出来 —— 空壳也不是 null。
+        /// </summary>
+        public bool HasSerializedModel
+        {
+            get { return HasContent(DeviceModel); }
+        }
+
+        /// <summary>序列化出来的模型是否真的填过东西（有动作或有属性）。</summary>
+        private static bool HasContent(TwinDeviceModel m)
+        {
+            if (m == null) return false;
+            if (m.Actions != null && m.Actions.Count > 0) return true;
+            if (m.Properties != null && m.Properties.Count > 0) return true;
+            return false;
+        }
 
         public TwinMetricDefinition FindMetric(string metric)
         {

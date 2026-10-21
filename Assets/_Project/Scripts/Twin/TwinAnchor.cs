@@ -43,6 +43,10 @@ namespace SchoolTwin.Twin
         private readonly Dictionary<string, TwinValue> _values =
             new Dictionary<string, TwinValue>(StringComparer.Ordinal);
 
+        /// <summary>每个指标上一次的判定结果 —— 回差判定要用它（见 ApplyDeadband）。</summary>
+        private readonly Dictionary<string, TwinStatus> _metricStatus =
+            new Dictionary<string, TwinStatus>(4, StringComparer.Ordinal);
+
         /// <summary>已经提醒过「未配置阈值」的 (TwinId|Metric)。跨实例共享，避免刷屏。</summary>
         private static readonly HashSet<string> s_unconfiguredWarned =
             new HashSet<string>(StringComparer.Ordinal);
@@ -301,6 +305,64 @@ namespace SchoolTwin.Twin
         }
 
         private TwinStatus StatusOf(string metric, TwinValue value)
+        {
+            TwinStatus raw = RawStatusOf(metric, value);
+
+            TwinStatus prev;
+            if (_metricStatus.TryGetValue(metric, out prev))
+            {
+                raw = ApplyDeadband(metric, value.Value, raw, prev);
+            }
+            _metricStatus[metric] = raw;
+            return raw;
+        }
+
+        /// <summary>
+        /// 回差（死区）：**状态变差立刻生效，变好要等值真的离开阈值一段距离**。
+        ///
+        /// 【为什么必须有】温度在 27.9 / 28.1 之间抖（阈值 28），没有回差就是
+        /// 「警告 → 正常 → 警告 → 正常」每 100ms 一次，告警历史会被同一条事件刷满，
+        /// 声音也会变成连续的滴滴声。这不是数据问题，是判定方式问题。
+        ///
+        /// 【为什么不直接改阈值】阈值是「业务上什么算越界」的声明，改它等于把标准放宽了。
+        /// 回差是「判定方式」，两件事分开，阈值才敢照实写。
+        /// </summary>
+        private TwinStatus ApplyDeadband(string metric, float value, TwinStatus raw, TwinStatus prev)
+        {
+            // 变差或不变：立刻生效，不许延迟（安全方向永远是即时的）
+            if (Severity(raw) >= Severity(prev)) return raw;
+
+            TwinMetricDefinition def = FindMetricDefinition(metric);
+            if (def == null) return raw;
+
+            float db = DeadbandOf(def);
+            if (db <= 0f) return raw;
+
+            if (prev == TwinStatus.Alarm)
+            {
+                // 必须离告警线一个死区才算真的退出告警
+                if (value < def.AlarmLow + db || value > def.AlarmHigh - db) return TwinStatus.Alarm;
+                return raw;
+            }
+
+            if (prev == TwinStatus.Warning && raw == TwinStatus.Normal)
+            {
+                if (value < def.WarnLow + db || value > def.WarnHigh - db) return TwinStatus.Warning;
+            }
+            return raw;
+        }
+
+        /// <summary>回差大小。没配就用警告带宽的 5%（与 Spec §8.7 的 0.5°C / 2%RH 同量级）。</summary>
+        private static float DeadbandOf(TwinMetricDefinition def)
+        {
+            if (def == null) return 0f;
+            if (def.Hysteresis > 0f) return def.Hysteresis;
+            float span = def.WarnHigh - def.WarnLow;
+            return span > 0f ? span * 0.05f : 0f;
+        }
+
+        /// <summary>纯阈值判定，不含回差。回差逻辑包在 <see cref="StatusOf(string, TwinValue)"/> 外面。</summary>
+        private TwinStatus RawStatusOf(string metric, TwinValue value)
         {
             if (value.Quality == DataQuality.Offline) return TwinStatus.Offline;
             if (value.Quality == DataQuality.Bad) return TwinStatus.Warning;

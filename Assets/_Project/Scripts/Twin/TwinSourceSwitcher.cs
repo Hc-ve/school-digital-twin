@@ -171,6 +171,52 @@ namespace SchoolTwin.Twin
             DetectCurrent();
         }
 
+        /// <summary>
+        /// 【为什么这条检查放在 Start，而不是 EnsureReady】
+        /// 本组件是运行时 AddComponent 挂上的（TwinDetailPanel 建数据源条时），
+        /// 而 `EnsureReady` 可能被「建条子时读一下状态」提前触发 —— 那一刻场景里
+        /// 其它对象的 `OnEnable` 未必都跑完了，`IsRunning` 全 false，
+        /// `DetectCurrent` 只能保留字段默认值（Mqtt），于是后面所有命令都发到 broker。
+        ///
+        /// `Start` 一定在所有对象的 `OnEnable` 之后、第一帧 `Update` 之前执行，
+        /// 到那时「谁在跑」才有确定答案，所以这里**重新判定一次**再强制单选。
+        /// </summary>
+        private void Start()
+        {
+            EnsureReady();
+            DetectCurrent();
+            EnforceSingleSource();
+        }
+
+        /// <summary>
+        /// 启动时如果发现多个数据源同时在跑，只保留当前那个。
+        ///
+        /// 【为什么必须在第一次访问时做，而不是等用户点切换】
+        /// 场景里两个源的 `Auto Start` 可能都勾着，而本组件是**懒加载**的
+        /// （TwinDetailPanel 建数据源条时才 AddComponent）。等它出现时，两个源早就各自
+        /// Start 过了 —— 于是同一批 TwinId 被两个源轮流写，值在 Mock 波形和 MQTT 报文之间
+        /// 来回跳，而界面上完全看不出来（两边的量级都「合理」）。
+        ///
+        /// 更糟的是命令通道要按「当前数据源」选。两个都在跑时 DetectCurrent 只能二选一，
+        /// 一旦选中 MQTT，就会出现：**看着 Mock 的数据、命令却发到 broker、3 秒后报「设备无响应」**，
+        /// 而且设备代理一条日志都没有（它确实没收到）。P12 第一次实测就是这个症状。
+        /// </summary>
+        private void EnforceSingleSource()
+        {
+            int running = 0;
+            if (_mock != null && _mock.IsRunning) running++;
+            if (_mqtt != null && _mqtt.IsRunning) running++;
+            if (_player != null && _player.IsRunning) running++;
+            if (running <= 1) return;
+
+            DataSourceBase keep = SourceOf(_current);
+            StopExcept(keep);
+
+            Debug.LogWarning("[Twin] 检测到 " + running + " 个数据源同时在跑 —— 它们会互相覆盖同一批 TwinId。" +
+                             "已只保留「" + ShortName(_current) + "」，其余已停止。" +
+                             "（想换源请在数据源条上点，不要在 Inspector 里同时勾 Auto Start）");
+        }
+
         private static T FindAny<T>() where T : Component
         {
             T[] all = FindObjectsOfType<T>(true);   // true = 连未激活的也找（Mock 默认是关着的）
@@ -180,8 +226,12 @@ namespace SchoolTwin.Twin
         /// <summary>启动时以「真正在跑的那个」为准，而不是脚本默认值。</summary>
         private void DetectCurrent()
         {
-            if (_mqtt != null && _mqtt.IsRunning) { _current = SourceKind.Mqtt; return; }
+            // 顺序 = 优先级。**Mock 排第一**，因为它是自带生成器的演示源
+            // （32 个点位 / 61 个指标 / 10Hz，不依赖任何外部进程）；
+            // MQTT 要靠外部发布者才有数据，属于「用户主动点开」的通道。
+            // 两个都在跑时选 Mock，命令才走进程内那条路 —— 那里有真的设备代理在听。
             if (_mock != null && _mock.IsRunning) { _current = SourceKind.Mock; return; }
+            if (_mqtt != null && _mqtt.IsRunning) { _current = SourceKind.Mqtt; return; }
             if (_player != null && _player.IsRunning) { _current = SourceKind.Playback; return; }
             // 都没跑：保留字段默认值，用户点哪个就起哪个
         }

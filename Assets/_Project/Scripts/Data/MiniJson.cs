@@ -88,6 +88,50 @@ namespace SchoolTwin.Data
                 }
                 return false;
             }
+
+            /// <summary>
+            /// 取布尔值。JSON 的 true/false、1/0、"true"/"false" 都接受 ——
+            /// 回执里的 ok 字段三种写法在不同网关上都见过。
+            /// </summary>
+            public bool TryGetBool(string key, out bool value)
+            {
+                value = false;
+                if (Keys == null || string.IsNullOrEmpty(key)) return false;
+                for (int i = 0; i < Keys.Length; i++)
+                {
+                    if (!string.Equals(Keys[i], key, StringComparison.Ordinal)) continue;
+
+                    if (Kinds[i] == KindBool || Kinds[i] == KindNumber)
+                    {
+                        value = NumberValues[i] != 0d;
+                        return true;
+                    }
+                    if (Kinds[i] == KindString)
+                    {
+                        string s = StringValues[i];
+                        if (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)) { value = true; return true; }
+                        if (string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) { value = false; return true; }
+                        double d;
+                        if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out d))
+                        {
+                            value = d != 0d;
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                return false;
+            }
+
+            /// <summary>取整数（错误码这类字段）。小数会被截断。</summary>
+            public bool TryGetInt(string key, out int value)
+            {
+                value = 0;
+                double d;
+                if (!TryGetNumber(key, out d)) return false;
+                value = (int)d;
+                return true;
+            }
         }
 
         /// <summary>解析 UTF-8 字节。失败返回 false（调用方计入 parseFail）。</summary>
@@ -258,13 +302,13 @@ namespace SchoolTwin.Data
 
             if (c == (byte)'t')
             {
-                if (Match(b, pos, "true")) { pos += 4; kind = Object.KindBool; return true; }
+                if (Match(b, pos, "true")) { pos += 4; nval = 1d; kind = Object.KindBool; return true; }
                 return false;
             }
 
             if (c == (byte)'f')
             {
-                if (Match(b, pos, "false")) { pos += 5; kind = Object.KindBool; return true; }
+                if (Match(b, pos, "false")) { pos += 5; nval = 0d; kind = Object.KindBool; return true; }
                 return false;
             }
 

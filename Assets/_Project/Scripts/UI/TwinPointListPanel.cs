@@ -61,24 +61,13 @@ namespace SchoolTwin.UI
         /// <summary>
         /// 分区的显示顺序与中文名。
         ///
-        /// 【为什么要写死】`Zone` 在数据里是 `Class2-1` / `ClassComputer` 这种 id，
-        /// 直接印给观众看是英文；而按 id 排序会得到 `ClassComputer` 排在 `Class2-1` 前面
-        /// 这种反直觉的顺序（字典序把 `C` 排在 `2` 前面）。
+        /// 【为什么不在这里写死】这张表原来在这里手写了一份，和总控面板（P14）要用的
+        /// `TwinSiteLayout` 完全重复。两份表一定会漂移（改了一处忘了另一处），
+        /// 所以改成从 `TwinSiteLayout` 取 —— 那边还多了楼层信息，P14 的楼层筛选要用。
+        ///
         /// 表里没写的新分区不会丢 —— 见 <see cref="AppendUnknownZones"/>。
         /// </summary>
-        private static readonly string[][] ZoneTable =
-        {
-            new[] { "Class1-2", "1-2班" },
-            new[] { "Class1-3", "1-3班" },
-            new[] { "Class1-4", "1-4班" },
-            new[] { "Class2-1", "2-1班" },
-            new[] { "Class2-2", "2-2班" },
-            new[] { "ClassComputer", "计算机教室" },
-            new[] { "ClassTeachers", "教师办公室" },
-            new[] { "ClassDirector", "主任室" },
-            new[] { "Corridor1", "一层走廊" },
-            new[] { "Corridor2", "二层走廊" },
-        };
+        private static readonly string[][] ZoneTable = TwinSiteLayout.ZoneTitleTable();
 
         // ---------------- 外部参数 ----------------
         private float _scale = 1f;
