@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace SchoolTwin.Interaction
 {
@@ -134,6 +135,15 @@ namespace SchoolTwin.Interaction
 
         private void HandleZoom()
         {
+            // 指针压在界面上时，滚轮归界面。
+            //
+            // 【为什么必须挡】相机读的是 Input.mouseScrollDelta，**不经过事件系统**，
+            // 而 UGUI 的 ScrollRect 也是直接读滚轮。两边各读各的，谁也不会「消费」掉事件
+            // —— 于是在点位清单上滚一下，列表往下滚的同时相机也往前推了一段。
+            // TwinPicker 早就有同样的判断（IsPointerOverGameObject），这里补上。
+            EventSystem events = EventSystem.current;
+            if (events != null && events.IsPointerOverGameObject()) return;
+
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) < 0.0001f) return;
 

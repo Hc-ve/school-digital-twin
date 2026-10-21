@@ -98,6 +98,17 @@ namespace SchoolTwin.UI
         private Vector2 _userPos;
         private Vector2 _userSize;
 
+        /// <summary>
+        /// 用户**亲手拉过高度**没有。
+        ///
+        /// 【为什么必须和「拖动」分开】窗口高度默认是「按内容算」的。
+        /// 如果用户只是把窗口拖到别处（没改尺寸），之后点位数变了还是要按内容自动长高；
+        /// 只有他真的拉过右下角，才该锁住他给的高度。
+        /// 判据是「当前高度 vs 上一次自动算出来的高度」差多少。
+        /// </summary>
+        private bool _userSized;
+        private float _autoH;
+
         // ---------------- 节点 ----------------
         private RectTransform _panel;
         private RectTransform _dragBar;
@@ -125,6 +136,8 @@ namespace SchoolTwin.UI
             public bool Header;
             public string Title;
             public int Count;
+            /// <summary>仅组头用：这个分区里需要关注的点位有几个。</summary>
+            public int Abnormal;
             public TwinAnchor Anchor;
             public TwinStatus Status;
 
@@ -216,10 +229,9 @@ namespace SchoolTwin.UI
             // 先算内容有多高，才能决定窗口初始高度（内容少就别撑满屏幕）
             RebuildEntries();
             _entriesDirty = false;
-            float contentH = ContentHeight();
             float w = Mathf.Min(BaseWidth * s, Mathf.Max(MinWidth, _maxWidth));
-            float h = Mathf.Min(contentH + BaseHeaderH * s + BaseBottomPad * s,
-                                Mathf.Max(160f * s, _maxHeight));
+            float h = AutoHeight();
+            _autoH = h;
 
             _panel = (RectTransform)TwinUIFactory.Node("PointListPanel", root).transform;
             // 先关掉再搭：ScrollRect 在 OnEnable 里就检查 content 有没有赋值，
@@ -456,10 +468,23 @@ namespace SchoolTwin.UI
 
             _bucket.Sort(CompareAnchor);
 
+            // 组头顺便统计「这个房间有几个点位要关注」。
+            // 这比「找到点位」更常用：一眼就能看出哪个房间有事，不用逐条往下读。
+            int abnormal = 0;
+            TwinStatus worst = TwinStatus.Normal;
+            for (int i = 0; i < _bucket.Count; i++)
+            {
+                TwinStatus st = CurrentStatus(_bucket[i]);
+                if (TwinStatusPalette.NeedsAttention(st)) abnormal++;
+                if (TwinStatusPalette.Severity(st) > TwinStatusPalette.Severity(worst)) worst = st;
+            }
+
             Entry header = new Entry();
             header.Header = true;
             header.Title = title;
             header.Count = _bucket.Count;
+            header.Abnormal = abnormal;
+            header.Status = worst;
             _entries.Add(header);
 
             for (int i = 0; i < _bucket.Count; i++)
@@ -553,6 +578,23 @@ namespace SchoolTwin.UI
             return total;
         }
 
+        /// <summary>
+        /// 「按内容算」的窗口高度：内容多高窗口就多高，最多到屏幕可用高度。
+        ///
+        /// 【为什么要单独一个方法，而且每次重建列表都要重算】
+        /// 第一版只在建窗口时算一次，结果窗口永远停在「建的时候有几个点位」的高度。
+        /// 而面板是在 `Awake` 早期建的，那一刻点位还没注册完 → 内容高度是 0
+        /// → 窗口被压成两条标题那么高（约 60 单位），视口高度算出来是 0，
+        /// **整张列表一个字都看不见**，只有标题栏浮在那儿。
+        /// 后来 Refresh 里查到了 32 个点位，但没人再去改窗口高度，于是一直错着。
+        /// </summary>
+        private float AutoHeight()
+        {
+            float s = _scale;
+            float want = ContentHeight() + BaseHeaderH * s + BaseBottomPad * s;
+            return Mathf.Min(want, Mathf.Max(160f * s, _maxHeight));
+        }
+
         // ================================================================ 排版（几何）
 
         private void Layout()
@@ -607,9 +649,13 @@ namespace SchoolTwin.UI
             float s = _scale;
             float y = 0f;
 
-            float badgeW = Mathf.Min(64f * s, contentW * 0.32f);
+            // 组头的徽标要放「5 个 · 2 异常」，条目只要放「数据陈旧」——宽度分开算。
+            // 给窄了的话（MiddleRight + Overflow）文字会往左画，直接压到名字上。
+            float badgeWItem = Mathf.Min(60f * s, contentW * 0.30f);
+            float badgeWHead = Mathf.Min(110f * s, contentW * 0.50f);
             float nameX = 22f * s;
-            float nameW = Mathf.Max(40f, contentW - nameX - badgeW - 6f * s);
+            float nameWItem = Mathf.Max(40f, contentW - nameX - badgeWItem - 6f * s);
+            float nameWHead = Mathf.Max(40f, contentW - badgeWHead - 8f * s);
             int nameFs = Mathf.Max(8, Mathf.RoundToInt(FsRow * s));
 
             for (int i = 0; i < _entries.Count && i < _rows.Count; i++)
@@ -626,9 +672,10 @@ namespace SchoolTwin.UI
 
                 // 组头把状态点让出来给文字用（组头没有状态）
                 float labelX = e.Header ? 4f * s : nameX;
-                float labelW = e.Header ? Mathf.Max(40f, contentW - badgeW - 8f * s) : nameW;
+                float labelW = e.Header ? nameWHead : nameWItem;
                 TwinUIFactory.Place(row.Label.rectTransform, labelX, 0f, labelW, rowH);
 
+                float badgeW = e.Header ? badgeWHead : badgeWItem;
                 TwinUIFactory.Place(row.Badge.rectTransform, contentW - badgeW, 0f, badgeW, rowH);
 
                 e.NameWidth = labelW;
@@ -655,6 +702,10 @@ namespace SchoolTwin.UI
             _userMoved = true;
             _userPos = _panel.anchoredPosition;
             _userSize = _panel.sizeDelta;
+
+            // 只有「高度真的和自动算出来的不一样」才算用户亲手改过尺寸。
+            // 否则单纯拖动一下窗口，之后点位增减就再也不自动长高了。
+            if (Mathf.Abs(_panel.sizeDelta.y - _autoH) > 1f) _userSized = true;
 
             Layout();
 
@@ -741,6 +792,17 @@ namespace SchoolTwin.UI
 
             if (_empty != null) _empty.gameObject.SetActive(_entries.Count == 0);
 
+            // 点位数变了 → 窗口高度也要跟着长（用户没亲手拉过高度时才自动改）
+            if (!_userSized)
+            {
+                float want = AutoHeight();
+                if (Mathf.Abs(_panel.sizeDelta.y - want) > 0.5f)
+                {
+                    _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, want);
+                    _autoH = want;
+                }
+            }
+
             // 【顺序不能反】Layout 会把「名称列当前宽度」写进每个 Entry，
             // ApplyRows 靠那个宽度截断文字。反过来做的话，新重建的 Entry 宽度还是 0，
             // FitText 会返回空串 —— 表现为「刚打开时列表里一个字都没有」。
@@ -752,8 +814,25 @@ namespace SchoolTwin.UI
         {
             for (int i = 0; i < _entries.Count; i++)
             {
-                Entry e = _entries[i];
-                if (!e.Header && e.Anchor != null) e.Status = CurrentStatus(e.Anchor);
+                Entry h = _entries[i];
+                if (!h.Header)
+                {
+                    if (h.Anchor != null) h.Status = CurrentStatus(h.Anchor);
+                    continue;
+                }
+
+                // 组头：把它后面连续的点位扫一遍，重算「几个异常 + 最差状态」
+                int abnormal = 0;
+                TwinStatus worst = TwinStatus.Normal;
+                for (int k = i + 1; k < _entries.Count && !_entries[k].Header; k++)
+                {
+                    Entry e = _entries[k];
+                    if (e.Anchor != null) e.Status = CurrentStatus(e.Anchor);
+                    if (TwinStatusPalette.NeedsAttention(e.Status)) abnormal++;
+                    if (TwinStatusPalette.Severity(e.Status) > TwinStatusPalette.Severity(worst)) worst = e.Status;
+                }
+                h.Abnormal = abnormal;
+                h.Status = worst;
             }
         }
 
@@ -782,8 +861,9 @@ namespace SchoolTwin.UI
 
                     _sb.Length = 0;
                     _sb.Append(e.Count).Append(" 个");
+                    if (e.Abnormal > 0) _sb.Append(" · ").Append(e.Abnormal).Append(" 异常");
                     SetCached(row.Badge, _sb.ToString());
-                    row.Badge.color = TwinStatusPalette.TextMuted;
+                    row.Badge.color = e.Abnormal > 0 ? BadgeColor(e.Status) : TwinStatusPalette.TextMuted;
                     continue;
                 }
 
