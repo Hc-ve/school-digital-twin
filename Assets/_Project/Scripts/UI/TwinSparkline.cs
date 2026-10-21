@@ -34,16 +34,19 @@ namespace SchoolTwin.UI
         [SerializeField] private int _capacity = 320;
 
         [Tooltip("线条粗细（UI 单位）")]
-        [SerializeField] private float _lineWidth = 2f;
+        [SerializeField] private float _lineWidth = 2.6f;
 
         [Tooltip("线条颜色")]
         [SerializeField] private Color _lineColor = new Color(0.55f, 0.84f, 1f, 1f);
 
         [Tooltip("线条下方的填充色（半透明，别调太实，否则会盖住背景）")]
-        [SerializeField] private Color _fillColor = new Color(0.45f, 0.78f, 1f, 0.14f);
+        [SerializeField] private Color _fillColor = new Color(0.45f, 0.78f, 1f, 0.22f);
 
         [Tooltip("底部基线颜色")]
-        [SerializeField] private Color _baseColor = new Color(1f, 1f, 1f, 0.16f);
+        [SerializeField] private Color _baseColor = new Color(1f, 1f, 1f, 0.22f);
+
+        [Tooltip("顶部边框颜色（极淡，只用来把图表区框出来）")]
+        [SerializeField] private Color _frameColor = new Color(1f, 1f, 1f, 0.09f);
 
         private struct Sample
         {
@@ -57,6 +60,7 @@ namespace SchoolTwin.UI
         private float _max = 1f;
         private float _now;
         private bool _loggedFirstDraw;
+        private bool _loggedBadRect;
 
         /// <summary>当前缓存了多少个采样点。用于诊断「线是空的」到底是没数据还是没画。</summary>
         public int SampleCount { get { return _samples.Count; } }
@@ -94,15 +98,9 @@ namespace SchoolTwin.UI
             s.V = value;
             _samples.Add(s);
 
-            // 第一次攒够两个点、真正能画出线的时候打一行日志。
-            // 「趋势线是空的」有两种完全不同的原因（没数据 / 没画出来），
-            // 有这一行就能一次分清，不用再靠猜。
-            if (!_loggedFirstDraw && _samples.Count >= 2)
-            {
-                _loggedFirstDraw = true;
-                Debug.Log("[TwinUI] 趋势线开始出图（该指标已采到 2 个点）。" +
-                          "若此时仍看不到线，问题在绘制而不在数据。");
-            }
+            // 注意：这里**不打日志**。上一版在这里打「开始出图」，结果它出现了两次
+            // 而线依然看不见 —— 说明「有数据」和「画出来了」是两件事，
+            // 日志要打在真正生成网格的地方（见 OnPopulateMesh 末尾），否则会误导排查方向。
         }
 
         /// <summary>
@@ -130,10 +128,27 @@ namespace SchoolTwin.UI
             vh.Clear();
 
             Rect r = GetPixelAdjustedRect();
-            if (r.width <= 0.5f || r.height <= 0.5f) return;
+            if (r.width <= 0.5f || r.height <= 0.5f)
+            {
+                if (!_loggedBadRect)
+                {
+                    _loggedBadRect = true;
+                    Debug.LogWarning("[TwinUI] 趋势线尺寸异常 rect=" +
+                                     r.width.ToString("0.#") + "×" + r.height.ToString("0.#") +
+                                     "，网格画不出来（检查 Place 时的宽高）");
+                }
+                return;
+            }
 
-            // 基线：让「零轴」有参照，也让空数据时不是一片空白
+            // 上下两条极淡的横线，把「这是一块图表区」框出来。
+            //
+            // 【为什么必须有】上一版只有一条底部基线（alpha 0.16、1 单位粗），
+            // 在深色卡片上等于没有。于是「数据平稳，线是一条水平线」和
+            // 「什么都没画」在画面上长得一模一样 —— 用户看到的是一片空白，
+            // 根本无从判断是功能坏了还是数据稳。
+            // 有这两条线，图表区先立住，再谈里面的线。
             AddQuad(vh, r.xMin, r.yMin, r.xMax, r.yMin + 1f, _baseColor);
+            AddQuad(vh, r.xMin, r.yMax - 1f, r.xMax, r.yMax, _frameColor);
 
             if (_samples.Count < 2) return;
 
@@ -173,6 +188,25 @@ namespace SchoolTwin.UI
 
                 prev = p;
                 hasPrev = true;
+            }
+
+            // 末端方块：标出「现在」这一刻的值。
+            // 光有线不够 —— 一条平稳的水平线看不出「它还在动」，
+            // 右端挂一个实心点，才一眼知道这是活的。
+            if (hasPrev)
+            {
+                float half = Mathf.Max(1.5f, _lineWidth);
+                AddQuad(vh, prev.x - half, prev.y - half, prev.x + half, prev.y + half, _lineColor);
+            }
+
+            // 【日志为什么打在这里】上一版打在 Push() 里，报的是「采到 2 个点」，
+            // 于是它出现了两次而线依然看不见 —— 那是「有数据」，不是「画出来了」。
+            // 只有走到这里、顶点数才真正说明问题，排查方向才不会被带偏。
+            if (!_loggedFirstDraw)
+            {
+                _loggedFirstDraw = true;
+                Debug.Log("[TwinUI] 趋势线已生成网格：区域 " + r.width.ToString("0") + "×" + r.height.ToString("0") +
+                          "，采样 " + _samples.Count + " 点，顶点 " + vh.currentVertCount + " 个");
             }
         }
 

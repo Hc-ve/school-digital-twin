@@ -123,17 +123,20 @@ namespace SchoolTwin.UI
         private const float BaseSubtitleY = 50f;
         private const float BaseDivider1Y = 80f;
         private const float BaseMetricsTop = 90f;
-        private const float BaseRowHeight = 90f;
+        private const float BaseRowHeight = 102f;
         private const float BaseRowGap = 7f;
         private const float BaseBarY = 30f;
         private const float BaseBarHeight = 9f;
 
-        // 迷你趋势线：一行 62 → 90，多出来的 28 全给趋势线。
+        // 迷你趋势线：一行 62 → 102，多出来的 40 全给趋势线。
         // 为什么放在量程条和提示文字**下面**：上面三行（名称/数值、量程条、阈值提示）
         // 已经被占满，只有这里还有整行宽度的空白，且不与任何文字抢位置。
-        // 20 单位 × 0.75 只有 15px，太扁看不出形状 —— 给到 24。
+        //
+        // 【24 不够，改成 34】24 × 0.75 = 18 单位，在 0.68 的 scaleFactor 下
+        // 只剩约 12px 高 —— 一条 2 单位粗的线在里面不到 1.5px，
+        // 平稳时看起来就是「这块是空的」。图表区必须先立得住，线才有意义。
         private const float BaseSparkY = 62f;
-        private const float BaseSparkHeight = 24f;
+        private const float BaseSparkHeight = 34f;
 
         /// <summary>趋势线采样间隔（秒）。60 秒窗口按 5Hz 存 300 个点。</summary>
         private const float SparkSampleInterval = 0.2f;
