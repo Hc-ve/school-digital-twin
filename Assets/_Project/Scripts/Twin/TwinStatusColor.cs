@@ -90,10 +90,10 @@ namespace SchoolTwin.Twin
             ResolveAnchor();
             CollectRenderers();
 
-            TwinStatus status = ColorStatus();
+            TwinStatus status = EffectiveStatus();
             _current = ColorFor(status);
             _target = _current;
-            _appliedStrength = StrengthFor(status);
+            _appliedStrength = EffectiveStrength(status);
             Apply(_current, _appliedStrength);
         }
 
@@ -108,8 +108,8 @@ namespace SchoolTwin.Twin
         {
             float now = Time.realtimeSinceStartup;
 
-            TwinStatus status = ColorStatus();
-            bool blinking = ShouldBlink(status);
+            TwinStatus status = EffectiveStatus();
+            bool blinking = !IsPowerCut() && ShouldBlink(status);
             float interval = blinking ? _blinkRefreshInterval : _refreshInterval;
 
             if (now < _nextRefresh) return;
@@ -117,7 +117,7 @@ namespace SchoolTwin.Twin
 
             // 强度也要参与判断：状态从 Normal 变成 Warning 时颜色可能刚好没变多少，
             // 但强度从 0 跳到 0.3，必须重新应用一次。
-            float strength = StrengthFor(status);
+            float strength = EffectiveStrength(status);
             bool strengthChanged = Mathf.Abs(strength - _appliedStrength) > 0.005f;
 
             Color baseColor = ColorFor(status);
@@ -265,6 +265,34 @@ namespace SchoolTwin.Twin
             return s;
         }
 
+        /// <summary>
+        /// 回路断电了吗。
+        ///
+        /// 【为什么着色也要管这件事】断电 8 秒后点位自己会变 Offline，而 Offline 是**闪烁**的
+        /// （见 ShouldBlink）。断一层电 = 12 台设备同时闪 —— 看起来像 12 个故障，
+        /// 实际上只有一个事实。断电要"静下来"：稳定的深灰，不闪。
+        /// </summary>
+        private bool IsPowerCut()
+        {
+            return _anchor != null && !string.IsNullOrEmpty(_anchor.TwinId)
+                   && !TwinCircuit.IsPowered(_anchor.TwinId);
+        }
+
+        /// <summary>着色用的最终状态：断电统一压成 Offline（深灰），不参与闪烁。</summary>
+        private TwinStatus EffectiveStatus()
+        {
+            return IsPowerCut() ? TwinStatus.Offline : ColorStatus();
+        }
+
+        private float EffectiveStrength(TwinStatus status)
+        {
+            // 断电比普通 Offline 更"实"一点（0.6 倍告警强度）：
+            // 它是个确定的人为状态，应该一眼能看出"这台设备现在不工作"，
+            // 而不是像瞬时丢包那样淡淡泛灰。
+            if (IsPowerCut()) return _alarmTintStrength * 0.6f;
+            return StrengthFor(status);
+        }
+
         private Color ColorFor(TwinStatus status)
         {
             switch (status)
@@ -339,7 +367,7 @@ namespace SchoolTwin.Twin
             _renderers = null;
             _renderersCollected = false;
             CollectRenderers();
-            _appliedStrength = StrengthFor(ColorStatus());
+            _appliedStrength = EffectiveStrength(EffectiveStatus());
             Apply(_target, _appliedStrength);
         }
 

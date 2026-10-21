@@ -46,6 +46,9 @@ namespace SchoolTwin.Command
         [SerializeField] private float _failHoldSeconds = 3f;
         [SerializeField] private float _confirmHoldSeconds = 1.2f;
 
+        [Tooltip("命令超时后，面板把该设备标成「无响应」保持多久（秒）")]
+        [SerializeField] private float _unreachableHoldSeconds = 20f;
+
         [Header("MQTT 命令通道")]
         [SerializeField] private string _mqttHost = "127.0.0.1";
         [SerializeField] private int _mqttPort = 1883;
@@ -196,6 +199,20 @@ namespace SchoolTwin.Command
                 return false;
             }
 
+            // ---- 断电拦截（P15）----
+            //
+            // 【为什么必须在这里挡，而不是等 ack 超时】断电的设备不会回任何东西，
+            // 不挡的话用户要等 3 秒才看到「设备无响应」—— 而真实原因就摆在面板上：
+            // 这一层楼断电了。等 3 秒还给出错误原因，是拿用户的时间换一句不准确的话。
+            //
+            // 走「本机拒绝」而不是生成一条 Failed 命令：断电期间**根本不该产生意图**，
+            // 产生一条失败记录反而会污染审计日志（看起来像有人试图操作一台不存在的设备）。
+            if (!TwinCircuit.IsPowered(twinId))
+            {
+                reject = CommandText.FailReason(CommandFailCode.PowerOff);
+                return false;
+            }
+
             string actionName = CommandText.ActionName(action);
             TwinActionDefinition def = model.FindAction(actionName);
             if (def == null)
@@ -310,7 +327,16 @@ namespace SchoolTwin.Command
                     {
                         // 注意：这里说的是「无响应」而不是「执行失败」—— 我们确实不知道设备是没收到、
                         // 还是收到了但没回。把不确定性如实说出来，比编一个原因好。
-                        Fail(c, CommandFailCode.Offline, null);
+                        //
+                        // 【P15：用心跳把不确定性收窄一格】心跳是设备自己说"我在"。
+                        //   · 心跳说不在 → 命令不可能送到，原因就是"设备不在"
+                        //   · 心跳说在   → 命令可能没送到，也可能是设备卡住了
+                        // 这两句话给运维的下一步动作完全不同（去现场 vs 查网络），
+                        // 而只靠沉默判定这两件事永远分不开。
+                        bool online = TwinPowerController.IsOnline(c.TwinId);
+                        TwinCircuit.MarkUnreachable(c.TwinId, _unreachableHoldSeconds);
+                        Fail(c, CommandFailCode.Offline,
+                             online ? "设备在线但没回执（命令可能没送到）" : "设备不在线（心跳已断）");
                     }
                     break;
 

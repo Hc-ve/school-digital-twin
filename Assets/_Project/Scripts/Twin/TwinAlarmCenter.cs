@@ -68,6 +68,16 @@ namespace SchoolTwin.Twin
         {
             public TwinStatus Status;
             public float LastRaisedRealtime;
+
+            /// <summary>
+            /// 是否因为「回路断电」被抑制。
+            ///
+            /// 【为什么必须有这个位，不能只看状态】断电期间我们把这个点位记成 Unknown，
+            /// 而 Unknown 和「本来就没数据」在状态上是同一个值。没有这个位，
+            /// 供电恢复后就没法区分"要重新判一次"和"一直都在 Unknown"，
+            /// 结果是要么恢复后不重新判（灯亮了但面板还是灰的），要么每轮都清一次（白跑）。
+            /// </summary>
+            public bool Suppressed;
         }
 
         private readonly Dictionary<TwinAnchor, Entry> _states =
@@ -78,8 +88,14 @@ namespace SchoolTwin.Twin
         private float _nextPoll;
         private float _nextPrune;
 
+        /// <summary>当前因断电被抑制的点位数。面板用它显示「断电抑制 N 个」。</summary>
+        private int _suppressedCount;
+
         /// <summary>正在跟踪的点位数（调试用）。</summary>
         public int TrackedCount { get { return _states.Count; } }
+
+        /// <summary>因回路断电被抑制的点位数（这些点位此刻不会报警，是**设计如此**）。</summary>
+        public int SuppressedCount { get { return _suppressedCount; } }
 
         private void Awake()
         {
@@ -123,10 +139,55 @@ namespace SchoolTwin.Twin
 
         private void Evaluate(TwinAnchor anchor, float now)
         {
-            TwinStatus status = CurrentStatus(anchor);
-
             Entry entry;
             bool known = _states.TryGetValue(anchor, out entry);
+
+            // ---- 断电抑制（P15）----
+            //
+            // 【为什么必须挡在一切之前】断电后设备沉默 8 秒，状态会自己走到 Offline，
+            // 于是整层楼的设备同时"离线告警"—— 一次断电制造 15 条告警 + 15 声提示音，
+            // 而真正的事实只有一条：有人把闸拉了。这就是 Spec 里"断电期间不产生新告警"
+            // 那条验收项要挡的东西。
+            //
+            // 已经在报的那条也要收掉（走 Cleared），因为对运维来说"这层断电了"是**已知状态**，
+            // 不是一条待处理的异常。留着一屏红色，人反而看不见别的。
+            if (!TwinCircuit.IsPowered(anchor.TwinId))
+            {
+                if (!known)
+                {
+                    entry.Status = TwinStatus.Unknown;
+                    entry.LastRaisedRealtime = 0f;
+                    entry.Suppressed = true;
+                    _states[anchor] = entry;
+                    _suppressedCount++;
+                    return;
+                }
+                if (!entry.Suppressed)
+                {
+                    bool wasAttention = TwinStatusPalette.NeedsAttention(entry.Status);
+                    entry.Suppressed = true;
+                    entry.Status = TwinStatus.Unknown;
+                    entry.LastRaisedRealtime = 0f;
+                    _states[anchor] = entry;
+                    _suppressedCount++;
+                    if (wasAttention) RaiseCleared(anchor);
+                }
+                return;
+            }
+
+            // ---- 供电恢复 ----
+            // 清掉抑制位，让下一段按数据重新判一次。重置成 Unknown 而不是保留旧值，
+            // 是为了让"恢复后的第一个真实状态"一定被当成新事件处理（哪怕它还是 Offline）。
+            if (known && entry.Suppressed)
+            {
+                entry.Suppressed = false;
+                entry.Status = TwinStatus.Unknown;
+                entry.LastRaisedRealtime = 0f;
+                _states[anchor] = entry;
+                if (_suppressedCount > 0) _suppressedCount--;
+            }
+
+            TwinStatus status = CurrentStatus(anchor);
             TwinStatus prev = known ? entry.Status : TwinStatus.Unknown;
 
             if (!known || prev != status)
@@ -204,7 +265,15 @@ namespace SchoolTwin.Twin
                 if (!_alive.Contains(kv.Key)) _dead.Add(kv.Key);
             }
 
-            for (int i = 0; i < _dead.Count; i++) _states.Remove(_dead[i]);
+            for (int i = 0; i < _dead.Count; i++)
+            {
+                // 被抑制的点位销毁时也要把计数减回来，否则「断电抑制 N 个」只增不减，
+                // 面板上会一直挂着一个不存在的数字。
+                Entry e;
+                if (_states.TryGetValue(_dead[i], out e) && e.Suppressed && _suppressedCount > 0)
+                    _suppressedCount--;
+                _states.Remove(_dead[i]);
+            }
         }
 
         /// <summary>与面板 / 着色同口径：整体状态 + 沉默判定。</summary>

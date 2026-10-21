@@ -52,8 +52,37 @@ namespace SchoolTwin.Data
         private static readonly ConcurrentDictionary<string, float> s_overrides =
             new ConcurrentDictionary<string, float>();
 
+        /// <summary>
+        /// 被「断电」的点位：**整台设备一条样本都不发**。
+        ///
+        /// 【为什么用「停发」而不是「发一个 0」】这是断电和关灯的本质区别：
+        /// 关灯时设备还在，会继续上报 `Power=0`；断电时设备不在了，一个字节都没有。
+        /// 如果断电也发 0，那么"沉默 8 秒判离线"这条判据就永远走不到 ——
+        /// 而 P15 要证明的恰恰是"断电会表现为离线，但系统显示的是断电"。
+        ///
+        /// 【为什么键只有 TwinId、不带 metric】断电是整台设备的事，
+        /// 按指标停发会出现"功率停了、温度还在报"这种物理上不存在的状态。
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, byte> s_muted =
+            new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+
         private long _silenceUntilTicks;
         private volatile int _emittedTotal;
+
+        /// <summary>
+        /// 每次进入 Play 都把两张静态表清空。
+        ///
+        /// 【为什么这条不能省】「停发」的残留后果极其隐蔽：上一轮断过电的设备，
+        /// 这一轮开局就一个字节都不发，场景里表现为"这几个点位永远没数据"，
+        /// 而 Console 干干净净 —— 排查方向会被引到数据源/点位上，而不是这里。
+        /// 顺手把 override 也清了（它原来只在手动菜单里清，同一个坑）。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticsOnLoad()
+        {
+            s_muted.Clear();
+            s_overrides.Clear();
+        }
 
         public override string SourceName { get { return "Mock"; } }
         public int EmittedTotal { get { return _emittedTotal; } }
@@ -129,6 +158,11 @@ namespace SchoolTwin.Data
                 {
                     TwinPointDefinition point = points[i];
                     if (point == null || point.Metrics == null) continue;
+
+                    // 断电点位整台跳过：一条样本都不发。
+                    // 这个判断放在最外层（而不是逐个 metric），是为了让"整台设备消失"
+                    // 这件事在代码里也只有一处表达。
+                    if (s_muted.ContainsKey(point.TwinId)) continue;
 
                     for (int k = 0; k < point.Metrics.Count; k++)
                     {
@@ -238,6 +272,37 @@ namespace SchoolTwin.Data
         public static void ClearAllOverrides()
         {
             s_overrides.Clear();
+        }
+
+        /// <summary>
+        /// 停发 / 恢复某台设备的全部样本（断电模拟用）。
+        ///
+        /// 幂等：重复设同一个值什么都不发生 —— 调用方是每 0.5 秒对账一次的，
+        /// 不幂等的话日志和集合操作都会被无意义地重复触发。
+        /// </summary>
+        public static void SetMuted(string twinId, bool muted)
+        {
+            if (string.IsNullOrEmpty(twinId)) return;
+
+            if (muted) s_muted.TryAdd(twinId, 0);
+            else
+            {
+                byte ignored;
+                s_muted.TryRemove(twinId, out ignored);
+            }
+        }
+
+        public static bool IsMuted(string twinId)
+        {
+            return !string.IsNullOrEmpty(twinId) && s_muted.ContainsKey(twinId);
+        }
+
+        /// <summary>当前停发的点位数（自检 / 调试用）。</summary>
+        public static int MutedCount { get { return s_muted.Count; } }
+
+        public static void ClearAllMuted()
+        {
+            s_muted.Clear();
         }
 
         /// <summary>让数据源静默若干秒 —— 用于验收「拔掉数据源 → 显示离线而不是崩溃」。</summary>

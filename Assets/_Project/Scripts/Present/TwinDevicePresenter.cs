@@ -220,6 +220,17 @@ namespace SchoolTwin.Present
 
             TwinValue power;
             bool on = anchor.TryGetValue("Power", out power) && power.Value > 0.5f;
+
+            // 【P15】断电时灯必须是灭的。
+            //
+            // 断电后数据链路整台设备都停了，`TryGetValue` 读到的还是**断电前最后一条样本**
+            // （对灯来说就是"开着"）。不看可用性的话，闸都拉了、灯还亮着 ——
+            // 这是表现层最容易被抓住的一处"假"。
+            //
+            // 注意这**不是**在读命令状态（那条红线没破）：回路通断是设备侧的物理事实，
+            // 和"我点过开"完全是两件事。
+            if (!TwinCircuit.IsPowered(twinId)) on = false;
+
             ApplyLamp(v, on);
         }
 

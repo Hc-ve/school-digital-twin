@@ -288,9 +288,19 @@ namespace SchoolTwin.UI
 
             CommandState state = _center.StateOf(_anchor.TwinId);
             bool busy = CommandText.IsProgress(state);
-            SetInteractable(!busy);
 
-            if (busy)
+            // 断电（P15）：按钮禁用 + 明确写「断电」。
+            // 不写的话，用户看到的是"按钮灰着、状态写着已开" —— 自相矛盾，
+            // 而真实原因（这一层楼断电了）在总控面板上，卡片里一个字都没有。
+            bool dead = !TwinCircuit.IsPowered(_anchor.TwinId);
+            SetInteractable(!busy && !dead);
+
+            if (dead)
+            {
+                SetStatus(TwinCircuit.AvailabilityLabel(DeviceAvailability.PowerOff),
+                    TwinCircuit.AvailabilityColor(DeviceAvailability.PowerOff));
+            }
+            else if (busy)
             {
                 SetStatus(CommandText.ProgressLabel(state), TwinStatusPalette.TextMuted);
             }
@@ -349,6 +359,14 @@ namespace SchoolTwin.UI
         private void RefreshTemperature()
         {
             if (!_hasTemp || _tempValue == null) return;
+
+            if (!TwinCircuit.IsPowered(_anchor.TwinId))
+            {
+                _tempValue.text = "--";
+                if (_minusBtn != null) _minusBtn.interactable = false;
+                if (_plusBtn != null) _plusBtn.interactable = false;
+                return;
+            }
 
             TwinValue temp;
             if (!_anchor.TryGetValue("SetTemp", out temp))

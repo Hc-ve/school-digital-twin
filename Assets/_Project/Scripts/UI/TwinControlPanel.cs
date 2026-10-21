@@ -63,6 +63,7 @@ namespace SchoolTwin.UI
         private const float BaseFloorBtnH = 20f;
         private const float BaseBatchBtnW = 54f;
         private const float BaseBatchBtnH = 22f;
+        private const float BasePowerBtnW = 78f;
         private const float BaseBtnW = 38f;
         private const float BaseSmallBtnW = 20f;
         private const float BaseTempW = 44f;
@@ -138,6 +139,14 @@ namespace SchoolTwin.UI
         private Text _batchOnText, _batchOffText, _okText, _cancelText;
         private Button _batchOnBtn, _batchOffBtn, _okBtn, _cancelBtn;
 
+        /// <summary>回路开关按钮（P15）：[断 1F 电] / [恢复供电]。走 SBO 两步式。</summary>
+        private Image _powerBg;
+        private Text _powerText;
+        private Button _powerBtn;
+
+        /// <summary>SBO 弹窗。和面板同一个 GameObject，由面板负责建/拆。</summary>
+        private TwinSboDialog _sbo;
+
         private RectTransform _devViewport;
         private RectTransform _devContent;
         private ScrollRect _devScroll;
@@ -176,6 +185,15 @@ namespace SchoolTwin.UI
             public bool CanPower;
             public bool CanTemp;
             public bool InScope;
+
+            /// <summary>
+            /// 可用性（P15）：通电 / 断电 / 无响应。
+            ///
+            /// 【为什么存一份而不是每次现查】Refresh 里一行要读三四次（状态点、文字、按钮），
+            /// 每次都走一遍「房间 → 楼层 → 楼栋」的回路链，等于把同一件事算四遍。
+            /// 每轮 Refresh 算一次放进这里，行内所有判断都读它。
+            /// </summary>
+            public DeviceAvailability Avail;
 
             /// <summary>
             /// 最近一次被本机拒绝的原因（串行锁 / 不在白名单 / 回放中）。
@@ -263,11 +281,16 @@ namespace SchoolTwin.UI
             _batchOnBg = null; _batchOffBg = null; _okBg = null; _cancelBg = null;
             _batchOnText = null; _batchOffText = null; _okText = null; _cancelText = null;
             _batchOnBtn = null; _batchOffBtn = null; _okBtn = null; _cancelBtn = null;
+            _powerBg = null; _powerText = null; _powerBtn = null;
             _devViewport = null;
             _devContent = null;
             _devScroll = null;
             _empty = null;
             _grip = null;
+
+            // 弹窗的节点是面板的子节点，会跟着一起被销毁；这里只清引用并复位状态机，
+            // 否则重建面板后会冒出一个"上次没做完的断电操作"。
+            if (_sbo != null) _sbo.Detach();
 
             _floorBtnBgs.Clear();
             _floorBtnTexts.Clear();
@@ -316,6 +339,7 @@ namespace SchoolTwin.UI
             BuildRightHeader();
             BuildDevArea();
             BuildGrip();
+            BuildSbo();
 
             if (_userMoved)
             {
@@ -463,6 +487,28 @@ namespace SchoolTwin.UI
 
             _cancelBg = MakeBatchButton("ConfirmCancel", "取消", out _cancelText, out _cancelBtn);
             _cancelBtn.onClick.AddListener(OnCancelClicked);
+
+            // ---- 回路开关（P15）----
+            //
+            // 【为什么放在表头而不是左树每一行】左树的每一行都是"点一下切筛选"，
+            // 在同一个矩形里再塞一个按钮，误触率会高到不可接受 —— 而误触的后果是断电。
+            // 表头这个位置的含义很清楚：「对当前选中的范围做一件重事」，
+            // 和旁边的[全开][全关]是同一类操作，只是影响面更大。
+            _powerBg = TwinUIFactory.Block(_panel, "PowerSwitch", TwinStatusPalette.Track, true);
+            TwinUIFactory.Place(_powerBg.rectTransform, 0f, 0f, BasePowerBtnW * _scale, BaseBatchBtnH * _scale);
+
+            _powerBtn = _powerBg.gameObject.AddComponent<Button>();
+            _powerBtn.targetGraphic = _powerBg;
+            _powerBtn.transition = Selectable.Transition.ColorTint;
+            ApplyTint(_powerBtn);
+            _powerBtn.onClick.AddListener(OnPowerClicked);
+
+            _powerText = TwinUIFactory.Label(_powerBg.transform, "Text",
+                Mathf.Max(8, Mathf.RoundToInt(FsSmall * _scale)),
+                TextAnchor.MiddleCenter, TwinStatusPalette.TextPrimary);
+            TwinUIFactory.Stretch(_powerText.rectTransform);
+            _powerText.raycastTarget = false;
+            _powerText.text = "断电";
         }
 
         private Image MakeBatchButton(string name, string caption, out Text text, out Button button)
@@ -537,6 +583,17 @@ namespace SchoolTwin.UI
             resize.OnChanged = OnGeometryChanged;
 
             _grip.SetAsLastSibling();
+        }
+
+        /// <summary>
+        /// SBO 弹窗（P15）。挂在面板自己身上，由面板建、由面板拆 ——
+        /// 和告警历史/点位清单/总控面板同一个思路：不依赖 Inspector 配置。
+        /// </summary>
+        private void BuildSbo()
+        {
+            if (_sbo == null) _sbo = GetComponent<TwinSboDialog>();
+            if (_sbo == null) _sbo = gameObject.AddComponent<TwinSboDialog>();
+            _sbo.Build(_panel, _scale);
         }
 
         /// <summary>
@@ -732,6 +789,12 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(_batchOnBg.rectTransform, bx, btnY, btnW, btnH);
             TwinUIFactory.Place(_okBg.rectTransform, bx, btnY, btnW, btnH);
 
+            // 回路开关在最左边：它影响的是整个范围（可能是整层楼），
+            // 和[全开][全关]（只影响当前表里的可控设备）不是同一量级，视觉上要分开。
+            float powerW = BasePowerBtnW * s;
+            bx -= powerW + 10f * s;
+            TwinUIFactory.Place(_powerBg.rectTransform, bx, btnY, powerW, btnH);
+
             float headTextW = Mathf.Max(40f, (bx - 6f * s) - rightX);
             TwinUIFactory.Place(_rightTitle.rectTransform, rightX, bodyY, headTextW, headH);
 
@@ -742,6 +805,10 @@ namespace SchoolTwin.UI
 
             // ---- 缩放手柄 ----
             TwinUIFactory.Place(_grip, w - gripSize - 2f * s, h - gripSize - 2f * s, gripSize, gripSize);
+
+            // ---- SBO 弹窗 ----
+            // 跟着面板一起变：面板拉大，弹窗的名单就能多显示几行。
+            if (_sbo != null) _sbo.Layout(w, h, headerH, pad);
 
             LayoutRooms(treeW);
             LayoutRows(rightW, vpH);
@@ -866,12 +933,22 @@ namespace SchoolTwin.UI
             {
                 // 关掉时取消未确认的批量，避免「关掉面板再打开，突然冒出一个确认框」
                 _confirming = false;
+
+                // SBO 同理，而且更重要：**关窗等于放弃**。
+                // 不取消的话，10 秒倒计时会在面板关着的时候继续走，
+                // 用户再按 G 打开会看到一个"已就绪"的弹窗，而他已经忘了这件事。
+                if (_sbo != null) _sbo.Hide();
             }
         }
 
         private void OnFloorClicked(int floor)
         {
             if (_floorFilter == floor) return;
+
+            // SBO 进行中不许换楼层：弹窗里列的是"当前范围内的 N 台设备"，
+            // 底下悄悄换了范围，那张名单就成了假的 —— 而它正是让人做决定的依据。
+            if (_sbo != null && _sbo.IsActive) return;
+
             _floorFilter = floor;
             // 切楼层时如果当前选中的房间不在这一层，退回「全部」
             if (_selectedZone != null)
@@ -999,7 +1076,24 @@ namespace SchoolTwin.UI
             int n = 0;
             for (int i = 0; i < _devs.Count; i++)
             {
-                if (_devs[i] != null && _devs[i].CanPower) n++;
+                if (_devs[i] == null || !_devs[i].CanPower) continue;
+
+                // 断电的设备不算「可控目标」：点了也只会被命令中心拒掉。
+                // 把它算进「开 3 台设备？」里，用户点完发现只动了 2 台，会以为有 bug。
+                if (!TwinCircuit.IsPowered(_devs[i].Anchor.TwinId)) continue;
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>当前表里因断电而不能操作的设备数（表头提示用）。</summary>
+        private int CountPowerOffTargets()
+        {
+            int n = 0;
+            for (int i = 0; i < _devs.Count; i++)
+            {
+                if (_devs[i] == null || !_devs[i].CanPower) continue;
+                if (!TwinCircuit.IsPowered(_devs[i].Anchor.TwinId)) n++;
             }
             return n;
         }
@@ -1008,6 +1102,122 @@ namespace SchoolTwin.UI
         {
             if (_center == null) _center = TwinCommandCenter.Ensure();
             return _center;
+        }
+
+        // ================================================================ 回路（P15）
+
+        /// <summary>
+        /// 点表头的回路开关。
+        ///
+        /// 【为什么一定要走 SBO，不能像[全开]那样一句确认就完】影响面不同量级：
+        /// 房间级全开是 5 台灯/空调，楼层级断电是整层 15 台设备 + 5 个房间全黑。
+        /// 后者点错一次要现场去合闸，所以按 Spec §8.5 走「选择 → 就绪 → 执行」三段，
+        /// 中间那 10 秒就是留给人反悔的。
+        /// </summary>
+        private void OnPowerClicked()
+        {
+            if (_sbo == null) return;
+
+            string circuitId = TwinCircuit.CircuitOfSelection(_selectedZone, _floorFilter);
+            TwinCircuitNode node = TwinCircuit.Find(circuitId);
+            if (node == null) return;
+
+            bool targetOn = !node.On;    // 现在是合闸 → 这次是断电
+
+            List<string> names = new List<string>(16);
+            TwinCircuit.CollectDeviceNames(circuitId, names);
+
+            if (names.Count == 0)
+            {
+                // 不弹窗。弹出来再告诉人"这里没有设备"是浪费一次点击。
+                _batchResult = node.Title + " 范围内没有设备";
+                _batchResultUntil = Time.unscaledTime + 3f;
+                // 用 1 而不是 0：这样表头是警示色（黄）。写"没有设备"却显示绿色，
+                // 会让人以为是"一切正常"而不是"这里点不动"。
+                _batchFail = 1;
+                Refresh(true);
+                return;
+            }
+
+            TwinSboRequest req = new TwinSboRequest();
+            req.CircuitId = circuitId;
+            req.PowerOn = targetOn;
+            req.Subject = node.Title;
+            req.Title = (targetOn ? "断开 " : "恢复 ") + node.Title + (targetOn ? " 的电源" : " 的供电");
+            req.Targets = names;
+
+            string capturedId = circuitId;
+            bool capturedOn = targetOn;
+            req.Operate = delegate
+            {
+                TwinCircuit.SetSwitch(capturedId, capturedOn);
+                // 断/恢复都会改变整张表的可用性，必须重建条目（而不只是重刷文字）
+                _entriesDirty = true;
+            };
+
+            // 开始一次重操作时，先把 P14 的批量确认收掉 —— 两个"待确认"同时在屏幕上
+            // 是最容易点错的状态。
+            _confirming = false;
+            _sbo.Show(req);
+            Refresh(true);
+        }
+
+        /// <summary>表头那个按钮的文案与颜色：合闸时是「断电」（警示），断开时是「恢复供电」（正常）。</summary>
+        private void ApplyPowerButton()
+        {
+            if (_powerBg == null || _powerBtn == null) return;
+
+            string circuitId = TwinCircuit.CircuitOfSelection(_selectedZone, _floorFilter);
+            TwinCircuitNode node = TwinCircuit.Find(circuitId);
+
+            bool on = node == null || node.On;
+            bool parentDead = node != null && !TwinCircuit.ParentPowered(circuitId);
+
+            string caption;
+            if (node == null)
+            {
+                caption = "断电";
+            }
+            else if (parentDead)
+            {
+                // 上级断电时自己的闸没有意义：点了也不会亮，别让人白点两次。
+                caption = "上级已断电";
+            }
+            else if (!on)
+            {
+                caption = "恢复供电";
+            }
+            else if (_selectedZone != null)
+            {
+                caption = "断房间电";
+            }
+            else if (_floorFilter > 0)
+            {
+                caption = "断" + _floorFilter + "F电";
+            }
+            else
+            {
+                caption = "断全楼电";
+            }
+
+            SetCached(_powerText, caption);
+
+            // 断电动作是警示色（黄），恢复供电是正常色（绿）——
+            // 方向不同，颜色就不该一样，否则很容易点反。
+            Color bg;
+            if (parentDead) bg = TwinStatusPalette.Track;
+            else if (on)
+                bg = new Color(TwinStatusPalette.Warning.r, TwinStatusPalette.Warning.g,
+                               TwinStatusPalette.Warning.b, 0.20f);
+            else
+                bg = new Color(TwinStatusPalette.Normal.r, TwinStatusPalette.Normal.g,
+                               TwinStatusPalette.Normal.b, 0.22f);
+            if (_powerBg.color != bg) _powerBg.color = bg;
+
+            bool blocked = _sbo != null && _sbo.IsActive;
+            bool usable = node != null && !blocked && !parentDead;
+            if (_powerBtn.interactable != usable) _powerBtn.interactable = usable;
+            SetAlpha(_powerText, usable ? 1f : 0.45f);
         }
 
         // ================================================================ 刷新
@@ -1043,9 +1253,14 @@ namespace SchoolTwin.UI
             ApplyRoomRows(registry);
             ApplyDevRows(force);
             ApplyBatchLine();
+            ApplyPowerButton();
 
-            // 顶部汇总：总点位 / 异常
-            int abnormal = 0, total = 0;
+            // 顶部汇总：总点位 / 异常 / 断电
+            //
+            // 【为什么断电要单独数，不算进异常】断一层电会让 15 台设备全部 Offline，
+            // 混进「异常」里的话，一次人为拉闸看起来像 15 个故障 —— 而这正是 P15
+            // 要拆开的两件事：异常是"要人处理"，断电是"已知状态"。
+            int abnormal = 0, total = 0, powerOff = 0;
             if (registry != null)
             {
                 IReadOnlyList<TwinAnchor> all = registry.All;
@@ -1055,6 +1270,7 @@ namespace SchoolTwin.UI
                     if (a == null) continue;
                     if (a.TwinId != null && a.TwinId.StartsWith("BAK", StringComparison.Ordinal)) continue;
                     total++;
+                    if (!TwinCircuit.IsPowered(a.TwinId)) { powerOff++; continue; }
                     if (TwinStatusPalette.NeedsAttention(a.Status)) abnormal++;
                 }
             }
@@ -1062,6 +1278,7 @@ namespace SchoolTwin.UI
             _sb.Length = 0;
             _sb.Append(TwinSiteLayout.DefaultBuilding).Append(" · ").Append(total).Append(" 个点位");
             if (abnormal > 0) _sb.Append(" · ").Append(abnormal).Append(" 个异常");
+            if (powerOff > 0) _sb.Append(" · ").Append(powerOff).Append(" 台断电");
             SetCached(_sub, _sb.ToString());
 
             // 正向确认：让「面板到底有没有数据」在 Console 里有一个明确答案。
@@ -1076,11 +1293,16 @@ namespace SchoolTwin.UI
             }
 
             _sb.Length = 0;
-            _sb.Append(abnormal > 0 ? "异常 " + abnormal + " 个" : "全部正常");
+            if (abnormal > 0) _sb.Append("异常 ").Append(abnormal).Append(" 个");
+            else if (powerOff > 0) _sb.Append(powerOff).Append(" 台断电");
+            else _sb.Append("全部正常");
             SetCached(_summary, _sb.ToString());
             if (_summary != null)
             {
-                _summary.color = abnormal > 0 ? TwinStatusPalette.Warning : TwinStatusPalette.TextMuted;
+                _summary.color = abnormal > 0
+                    ? TwinStatusPalette.Warning
+                    : (powerOff > 0 ? TwinCircuit.AvailabilityColor(DeviceAvailability.PowerOff)
+                                    : TwinStatusPalette.TextMuted);
             }
 
             if (_empty != null) _empty.gameObject.SetActive(_devs.Count == 0);
@@ -1223,13 +1445,29 @@ namespace SchoolTwin.UI
             for (int i = 0; i < _floorBtnBgs.Count; i++)
             {
                 bool active = _floorBtnValues[i] == _floorFilter;
-                Color bg = active ? new Color(1f, 1f, 1f, 0.18f) : TwinStatusPalette.Track;
-                if (_floorBtnBgs[i] != null && _floorBtnBgs[i].color != bg) _floorBtnBgs[i].color = bg;
-                if (_floorBtnTexts[i] != null)
+
+                // 断电的楼层直接在筛选条上标出来：不然要一路点进去才发现"整层都是黑的"。
+                TwinCircuitNode floorNode = _floorBtnValues[i] > 0
+                    ? TwinCircuit.Find(TwinCircuit.FloorId(_floorBtnValues[i]))
+                    : null;
+                bool dead = floorNode != null && !floorNode.On;
+
+                Color bg;
+                Color fg;
+                if (dead)
                 {
-                    Color c = active ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextSecondary;
-                    if (_floorBtnTexts[i].color != c) _floorBtnTexts[i].color = c;
+                    bg = new Color(TwinStatusPalette.Warning.r, TwinStatusPalette.Warning.g,
+                                   TwinStatusPalette.Warning.b, active ? 0.30f : 0.16f);
+                    fg = TwinStatusPalette.Warning;
                 }
+                else
+                {
+                    bg = active ? new Color(1f, 1f, 1f, 0.18f) : TwinStatusPalette.Track;
+                    fg = active ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextSecondary;
+                }
+
+                if (_floorBtnBgs[i] != null && _floorBtnBgs[i].color != bg) _floorBtnBgs[i].color = bg;
+                if (_floorBtnTexts[i] != null && _floorBtnTexts[i].color != fg) _floorBtnTexts[i].color = fg;
             }
         }
 
@@ -1253,9 +1491,24 @@ namespace SchoolTwin.UI
 
                 if (!string.Equals(r.Name.text, name, StringComparison.Ordinal)) r.Name.text = name;
 
-                _sb.Length = 0;
-                _sb.Append(devices).Append(" 台");
-                SetCached(r.Count, _sb.ToString());
+                // 断电的房间在左树里就要看得出来，否则用户得逐个点进去才发现"这间是黑的"。
+                // 用「断电」顶掉台数而不是追加：一行只有这么宽，两个信息抢位置时
+                // 「这间没电」比「这间有几台」重要得多。
+                bool roomDead = !isAll && !TwinCircuit.IsPoweredZone(zone);
+
+                if (roomDead)
+                {
+                    SetCached(r.Count, "断电");
+                    if (r.Count != null) r.Count.color = TwinCircuit.AvailabilityColor(DeviceAvailability.PowerOff);
+                }
+                else
+                {
+                    _sb.Length = 0;
+                    _sb.Append(devices).Append(" 台");
+                    SetCached(r.Count, _sb.ToString());
+                    if (r.Count != null && r.Count.color != TwinStatusPalette.TextMuted)
+                        r.Count.color = TwinStatusPalette.TextMuted;
+                }
 
                 bool selected = isAll
                     ? _selectedZone == null
@@ -1263,8 +1516,11 @@ namespace SchoolTwin.UI
                 Color bg = selected ? new Color(1f, 1f, 1f, 0.10f) : TwinStatusPalette.Transparent;
                 if (r.Bg.color != bg) r.Bg.color = bg;
 
-                // 选中项文字提亮到主色，未选中压到次要色 —— 只靠 10% 白的底差在小面板上不够醒目
-                r.Name.color = selected ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextSecondary;
+                // 选中项文字提亮到主色，未选中压到次要色 —— 只靠 10% 白的底差在小面板上不够醒目。
+                // 断电的房间再压一档（比未选中还暗），一眼能看出"这间现在不能操作"。
+                r.Name.color = roomDead
+                    ? TwinStatusPalette.TextMuted
+                    : (selected ? TwinStatusPalette.TextPrimary : TwinStatusPalette.TextSecondary);
             }
         }
 
@@ -1314,14 +1570,23 @@ namespace SchoolTwin.UI
 
                 TwinAnchor a = e.Anchor;
 
+                // ---- 可用性（P15）：每轮算一次，行内所有判断都读它 ----
+                e.Avail = TwinCircuit.AvailabilityOf(a.TwinId);
+                bool dead = e.Avail == DeviceAvailability.PowerOff;
+
                 // ---- 状态点 ----
-                Color dotColor = TwinStatusPalette.Of(a.Status);
+                // 断电时不取 TwinStatus 的颜色：断电 8 秒后状态会自己变 Offline，
+                // 但"断电"和"离线"要给不同的灰 —— 前者是人为状态，后者是链路故障。
+                Color dotColor = dead
+                    ? TwinCircuit.AvailabilityColor(DeviceAvailability.PowerOff)
+                    : TwinStatusPalette.Of(a.Status);
                 if (r.Dot.color != dotColor) r.Dot.color = dotColor;
 
                 // ---- 名字（窗口拉窄要截断，不能溢出到按钮上）----
                 float nameW = r.Name.rectTransform.sizeDelta.x;
                 string name = TwinUIFactory.Truncate(a.DisplayName, fsName, nameW);
                 if (!string.Equals(r.Name.text, name, StringComparison.Ordinal)) r.Name.text = name;
+                r.Name.color = dead ? TwinStatusPalette.TextMuted : TwinStatusPalette.TextPrimary;
 
                 // ---- 状态文字：颜色只表示结果，过程用文字 ----
                 string text;
@@ -1332,6 +1597,13 @@ namespace SchoolTwin.UI
                 {
                     text = e.RejectText;
                     color = TwinStatusPalette.Alarm;
+                }
+                else if (dead)
+                {
+                    // 断电优先于命令状态：断电期间点按钮会被命令中心当场拒掉，
+                    // 那一行本来会显示"设备已断电"三秒然后回到"已开"—— 而"已开"是断电前的旧值。
+                    text = TwinCircuit.AvailabilityLabel(e.Avail);
+                    color = TwinCircuit.AvailabilityColor(e.Avail);
                 }
                 else
                 {
@@ -1359,6 +1631,9 @@ namespace SchoolTwin.UI
                             break;
                         default:
                             text = PowerSummary(e);
+                            // 通电但命令超时 → 补一句"无响应"。它不改按钮可用性
+                            // （设备可能只是慢），但能解释"为什么刚才点了没反应"。
+                            if (e.Avail == DeviceAvailability.Unreachable) text += " · 无响应";
                             color = TwinStatusPalette.TextSecondary;
                             break;
                     }
@@ -1391,16 +1666,19 @@ namespace SchoolTwin.UI
 
                     // 没有数据时两个都允许点（状态未知不等于状态是关）
                     bool known = a.HasData;
-                    if (r.BtnOnC != null) r.BtnOnC.interactable = !busy && (!known || !on);
-                    if (r.BtnOffC != null) r.BtnOffC.interactable = !busy && (!known || on);
+                    if (r.BtnOnC != null) r.BtnOnC.interactable = !busy && !dead && (!known || !on);
+                    if (r.BtnOffC != null) r.BtnOffC.interactable = !busy && !dead && (!known || on);
                     SetAlpha(r.TxtOn, r.BtnOnC != null && r.BtnOnC.interactable ? 1f : 0.4f);
                     SetAlpha(r.TxtOff, r.BtnOffC != null && r.BtnOffC.interactable ? 1f : 0.4f);
                 }
 
                 if (hasTemp)
                 {
-                    TwinValue temp;
-                    if (a.TryGetValue("SetTemp", out temp))
+                    // 注意不能写成 `bool ok = !dead && a.TryGetValue(..., out temp);`：
+                    // 短路求值时 temp 没有被赋值，C# 会直接报 CS0170。先给默认值。
+                    TwinValue temp = default(TwinValue);
+                    bool hasTempValue = !dead && a.TryGetValue("SetTemp", out temp);
+                    if (hasTempValue)
                     {
                         _sb.Length = 0;
                         _sb.Append(Mathf.Round(temp.Value).ToString("0")).Append("°C");
@@ -1431,9 +1709,10 @@ namespace SchoolTwin.UI
             // 批量结果优先显示几秒，然后再回到房间标题
             if (!string.IsNullOrEmpty(_batchResult) && Time.unscaledTime < _batchResultUntil)
             {
-                SetCached(_rightTitle, _batchResult);
+                SetTitleText(_batchResult);
                 _rightTitle.color = _batchFail > 0 ? TwinStatusPalette.Warning : TwinStatusPalette.Normal;
                 SetBatchButtonsVisible(false, false);
+                SetPowerButtonVisible(false);
                 return;
             }
             if (!string.IsNullOrEmpty(_batchResult)) _batchResult = "";
@@ -1444,9 +1723,10 @@ namespace SchoolTwin.UI
             {
                 _sb.Length = 0;
                 _sb.Append(_confirmValue ? "开 " : "关 ").Append(targets).Append(" 台设备？");
-                SetCached(_rightTitle, _sb.ToString());
+                SetTitleText(_sb.ToString());
                 _rightTitle.color = TwinStatusPalette.TextPrimary;
                 SetBatchButtonsVisible(false, true);
+                SetPowerButtonVisible(false);
                 return;
             }
 
@@ -1467,18 +1747,20 @@ namespace SchoolTwin.UI
                     Debug.Log("[TwinPanel] " + _batchResult);
 
                     // 立刻显示结果，不要「先闪一帧房间名、0.2 秒后才变结果」
-                    SetCached(_rightTitle, _batchResult);
+                    SetTitleText(_batchResult);
                     _rightTitle.color = _batchFail > 0 ? TwinStatusPalette.Warning : TwinStatusPalette.Normal;
                     SetBatchButtonsVisible(false, false);
+                    SetPowerButtonVisible(false);
                     return;
                 }
                 else
                 {
                     _sb.Length = 0;
                     _sb.Append("执行中 ").Append(ok + fail).Append("/").Append(ok + fail + pending);
-                    SetCached(_rightTitle, _sb.ToString());
+                    SetTitleText(_sb.ToString());
                     _rightTitle.color = TwinStatusPalette.TextSecondary;
                     SetBatchButtonsVisible(false, false);
+                    SetPowerButtonVisible(false);
                     return;
                 }
             }
@@ -1494,14 +1776,42 @@ namespace SchoolTwin.UI
                 _sb.Append(TwinSiteLayout.Find(_selectedZone).RoomName);
             }
             _sb.Append(" · ").Append(_devs.Count).Append(" 台");
-            if (targets > 0) _sb.Append("（").Append(targets).Append(" 台可控）");
-            SetCached(_rightTitle, _sb.ToString());
+
+            int off = CountPowerOffTargets();
+            if (targets > 0 || off > 0)
+            {
+                _sb.Append("（");
+                if (targets > 0) _sb.Append("可控 ").Append(targets);
+                if (targets > 0 && off > 0) _sb.Append(" · ");
+                if (off > 0) _sb.Append("断电 ").Append(off);
+                _sb.Append("）");
+            }
+            SetTitleText(_sb.ToString());
             _rightTitle.color = TwinStatusPalette.TextPrimary;
 
             SetBatchButtonsVisible(targets > 0, false);
+            SetPowerButtonVisible(true);
 
             if (_batchOnBtn != null) _batchOnBtn.interactable = targets > 0;
             if (_batchOffBtn != null) _batchOffBtn.interactable = targets > 0;
+        }
+
+        /// <summary>
+        /// 表头那行文字。**必须截断** —— Legacy Text 的 Overflow 模式不会换行也不会省略，
+        /// 表头挤了三个按钮之后，长房间名会直接画到按钮上面（P4 的老毛病）。
+        /// </summary>
+        private void SetTitleText(string value)
+        {
+            if (_rightTitle == null) return;
+            string fitted = TwinUIFactory.Truncate(value, _rightTitle.fontSize,
+                _rightTitle.rectTransform.sizeDelta.x);
+            SetCached(_rightTitle, fitted);
+        }
+
+        private void SetPowerButtonVisible(bool visible)
+        {
+            if (_powerBg == null) return;
+            if (_powerBg.gameObject.activeSelf != visible) _powerBg.gameObject.SetActive(visible);
         }
 
         private void SetBatchButtonsVisible(bool batch, bool confirm)
