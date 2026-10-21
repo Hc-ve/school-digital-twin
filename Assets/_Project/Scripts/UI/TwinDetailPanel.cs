@@ -149,6 +149,12 @@ namespace SchoolTwin.UI
         private const float BaseChipWidth = 86f;
         private const float BaseChipHeight = 28f;
 
+        // ---- 卡片当窗口用：标题栏拖动 / 右上角关闭 / 右下角缩放 ----
+        private const float BaseCardCloseSize = 22f;
+        private const float BaseCardGripSize = 20f;
+        /// <summary>卡片宽度下限。再窄的话量程提示那行会挤成一团。</summary>
+        private const float BaseCardMinWidth = 340f;
+
         // ---- 底部数据源切换条 ----
         //
         // 为什么放左下角：右上角是详情卡片、右下角是告警面板，
@@ -218,7 +224,10 @@ namespace SchoolTwin.UI
         private float _scaledPanelGap;
         private float _scaledChipWidth;
         private float _scaledChipHeight;
-        /// <summary>标题右侧要让出的宽度（状态胶囊 + 间隙），供 Truncate 计算可用字数。</summary>
+        private float _scaledCardCloseSize;
+        private float _scaledCardGripSize;
+        private float _scaledCardMinWidth;
+        /// <summary>标题右侧要让出的宽度（状态胶囊 + 关闭按钮 + 间隙），供 Truncate 计算可用字数。</summary>
         private float _scaledChipSpace;
 
         private int _scaledFsTitle;
@@ -444,7 +453,12 @@ namespace SchoolTwin.UI
             _scaledPanelGap = BasePanelGap * s;
             _scaledChipWidth = BaseChipWidth * s;
             _scaledChipHeight = BaseChipHeight * s;
-            _scaledChipSpace = _scaledChipWidth + 8f * s;
+            _scaledCardCloseSize = BaseCardCloseSize * s;
+            _scaledCardGripSize = BaseCardGripSize * s;
+            _scaledCardMinWidth = BaseCardMinWidth * s;
+            // 标题右侧要让出的宽度：胶囊 + × + 两个间隙。
+            // 漏掉 × 的话标题会一路压到关闭按钮底下（Legacy Text 是 Overflow，不会自己换行）。
+            _scaledChipSpace = _scaledChipWidth + _scaledCardCloseSize + 14f * s;
 
             _scaledFsTitle = ScaleFont(FsTitle, s);
             _scaledFsChip = ScaleFont(FsChip, s);
@@ -483,6 +497,34 @@ namespace SchoolTwin.UI
         private Image _divider1;
         private Image _divider2;
         private Text _footer;
+
+        // ---- 卡片当窗口：拖动条 / 关闭按钮 / 右下角缩放 ----
+        private RectTransform _cardDragBar;
+        private RectTransform _cardClose;
+        private RectTransform _cardGrip;
+        private TwinWindowHandle _cardResize;
+
+        /// <summary>用户动过卡片没有。动过就切成自由定位，不再跟右上角锚点走。</summary>
+        private bool _cardUserMoved;
+        /// <summary>
+        /// 用户摆的位置（自由定位下的 anchoredPosition）。
+        ///
+        /// 【为什么必须存】重建界面（切缩放 / 换分辨率）会新建一个 _card 节点，
+        /// 它的位置是默认的左上角。只恢复尺寸不恢复位置的话，重建后卡片会「跳」到屏幕左上角。
+        /// </summary>
+        private Vector2 _cardUserPos;
+        /// <summary>用户拉出来的宽度。0 = 没动过，用 <see cref="_scaledCardWidth"/>。</summary>
+        private float _cardUserW;
+        /// <summary>用户拉出来的高度。0 = 没动过，高度跟内容走。</summary>
+        private float _cardUserH;
+        /// <summary>被 × 关掉了吗。选中新点位 / 按 F4 会重新打开。</summary>
+        private bool _cardClosed;
+        /// <summary>上一次看到的点选计数。用来实现「点任意点位把卡片叫回来」。</summary>
+        private int _pickStamp = -1;
+        /// <summary>最近一次算出来的「内容需要多高」。高度下限就是它，永远不裁内容。</summary>
+        private float _cardContentH;
+        /// <summary>告警面板当前高度。用来给卡片高度设上限，免得把告警面板顶出屏幕。</summary>
+        private float _alarmPanelH;
 
         private RectTransform _alarmPanel;
         private Text _alarmTitle;
@@ -686,6 +728,16 @@ namespace SchoolTwin.UI
             _divider1 = null;
             _divider2 = null;
             _footer = null;
+
+            // 卡片窗口的把手节点会跟着 _uiRoot 一起销毁，引用必须显式清。
+            // （_cardUserMoved / _cardUserW / _cardUserH 是「用户摆过的位置」，要跨重建保留，
+            //   所以这里不清 —— 重建后他还想看到自己拉出来的大小。）
+            _cardDragBar = null;
+            _cardClose = null;
+            _cardGrip = null;
+            _cardResize = null;
+            _cardContentH = 0f;
+            _alarmPanelH = 0f;
             _alarmPanel = null;
             _alarmTitle = null;
             _alarmEmpty = null;
@@ -735,6 +787,13 @@ namespace SchoolTwin.UI
         {
             if (Input.GetKeyDown(_toggleKey)) SetVisible(!_visible);
             if (!_visible) return;
+
+            // 点了任意点位（哪怕还是同一个）→ 把被 × 关掉的卡片叫回来
+            if (_pickStamp != TwinPicker.PickStamp)
+            {
+                _pickStamp = TwinPicker.PickStamp;
+                ReopenCard();
+            }
 
             // 选中变化（TwinPicker 是唯一的选择来源，面板只读它）
             TwinAnchor current = TwinPicker.Selected;
@@ -836,6 +895,187 @@ namespace SchoolTwin.UI
                 rt.position += new Vector3(dx, dy, 0f);
         }
 
+        // ================================================================ 卡片当窗口
+        //
+        // 拖动 / 拉伸 / 关闭三件事的**通用实现**在 TwinWindowHandle 里（告警历史也在用它），
+        // 这里只负责两件它管不到的事：
+        //   ① 内容要按新宽度重排（卡片宽度会变，所有 Place 的宽度都得跟着变）；
+        //   ② 高度下限 = 内容需要的高度，用户永远拉不出「内容被裁掉」的状态。
+
+        /// <summary>卡片当前宽度：用户拉过就用他拉的，否则用基准宽度。</summary>
+        private float CardWidth
+        {
+            get { return _cardUserW > 0f ? _cardUserW : _scaledCardWidth; }
+        }
+
+        /// <summary>
+        /// 头部排版：标题 / 副标题 / 状态胶囊 / × / 拖动条 / 第一条分隔线 / 提示文字。
+        ///
+        /// 【为什么单独成一个方法】这些元素全都依赖卡片宽度。卡片变成可拉伸之后，
+        /// 「按宽度摆一次」这件事会重复发生，散在各处就一定会漏掉某个元素（漏了不报错，
+        /// 只是拉宽之后那处还停在旧位置）。
+        /// </summary>
+        private void PlaceCardChrome(float w)
+        {
+            if (_card == null) return;
+
+            float s = _activeScale;
+            float closeSize = _scaledCardCloseSize;
+            float closeX = w - _scaledPad - closeSize;
+            float chipX = closeX - 6f * s - _scaledChipWidth;
+            float titleW = Mathf.Max(40f, w - _scaledPad * 2f - _scaledChipSpace);
+
+            TwinUIFactory.Place(_title.rectTransform, _scaledPad, _scaledTitleY,
+                titleW, _scaledTitleY + _scaledFsTitle + 6f);
+
+            // 标题要按**当前**宽度重新截断。Legacy Text 是 Overflow，不截就直接压到胶囊上。
+            if (_selected != null)
+                SetCached(_title, ref _cachedTitle,
+                    TwinUIFactory.Truncate(_selected.DisplayName, _scaledFsTitle, titleW));
+
+            TwinUIFactory.Place(_chip.rectTransform, chipX, _scaledTitleY + 1f,
+                _scaledChipWidth, _scaledChipHeight);
+            TwinUIFactory.Place(_cardClose, closeX, _scaledTitleY + 2f * s, closeSize, closeSize);
+
+            // 拖动条：盖住标题 + 副标题。右端停在 × 左边 —— 重叠的话，
+            // 鼠标一移到 × 上就退出拖动区，标题栏高亮会在这一瞬间闪掉。
+            float dragX = 5f * s;
+            float dragRight = closeX - 4f * s;
+            float dragH = _scaledDivider1Y - 6f * s;
+            TwinUIFactory.Place(_cardDragBar, dragX, 3f * s,
+                Mathf.Max(0f, dragRight - dragX), Mathf.Max(1f, dragH));
+
+            TwinUIFactory.Place(_subtitle.rectTransform, _scaledPad, _scaledSubtitleY,
+                w - _scaledPad * 2f, _scaledFsSubtitle + 7f);
+            TwinUIFactory.Place(_divider1.rectTransform, _scaledPad, _scaledDivider1Y,
+                w - _scaledPad * 2f, 1f);
+            TwinUIFactory.Place(_hint.rectTransform, _scaledPad, _scaledMetricsTop,
+                w - _scaledPad * 2f, _scaledRowHeight * 2f);
+        }
+
+        /// <summary>
+        /// 指标行按当前宽度重排。
+        ///
+        /// 从 <see cref="EnsureMetricRow"/> 里抽出来的 —— 原来这些 Place 只在「建行」时跑一次，
+        /// 卡片宽度一变就全停在旧宽度上（量程条比卡片还宽，直接画到卡片外面）。
+        /// </summary>
+        private void LayoutMetricRow(MetricRow row, int index, float w)
+        {
+            if (row == null || row.Root == null) return;
+
+            float s = _activeScale;
+            float width = w - _scaledPad * 2f;
+            float top = _scaledMetricsTop + index * (_scaledRowHeight + _scaledRowGap);
+
+            TwinUIFactory.Place(row.Root, _scaledPad, top, width, _scaledRowHeight);
+            row.BarWidth = width;
+
+            TwinUIFactory.Place(row.Track.rectTransform, 0f, _scaledBarY, width, _scaledBarHeight);
+            TwinUIFactory.Place(row.Marker.rectTransform, 0f, _scaledBarY - 3f * s, 3f * s, 14f * s);
+            TwinUIFactory.Place(row.Name.rectTransform, 0f, 1f, width * 0.62f, _scaledFsMetricName + 9f);
+            TwinUIFactory.Place(row.Value.rectTransform, 0f, 0f, width, _scaledFsMetricValue + 8f);
+            TwinUIFactory.Place(row.Hint.rectTransform, 0f, _scaledBarY + 12f * s,
+                width, _scaledFsMetricHint + 5f);
+            TwinUIFactory.Place((RectTransform)row.Spark.transform, 0f, _scaledSparkY,
+                width, _scaledSparkHeight);
+        }
+
+        /// <summary>
+        /// 把卡片摆到最终位置和尺寸。
+        ///
+        /// 高度有两个约束：
+        ///   · 下限 = 内容需要的高度（<paramref name="contentHeight"/>）—— 绝不裁内容；
+        ///   · 上限 = 画布高度减去「顶边距 + 间隙 + 告警面板高度」——
+        ///     卡片拉太高会把下面的告警面板顶出屏幕，而告警面板是自动定位的，用户没法救。
+        /// </summary>
+        private void ApplyCardGeometry(float contentHeight)
+        {
+            if (_card == null) return;
+
+            _cardContentH = Mathf.Max(1f, contentHeight);
+
+            float w = CardWidth;
+            float h = Mathf.Max(_cardContentH, _cardUserH);
+
+            float maxH = ViewportHeight() - (_scaledScreenMargin + _scaledExtraTop)
+                         - _scaledPanelGap - _alarmPanelH;
+            if (maxH > _cardContentH) h = Mathf.Min(h, maxH);
+
+            // 缩放手柄的下限也要跟着内容走，否则用户能把卡片拉到「内容被切掉」的尺寸
+            if (_cardResize != null)
+                _cardResize.MinSize = new Vector2(_scaledCardMinWidth, _cardContentH);
+
+            if (_cardUserMoved)
+            {
+                // 用户动过 → 自由定位。
+                // FreeAnchor 只在第一次真的换锚点，之后是空操作；重建界面后它也负责
+                // 把「锚右上」的新节点切成左上锚点，否则 anchoredPosition 的含义会变。
+                TwinWindowHandle.FreeAnchor(_card);
+                _card.sizeDelta = new Vector2(w, h);
+                _card.anchoredPosition = _cardUserPos;
+                TwinWindowHandle.ClampToParent(_card);
+            }
+            else
+            {
+                TwinUIFactory.AnchorTopRight(_card,
+                    _scaledScreenMargin + _scaledExtraRight,
+                    _scaledScreenMargin + _scaledExtraTop, w, h);
+            }
+
+            float grip = _scaledCardGripSize;
+            TwinUIFactory.Place(_cardGrip, w - grip - 2f * _activeScale,
+                h - grip - 2f * _activeScale, grip, grip);
+        }
+
+        /// <summary>拖动 / 拉伸回调（由 <see cref="TwinWindowHandle"/> 每帧调用）。</summary>
+        private void OnCardGeometryChanged()
+        {
+            if (_card == null) return;
+
+            _cardUserMoved = true;
+            _cardUserPos = _card.anchoredPosition;
+
+            float w = _card.sizeDelta.x;
+            float h = _card.sizeDelta.y;
+
+            // 【为什么要拿「当前值 vs 上次的值」比较，而不是无条件记下来】
+            // 拖动和拉伸共用这一个回调。纯移动时尺寸没变，如果也照抄一遍，
+            // 就会把「用户没调过高度」变成「用户把高度定成了这个值」——
+            // 之后换一个指标更少的点位，卡片就再也不会自己缩回去，下面留一大块空白。
+            float prevW = _cardUserW > 0f ? _cardUserW : _scaledCardWidth;
+            float prevH = _cardUserH > 0f ? _cardUserH : _cardContentH;
+
+            bool widthChanged = !Mathf.Approximately(w, prevW);
+            bool heightChanged = !Mathf.Approximately(h, prevH);
+
+            if (widthChanged) _cardUserW = Mathf.Max(_scaledCardMinWidth, w);
+            if (heightChanged) _cardUserH = Mathf.Max(_cardContentH, h);
+
+            // 只移动不改尺寸时不用重排 —— 重排要遍历全部指标行，拖动期间每帧跑一遍纯浪费
+            if (widthChanged || heightChanged) RelayoutCard();
+        }
+
+        /// <summary>按当前宽度把卡片内容全部重排一遍（不动选中状态、不清趋势线历史）。</summary>
+        private void RelayoutCard()
+        {
+            if (!_built) return;
+            ApplySelection(true);
+        }
+
+        private void OnCardCloseClicked()
+        {
+            _cardClosed = true;
+            if (_card != null) _card.gameObject.SetActive(false);
+        }
+
+        /// <summary>把被 × 关掉的卡片叫回来。点任意点位或按 F4 都会走到这里。</summary>
+        private void ReopenCard()
+        {
+            if (!_cardClosed) return;
+            _cardClosed = false;
+            if (_card != null) _card.gameObject.SetActive(_visible);
+        }
+
         // ================================================================ 环境准备
 
         private RectTransform EnsureCanvas()
@@ -928,16 +1168,27 @@ namespace SchoolTwin.UI
             TwinUIFactory.Stretch(_cardBg.rectTransform);
             _cardGroup = _card.gameObject.AddComponent<CanvasGroup>();
 
+            // ---- 拖动条：必须建在背景之后、所有文字之前 ----
+            // ① 在背景之后 → 悬停高亮时压得住背景；
+            // ② 在文字之前 → 文字渲染在它上面（文字全都 raycastTarget=false，
+            //    所以点在字上照样能拖，不会被文字把事件吃掉）。
+            Image cardDragImg = TwinUIFactory.Block(_card, "CardDragBar", TwinStatusPalette.Transparent, true);
+            _cardDragBar = cardDragImg.rectTransform;
+            TwinWindowHandle cardDrag = _cardDragBar.gameObject.AddComponent<TwinWindowHandle>();
+            cardDrag.Window = _card;
+            cardDrag.HandleMode = TwinWindowHandle.Mode.Move;
+            cardDrag.HoverTarget = cardDragImg;
+            cardDrag.OnChanged = OnCardGeometryChanged;
+
+            // 下面这些节点只负责「建出来」，位置和尺寸统一交给 PlaceCardChrome() /
+            // LayoutCardGeometry() —— 卡片现在是可拉伸的窗口，宽度会变，
+            // 所以排版只能有一处来源（否则拉一次就会出现两套坐标打架）。
             _title = TwinUIFactory.Label(_card, "Title", _scaledFsTitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextPrimary, FontStyle.Bold);
-            TwinUIFactory.Place(_title.rectTransform, _scaledPad, _scaledTitleY,
-                _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace, _scaledTitleY + _scaledFsTitle + 6f);
 
             _chip = TwinUIFactory.Rounded(_card, "StatusChip", 12f * _activeScale,
                 TwinStatusPalette.Unknown, TwinStatusPalette.Unknown,
                 TwinStatusPalette.Unknown, 1f, false);
-            TwinUIFactory.Place(_chip.rectTransform, _scaledCardWidth - _scaledPad - _scaledChipWidth,
-                _scaledTitleY + 1f, _scaledChipWidth, _scaledChipHeight);
 
             _chipText = TwinUIFactory.Label(_chip.transform, "ChipText", _scaledFsChip, TextAnchor.MiddleCenter,
                 TwinStatusPalette.TextPrimary, FontStyle.Bold);
@@ -945,26 +1196,49 @@ namespace SchoolTwin.UI
 
             _subtitle = TwinUIFactory.Label(_card, "Subtitle", _scaledFsSubtitle, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextSecondary);
-            TwinUIFactory.Place(_subtitle.rectTransform, _scaledPad, _scaledSubtitleY,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFsSubtitle + 7f);
 
             _divider1 = TwinUIFactory.Block(_card, "Divider1", TwinStatusPalette.Divider, false);
-            TwinUIFactory.Place(_divider1.rectTransform, _scaledPad, _scaledDivider1Y,
-                _scaledCardWidth - _scaledPad * 2f, 1f);
 
             _hint = TwinUIFactory.Label(_card, "Hint", _scaledFsHint, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted, FontStyle.Normal, HorizontalWrapMode.Wrap);
-            TwinUIFactory.Place(_hint.rectTransform, _scaledPad, _scaledMetricsTop,
-                _scaledCardWidth - _scaledPad * 2f, _scaledRowHeight * 2f);
 
             _divider2 = TwinUIFactory.Block(_card, "Divider2", TwinStatusPalette.Divider, false);
-            TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, 0f,
-                _scaledCardWidth - _scaledPad * 2f, 1f);
 
             _footer = TwinUIFactory.Label(_card, "Footer", _scaledFsFooter, TextAnchor.UpperLeft,
                 TwinStatusPalette.TextMuted);
-            TwinUIFactory.Place(_footer.rectTransform, _scaledPad, 0f,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFooterHeight);
+
+            // ---- 关闭按钮（右上角，胶囊右边）----
+            // 建在这里而不是最前面：它是后建的兄弟节点，渲染与射线都压在拖动条和胶囊上面。
+            Image closeImg = TwinUIFactory.Block(_card, "CardClose", TwinStatusPalette.Track, true);
+            _cardClose = closeImg.rectTransform;
+            Button closeBtn = closeImg.gameObject.AddComponent<Button>();
+            closeBtn.targetGraphic = closeImg;
+            closeBtn.transition = Selectable.Transition.None;
+            closeBtn.onClick.AddListener(OnCardCloseClicked);
+
+            Text closeText = TwinUIFactory.Label(_cardClose, "X", _scaledFsChip, TextAnchor.MiddleCenter,
+                TwinStatusPalette.TextSecondary);
+            TwinUIFactory.Stretch(closeText.rectTransform);
+            closeText.text = "×";
+
+            // ---- 右下角缩放手柄 ----
+            // 两根细线拼成「◢」：纯色块会被当成内容，细线才像把手。
+            Image gripHit = TwinUIFactory.Block(_card, "CardGrip", TwinStatusPalette.Transparent, true);
+            _cardGrip = gripHit.rectTransform;
+
+            Color gripLine = new Color(TwinStatusPalette.TextMuted.r, TwinStatusPalette.TextMuted.g,
+                                       TwinStatusPalette.TextMuted.b, 0.55f);
+            Image gripH = TwinUIFactory.Block(_cardGrip, "GripH", gripLine, false);
+            TwinUIFactory.Place(gripH.rectTransform, 0f, _scaledCardGripSize - 1f, _scaledCardGripSize * 0.55f, 1f);
+            Image gripV = TwinUIFactory.Block(_cardGrip, "GripV", gripLine, false);
+            TwinUIFactory.Place(gripV.rectTransform, _scaledCardGripSize - 1f, _scaledCardGripSize * 0.45f,
+                1f, _scaledCardGripSize * 0.55f);
+
+            _cardResize = gripHit.gameObject.AddComponent<TwinWindowHandle>();
+            _cardResize.Window = _card;
+            _cardResize.HandleMode = TwinWindowHandle.Mode.ResizeBottomRight;
+            _cardResize.MinSize = new Vector2(_scaledCardMinWidth, _scaledRowHeight);
+            _cardResize.OnChanged = OnCardGeometryChanged;
 
             // ---------------- 告警面板 ----------------
             _alarmPanel = (RectTransform)TwinUIFactory.Node("AlarmPanel", _uiRoot).transform;
@@ -1260,7 +1534,13 @@ namespace SchoolTwin.UI
 
         // ================================================================ 选中变化 → 重建静态部分
 
-        private void ApplySelection()
+        private void ApplySelection() { ApplySelection(false); }
+
+        /// <param name="keepSparkHistory">
+        /// true = 只是重新排版（用户拉窗口），不要清空趋势线历史。
+        /// 不清的话，拉一次窗口就会把每条线都清掉、几秒后才重新长出来。
+        /// </param>
+        private void ApplySelection(bool keepSparkHistory)
         {
             if (!_built) return;
 
@@ -1272,6 +1552,8 @@ namespace SchoolTwin.UI
             int shown = _hasData ? defs.Count : 0;
 
             // ---- 标题区 ----
+            // 只负责「文字内容」。标题的截断宽度依赖卡片当前宽度，
+            // 统一放在 PlaceCardChrome 里做，避免两处各算一遍。
             if (_selected == null)
             {
                 SetCached(_title, ref _cachedTitle, "未选中点位");
@@ -1284,10 +1566,6 @@ namespace SchoolTwin.UI
             }
             else
             {
-                // 截断宽度与字号都用缩放后的值，否则放大后标题会溢出到状态胶囊上
-                SetCached(_title, ref _cachedTitle, TwinUIFactory.Truncate(
-                    _selected.DisplayName, _scaledFsTitle,
-                    _scaledCardWidth - _scaledPad * 2f - _scaledChipSpace));
                 SetCached(_subtitle, ref _cachedSubtitle,
                     _selected.TwinId + "   ·   " + _selected.Zone + " / " + CategoryLabel(_selected.Category));
 
@@ -1309,24 +1587,46 @@ namespace SchoolTwin.UI
             {
                 MetricRow row = EnsureMetricRow(i);
                 row.Root.gameObject.SetActive(true);
-                ConfigureMetricRow(row, defs[i]);
+                ConfigureMetricRow(row, defs[i], keepSparkHistory);
             }
-            // ---- 卡片高度与底部元素 ----
+
+            // ---- 几何：卡片高度、分隔线、页脚、手柄 ----
+            LayoutCardGeometry(shown);
+        }
+
+        /// <summary>
+        /// 按「当前卡片宽度 + 显示几行指标」把卡片的几何全部摆一遍。
+        ///
+        /// 【为什么要单独拆出来】卡片是可拉伸的窗口，宽度会变，而「哪些元素依赖宽度」
+        /// 一共七处（标题/胶囊/×/拖动条/副标题/两条分隔线/提示/每条指标行）。
+        /// 散在 ApplySelection 里改一次宽度就得改七处，漏一处就是「拉宽后那东西还在旧位置」。
+        /// </summary>
+        private void LayoutCardGeometry(int shown)
+        {
+            if (_card == null) return;
+
+            float w = CardWidth;
+
+            PlaceCardChrome(w);
+
             int slots = Mathf.Max(1, shown);
             float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
             float divider2Y = _scaledMetricsTop + metricsBlock + 8f * _activeScale;
             float footerY = divider2Y + 1f + 6f * _activeScale;
-            float cardHeight = footerY + _scaledFooterHeight + 14f * _activeScale;
+
+            // 底部留 26 而不是 14：右下角缩放手柄要占一块地方，
+            // 留少了手柄会压在页脚文字上（页脚是左对齐的，右边多半是空的，但别赌）。
+            float cardHeight = footerY + _scaledFooterHeight + 26f * _activeScale;
 
             TwinUIFactory.Place(_divider2.rectTransform, _scaledPad, divider2Y,
-                _scaledCardWidth - _scaledPad * 2f, 1f);
+                w - _scaledPad * 2f, 1f);
             TwinUIFactory.Place(_footer.rectTransform, _scaledPad, footerY,
-                _scaledCardWidth - _scaledPad * 2f, _scaledFooterHeight);
+                w - _scaledPad * 2f, _scaledFooterHeight);
 
-            TwinUIFactory.AnchorTopRight(_card,
-                _scaledScreenMargin + _scaledExtraRight,
-                _scaledScreenMargin + _scaledExtraTop,
-                _scaledCardWidth, cardHeight);
+            for (int i = 0; i < _metricRows.Count; i++)
+                LayoutMetricRow(_metricRows[i], i, w);
+
+            ApplyCardGeometry(cardHeight);
         }
 
         /// <summary>
@@ -1431,42 +1731,28 @@ namespace SchoolTwin.UI
             {
                 int i = _metricRows.Count;
                 MetricRow row = new MetricRow();
-                float s = _activeScale;
-                float width = _scaledCardWidth - _scaledPad * 2f;
-                float top = _scaledMetricsTop + i * (_scaledRowHeight + _scaledRowGap);
 
                 GameObject go = TwinUIFactory.Node("Metric" + i, _card);
                 row.Root = (RectTransform)go.transform;
-                TwinUIFactory.Place(row.Root, _scaledPad, top, width, _scaledRowHeight);
 
                 // 先建量程条，后建文字 —— UGUI 里后建的兄弟节点渲染在上层，
                 // 这样文字永远不会被量程游标盖住。
-                row.BarWidth = width;
-
                 row.Track = TwinUIFactory.Block(go.transform, "Track", TwinStatusPalette.Track, false);
-                TwinUIFactory.Place(row.Track.rectTransform, 0f, _scaledBarY, width, _scaledBarHeight);
 
                 row.Bands = new Image[MaxBands];
                 for (int b = 0; b < MaxBands; b++)
-                {
                     row.Bands[b] = TwinUIFactory.Block(go.transform, "Band" + b, TwinStatusPalette.Transparent, false);
-                    TwinUIFactory.Place(row.Bands[b].rectTransform, 0f, _scaledBarY, 0f, _scaledBarHeight);
-                }
 
                 row.Marker = TwinUIFactory.Block(go.transform, "Marker", TwinStatusPalette.TextPrimary, false);
-                TwinUIFactory.Place(row.Marker.rectTransform, 0f, _scaledBarY - 3f * s, 3f * s, 14f * s);
 
                 row.Name = TwinUIFactory.Label(go.transform, "Name", _scaledFsMetricName, TextAnchor.UpperLeft,
                     TwinStatusPalette.TextSecondary);
-                TwinUIFactory.Place(row.Name.rectTransform, 0f, 1f, width * 0.62f, _scaledFsMetricName + 9f);
 
                 row.Value = TwinUIFactory.Label(go.transform, "Value", _scaledFsMetricValue, TextAnchor.UpperRight,
                     TwinStatusPalette.TextPrimary, FontStyle.Bold);
-                TwinUIFactory.Place(row.Value.rectTransform, 0f, 0f, width, _scaledFsMetricValue + 8f);
 
                 row.Hint = TwinUIFactory.Label(go.transform, "Hint", _scaledFsMetricHint, TextAnchor.UpperLeft,
                     TwinStatusPalette.TextMuted);
-                TwinUIFactory.Place(row.Hint.rectTransform, 0f, _scaledBarY + 12f * s, width, _scaledFsMetricHint + 5f);
 
                 // 趋势线最后建 —— 它铺满整行宽度，但要留在文字下层不挡字。
                 // 实际上它画在 y=62 以下的空白区，和上面三行不重叠。
@@ -1475,15 +1761,23 @@ namespace SchoolTwin.UI
                 // 直接 AddComponent 的话，Graphic 少一个 CanvasRenderer 也不报错，
                 // 只是 Rebuild() 第一行就返回、OnPopulateMesh() 永远不跑 —— 画面上什么都没有。
                 row.Spark = TwinUIFactory.Graphic<TwinSparkline>(go.transform, "Spark");
-                TwinUIFactory.Place((RectTransform)row.Spark.transform, 0f, _scaledSparkY,
-                    width, _scaledSparkHeight);
 
                 _metricRows.Add(row);
+
+                // 位置和尺寸统一走 LayoutMetricRow —— 卡片可拉伸，宽度会变，
+                // 排版只能有一处来源。
+                LayoutMetricRow(row, i, CardWidth);
             }
             return _metricRows[index];
         }
 
-        private void ConfigureMetricRow(MetricRow row, TwinMetricDefinition def)
+        private void ConfigureMetricRow(MetricRow row, TwinMetricDefinition def) { ConfigureMetricRow(row, def, false); }
+
+        /// <param name="keepSparkHistory">
+        /// true = 只是重排（拉窗口），不要清趋势线。换了指标/换了点位时必须清 ——
+        /// 否则会拿上一个设备的历史数据画新设备的新线。
+        /// </param>
+        private void ConfigureMetricRow(MetricRow row, TwinMetricDefinition def, bool keepSparkHistory)
         {
             row.MetricName = def.Metric;
             row.Unit = def.Unit;
@@ -1500,7 +1794,7 @@ namespace SchoolTwin.UI
             if (row.Spark != null)
             {
                 row.Spark.SetRange(def.Min, def.Max);
-                row.Spark.Clear();
+                if (!keepSparkHistory) row.Spark.Clear();
             }
 
             BuildBands(row);
@@ -1922,13 +2216,15 @@ namespace SchoolTwin.UI
             float s = _activeScale;
             float viewport = ViewportHeight();
 
-            // 当前实际卡片高度（与 ApplySelection 用同一套公式）
+            // 当前实际卡片高度（与 LayoutCardGeometry 用同一套公式，底部留白 26 也是）
             int slots = Mathf.Max(1, _hasData ? _metricRows.Count : 1);
             float metricsBlock = slots * _scaledRowHeight + (slots - 1) * _scaledRowGap;
             float divider2Y = _scaledMetricsTop + metricsBlock + 8f * s;
             float footerY = divider2Y + 1f + 6f * s;
-            float cardH = footerY + _scaledFooterHeight + 14f * s;
-            if (_selected == null) cardH = _scaledMetricsTop + _scaledRowHeight * 2f + 14f * s;
+            float cardH = footerY + _scaledFooterHeight + 26f * s;
+            if (_selected == null) cardH = _scaledMetricsTop + _scaledRowHeight * 2f + 26f * s;
+            // 用户把卡片拉高过 → 按他拉的实际高度算，否则会多塞几行、把告警面板顶出屏幕
+            if (_cardUserH > cardH) cardH = _cardUserH;
 
             float avail = viewport - _scaledScreenMargin - cardH - _scaledPanelGap - _scaledScreenMargin;
 
@@ -1959,6 +2255,14 @@ namespace SchoolTwin.UI
                          + (rows - 1) * _scaledAlarmRowGap + 14f * s;
                 if (overflow) height += _scaledFsAlarmMore + 8f;
             }
+
+            // 【顺序很重要】先把告警面板高度告诉卡片，让卡片先把自己的高度夹到位，
+            // 再拿卡片的最终高度去摆告警面板。反过来做的话，告警面板会用「上一帧的卡片高度」，
+            // 卡片一变高它就滞后一帧 —— 表现为卡片拉高的瞬间告警面板闪一下。
+            bool alarmHeightChanged = !Mathf.Approximately(height, _alarmPanelH);
+            _alarmPanelH = height;
+            if (alarmHeightChanged && _cardUserH > 0f && _card != null)
+                ApplyCardGeometry(_cardContentH);
 
             float top = _scaledScreenMargin + _scaledExtraTop
                         + (_card != null ? _card.sizeDelta.y : 0f) + _scaledPanelGap;
@@ -2044,6 +2348,10 @@ namespace SchoolTwin.UI
         public void SetVisible(bool visible)
         {
             _visible = visible;
+
+            // 按 F4 打开 = 「把界面都给我放出来」，所以顺带把被 × 关掉的卡片也放出来。
+            if (visible) _cardClosed = false;
+
             if (_card != null) _card.gameObject.SetActive(visible);
             if (_alarmPanel != null) _alarmPanel.gameObject.SetActive(visible);
         }

@@ -31,6 +31,15 @@ namespace SchoolTwin.Interaction
         public static TwinAnchor Selected { get; private set; }
         public static event Action<TwinAnchor> SelectionChanged;
 
+        /// <summary>
+        /// 「点选动作」计数。**即使选中的还是同一个点位也会 +1**。
+        ///
+        /// 【为什么要单独有它】<see cref="Select"/> 在「选中的没变」时会直接 return，
+        /// 于是「点同一个点位」对外完全不可见。详情面板被 × 关掉之后，
+        /// 用户自然会再点一次那个点位想把它叫回来 —— 没有这个计数就永远叫不回来。
+        /// </summary>
+        public static int PickStamp { get; private set; }
+
         private void Awake()
         {
             if (_camera == null) _camera = GetComponent<Camera>();
@@ -80,6 +89,7 @@ namespace SchoolTwin.Interaction
 
         public static void Select(TwinAnchor anchor)
         {
+            PickStamp++;    // 先 +1：连点同一个点位也算一次「点选动作」
             if (Selected == anchor) return;
             Selected = anchor;
 
