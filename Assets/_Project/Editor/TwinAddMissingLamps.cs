@@ -54,38 +54,186 @@ namespace SchoolTwin.EditorTools
         /// <summary>新灯的名字前缀。重跑时按这个前缀清理上一次的结果，保证幂等。</summary>
         private const string NamePrefix = "TwinLamp_";
 
-        [MenuItem("P1 孪生框架/⑪ 给三间房补灯具（每间 2 盏）并接入表现层", false, 23)]
+        /// <summary>
+        /// 【菜单为什么挪进「⚠ 一次性迁移」并且写着「无需再点」】
+        /// 它是一次性的场景迁移工具，不是功能。2026-10-22 的实际情况是：
+        /// 用户在菜单里看到「⑪ 给三间房补灯具」，以为是还没做的任务，就在 **Play 模式**下点了 ——
+        /// 结果报 MissingReferenceException、灯没多出来、**而且场景文件被改坏了**。
+        /// 一个做完就不该再点的工具，不能长得像待办事项。
+        /// </summary>
+        [MenuItem("P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑪ 给三间房补灯具（每间 2 盏）", false, 23)]
         public static void ApplyFromMenu()
         {
-            Apply();
-            EditorUtility.DisplayDialog("补灯具",
-                "完成。详细清单见工程根目录 add_lamps.txt，Console 也有同样的内容。", "好");
+            string message;
+            bool ok = Run(out message);
+            EditorUtility.DisplayDialog(ok ? "补灯具：完成" : "补灯具：没有执行", message, "好");
         }
 
+        /// <summary>批处理入口（返回值被忽略，失败时由 Run 内部打 error）。</summary>
         public static void Apply()
         {
+            string message;
+            if (!Run(out message)) Debug.LogError("[LAMP] " + message);
+        }
+
+        /// <summary>只读检查：三间房的灯到底在不在、锚点接没接上。不碰场景，随便点。</summary>
+        [MenuItem("P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑫ 检查三间房灯具（只读，安全）", false, 24)]
+        public static void InspectFromMenu()
+        {
+            int missing;
+            Inspect(out missing);
+
+            EditorUtility.DisplayDialog("三间房灯具检查",
+                missing == 0 ? "三间房都正常，不需要再做任何事。\n\n详情见 Console。"
+                : missing < 0 ? "当前打开的不是目标场景，没有检查。\n\n请先打开 SchoolSceneDay.unity。"
+                : "有 " + missing + " 间不正常。\n\n详情见 Console。", "好");
+        }
+
+        /// <summary>
+        /// 只读检查的批处理入口（不弹窗，只打日志）。
+        /// 拆出来是为了能在 `-batchmode` 下跑 —— 弹窗在批处理里会把进程卡住。
+        /// </summary>
+        public static void Inspect()
+        {
+            int missing;
+            Inspect(out missing);
+            if (missing > 0) Debug.LogWarning("[LAMP] 有 " + missing + " 间房的灯不正常，见上。");
+        }
+
+        private static void Inspect(out int missing)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("[LAMP] ===== 三间房灯具检查（只读）=====");
+
+            // 【必须先确保看的是对的那个场景】
+            // 批处理（-batchmode -executeMethod）**不会自动加载场景**，活动场景是空的。
+            // 不打开的话这里会读到 0 盏灯、0 个锚点，然后报「三间房都没有灯」——
+            // 一个看起来很像结论的假结论。（2026-10-22 第一次跑就是这么被骗的。）
+            //
+            // 但**只在「活动场景没有路径」时才自动打开**（那就是批处理的情形）。
+            // 用户开着别的场景时不去动它：`OpenScene(Single)` 会把未保存的修改直接丢掉，
+            // 而且不弹任何提示 —— 一个「只读检查」把人家的改动弄没了，是最糟的副作用。
+            Scene scene = SceneManager.GetActiveScene();
+            if (string.IsNullOrEmpty(scene.path))
+            {
+                scene = EditorSceneManager.OpenScene(TwinExpandPoints.ScenePath, OpenSceneMode.Single);
+            }
+            else if (scene.path != TwinExpandPoints.ScenePath)
+            {
+                Debug.LogWarning("[LAMP] 当前打开的是 " + scene.path + "，不是 " + TwinExpandPoints.ScenePath +
+                                 "。请先打开目标场景再检查 —— 这里不会替你切场景（切场景会丢掉未保存的修改）。");
+                missing = -1;
+                return;
+            }
+            sb.AppendLine("[LAMP] 检查的场景：" + scene.path);
+
+            missing = 0;
+            for (int z = 0; z < Zones.Length; z++)
+            {
+                string zone = Zones[z];
+                string twinId = zone + "/Light/Main_01";
+
+                int lampCount = CountLamps(zone);
+                TwinAnchor anchor = TwinExpandPoints.FindAnchor(twinId);
+                GameObject vt = anchor != null ? anchor.VisualTarget : null;
+
+                string verdict;
+                if (lampCount == 0) { verdict = "✘ 场景里没有灯"; missing++; }
+                else if (anchor == null) { verdict = "✘ 找不到锚点"; missing++; }
+                else if (vt == null) { verdict = "✘ 锚点没有 VisualTarget（点开灯不会亮）"; missing++; }
+                else verdict = "✔ 正常";
+
+                sb.AppendLine(string.Format("  {0}：灯 {1} 盏 / 锚点 {2} / VisualTarget {3} → {4}",
+                    zone, lampCount,
+                    anchor != null ? anchor.gameObject.name : "(无)",
+                    vt != null ? vt.name : "(无)",
+                    verdict));
+            }
+
+            sb.AppendLine(missing == 0
+                ? "  ===== 三间房都正常，这一步不需要再做任何事 ====="
+                : "  ===== 有 " + missing + " 间不正常；若灯为 0 盏，退出 Play 模式后再跑一次补灯具 =====");
+
+            Debug.Log(sb.ToString());
+        }
+
+        private static int CountLamps(string zone)
+        {
+            Transform parent = FindByName(LampParentName);
+            if (parent == null) return 0;
+            int n = 0;
+            string prefix = NamePrefix + zone + "_";
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform c = parent.GetChild(i);
+                if (c != null && c.name.StartsWith(prefix, StringComparison.Ordinal)) n++;
+            }
+            return n;
+        }
+
+        /// <summary>真正干活。返回 false 表示**什么都没动**（场景未被修改、未被保存）。</summary>
+        public static bool Run(out string message)
+        {
+            message = "完成。详细清单见工程根目录 add_lamps.txt，Console 也有同样的内容。";
+
             StringBuilder log = new StringBuilder();
             log.AppendLine("[LAMP] ===== 给三间房补天花板灯 =====");
 
+            // ────────────────────────────────────────────────────────────────
+            // 【这一道闸必须在最前面，而且必须真的 return】
+            // 这个工具会 DestroyImmediate 旧灯、InstantiatePrefab 新灯、最后 SaveScene。
+            // 在 Play 模式下做这三件事的后果是连锁的（2026-10-22 实测踩到）：
+            //   ① 旧灯被删 → 表现层手里的 Transform 变成「已销毁」→ 同一帧抛
+            //      MissingReferenceException（就是用户截图里那条）；
+            //   ② 新灯是运行时对象，退出 Play 就没了；
+            //   ③ 而 SaveScene 会把**播放中的场景状态**写进磁盘 —— 资产里那间房的灯真的没了。
+            // 最终表现：不报错、只是「点开灯不亮」，而且很难想到是「点了个菜单」造成的。
+            // ────────────────────────────────────────────────────────────────
+            if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                message = "不能在 Play 模式下执行。\n\n" +
+                          "这个工具会删掉旧灯再放新灯，然后保存场景。播放中执行会把「播放中的场景状态」" +
+                          "写进磁盘，导致资产里的灯真的丢失 —— 而且不报错，只表现为「点开灯不亮」。\n\n" +
+                          "请先按停止退出 Play 模式再点。\n\n" +
+                          "如果你只是想验证「灯亮不亮」：不用跑这个工具，灯早就在场景里了 ——" +
+                          "按 Play 后按 G 打开总控面板，选房间点「开」即可。";
+                Debug.LogWarning("[LAMP] " + message.Replace("\n", " "));
+                return false;
+            }
+
+            // 【场景：只在活动场景「没有路径」时自动打开】
+            // 批处理下活动场景是空的，必须打开才能干活。
+            // 但用户开着别的场景时**不替他切** —— `OpenScene(Single)` 会静默丢掉未保存的修改，
+            // 而这个工具本身就会存盘，两件事叠在一起等于把用户没保存的东西也一起抹掉。
             Scene scene = SceneManager.GetActiveScene();
-            if (scene.path != TwinExpandPoints.ScenePath)
+            if (string.IsNullOrEmpty(scene.path))
             {
                 scene = EditorSceneManager.OpenScene(TwinExpandPoints.ScenePath, OpenSceneMode.Single);
                 log.AppendLine("[LAMP] 已打开场景：" + scene.path);
+            }
+            else if (scene.path != TwinExpandPoints.ScenePath)
+            {
+                message = "当前打开的是 " + scene.path + "，不是目标场景。\n\n" +
+                          "请先打开 " + TwinExpandPoints.ScenePath + " 再点这个菜单。\n" +
+                          "（这里不替你切场景：切场景会丢掉未保存的修改，而本工具紧接着还会存盘。）";
+                Fail(log, message);
+                return false;
             }
 
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(LampPrefabPath);
             if (prefab == null)
             {
-                Fail(log, "找不到灯具预制体：" + LampPrefabPath);
-                return;
+                message = "找不到灯具预制体：" + LampPrefabPath;
+                Fail(log, message);
+                return false;
             }
 
             Transform lampParent = FindByName(LampParentName);
             if (lampParent == null)
             {
-                Fail(log, "找不到灯具父节点 " + LampParentName + "（场景结构变了？）");
-                return;
+                message = "找不到灯具父节点 " + LampParentName + "（场景结构变了？）";
+                Fail(log, message);
+                return false;
             }
             log.AppendLine("[LAMP] 灯具父节点：" + lampParent.name);
 
@@ -142,17 +290,21 @@ namespace SchoolTwin.EditorTools
                     "[LAMP] 参考灯：{0} @ ({1:F2},{2:F2},{3:F2})",
                     reference.name, reference.position.x, reference.position.y, reference.position.z));
 
-                // 清掉上一次跑出来的同名灯，保证幂等
-                int removed = RemoveOldLamps(lampParent, zone);
-                if (removed > 0) log.AppendLine("[LAMP] 清理旧灯 " + removed + " 盏");
-
+                // 【顺序：先算位置，后删旧灯】
+                // 原来是「先删旧灯 → 再算位置」。一旦算不出位置，旧灯已经没了，
+                // 场景就退化成「这间房没有灯」—— 而且没有任何报错。2026-10-22 那次事故
+                // 就是「删掉了但没补上」的形态。把删除挪到「确定要放」之后，这个洞就没了。
                 List<Vector3> spots = ComputeSpots(zone, rb, reference.position.y, roomList, roomBounds, log);
                 if (spots.Count == 0)
                 {
-                    log.AppendLine("[LAMP] ✘ " + zone + " 算不出可用的摆放位置");
+                    log.AppendLine("[LAMP] ✘ " + zone + " 算不出可用的摆放位置（旧灯保持原样，没有删除）");
                     failed++;
                     continue;
                 }
+
+                // 清掉上一次跑出来的同名灯，保证幂等
+                int removed = RemoveOldLamps(lampParent, zone);
+                if (removed > 0) log.AppendLine("[LAMP] 清理旧灯 " + removed + " 盏");
 
                 GameObject first = null;
                 for (int i = 0; i < spots.Count; i++)
@@ -192,6 +344,20 @@ namespace SchoolTwin.EditorTools
                 }
             }
 
+            // 【一盏都没造出来就别存盘】
+            // 存盘会把「这次跑出来的中间状态」固化下来。一盏都没造就存，等于白白
+            // 重写一遍 10 万行场景文件，还把所有「已经正确的东西」暴露在一次全量重序列化里。
+            if (madeLamps == 0)
+            {
+                log.AppendLine("[LAMP] ✘ 这次一盏都没造出来 —— **不保存场景**，磁盘上的内容没变");
+                log.AppendLine("[LAMP] ===== 中止 =====");
+                Debug.LogError(log.ToString());
+                try { System.IO.File.WriteAllText("add_lamps.txt", log.ToString(), Encoding.UTF8); }
+                catch (Exception) { }
+                message = "一盏灯都没造出来，场景**没有被修改**。原因见 Console（通常是找不到房间节点或参考灯）。";
+                return false;
+            }
+
             EditorSceneManager.MarkSceneDirty(scene);
             bool saved = EditorSceneManager.SaveScene(scene);
             log.AppendLine("[LAMP] 场景保存：" + (saved ? "成功" : "失败"));
@@ -215,6 +381,12 @@ namespace SchoolTwin.EditorTools
             Debug.Log(log.ToString());
             try { System.IO.File.WriteAllText("add_lamps.txt", log.ToString(), Encoding.UTF8); }
             catch (Exception e) { Debug.LogWarning("[LAMP] 写文件失败：" + e.Message); }
+
+            message = saved
+                ? "完成：新灯 " + madeLamps + " 盏，接入表现层 " + linked + " 个点位，失败 " + failed + " 个。\n\n" +
+                  "**这一步做完就不用再点了。** 想确认效果：按 Play → 按 G 打开总控面板 → 选房间点「开」。"
+                : "灯已放好，但场景保存失败（磁盘只读？）。请用 Ctrl+S 手动保存。";
+            return saved;
         }
 
         // ================================================================ 摆放

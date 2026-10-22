@@ -91,6 +91,21 @@ namespace SchoolTwin.Perf
         public bool IsRunning { get { return _running; } }
         public string LastOutputPath { get; private set; }
 
+        /// <summary>
+        /// 进 Play 是否自动开始采样。
+        ///
+        /// 【为什么要有这个 setter】本组件现在由 <see cref="TwinPerfBootstrap"/> 在
+        /// `AfterSceneLoad` 自动挂上（以前只有压测菜单会挂，正式场景里按 F6 一直没反应）。
+        /// 自动挂载时把这里关掉，改成「按 F6 才开始」—— 否则每次 Play 都会自动跑 60 秒、
+        /// 屏幕上多一块读数、还顺手写一个 CSV，而用户根本没要求采样。
+        ///
+        /// 必须在 `Start()` 之前赋值（Awake 之后、第一帧之前），所以用 `AfterSceneLoad` 挂。
+        /// </summary>
+        public bool AutoStart { get { return _autoStart; } set { _autoStart = value; } }
+
+        /// <summary>采样中是否显示左上角实时读数。</summary>
+        public bool ShowOverlay { get { return _showOverlay; } set { _showOverlay = value; } }
+
         // ================================================================ 生命周期
 
         private void Awake()

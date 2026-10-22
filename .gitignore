@@ -70,3 +70,8 @@ crashlytics-build.properties
 # ---------- 诊断/截图临时文件（开发过程产物，不入库）----------
 /workbuddy*.png
 /workbuddy*.jpg
+
+# ---------- 本地工具与运行时产物（可再生成，不入库）----------
+/_scratch/
+/add_lamps.txt
+/Recordings/
