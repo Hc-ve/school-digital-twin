@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using UnityEngine;
+using SchoolTwin.Core;
 using SchoolTwin.Data;
 using SchoolTwin.Twin;
 
@@ -43,6 +44,29 @@ namespace SchoolTwin.Command
 
         [Tooltip("是否把每条命令打到 Console（排查用）")]
         [SerializeField] private bool _logEveryCommand = true;
+
+        [Tooltip("打铃持续秒数。这是**设备侧**行为：响完自己停，不需要上位机再发一次「停」")]
+        [SerializeField] private float _bellRingSeconds = 3f;
+
+        /// <summary>
+        /// 「到点自己恢复」的指标。
+        ///
+        /// 【为什么需要这张表】P19 之前所有设备都只有**稳态**：开就是开、关就是关，
+        /// 状态由命令驱动、一直保持。上课铃是第一个「脉冲型」设备 ——
+        /// 它响 3 秒然后自己停。如果不在设备侧做这个复位，界面上的铃会一直显示「正在响」，
+        /// 而现实里铃早停了 —— 那就是孪生体和实物不一致，比不做更糟。
+        ///
+        /// 复位也走 `SetState`（即 `MockDataSource` 注入值），所以回读链路看到的是
+        /// 「设备自己把状态改回去了」，而不是谁偷偷改的界面。
+        /// </summary>
+        private struct AutoOff
+        {
+            public string TwinId;
+            public string Metric;
+            public float DueTime;
+        }
+
+        private readonly List<AutoOff> _autoOff = new List<AutoOff>(4);
 
         private struct Job
         {
@@ -171,9 +195,32 @@ namespace SchoolTwin.Command
         /// </summary>
         private static readonly string[] SeedOnlyIds =
         {
-            "ClassComputer/PC/Room_01",
+            // 【P19 变更】`ClassComputer/PC/Room_01` 已进白名单（机房显示器能亮了），
+            // 留在这里会被 Seed 两次 —— 值一样所以无害，但日志里的数字会骗人。
+            // 只留教师办公室那台：它是 `Computer03`，模型没有屏幕，永远不给按钮。
             "ClassTeachers/PC/Room_01",
         };
+
+        /// <summary>
+        /// 【P19】场景里模型本来就是**关着**的门。
+        ///
+        /// 12 扇 `Door07a` 都是半开姿态，所以默认播种「开」；但礼堂那扇 `DoorDouble02`
+        /// 是关着的。差别不能靠猜 —— `TwinP17Diag` 打印的「关门角」是 0°，
+        /// 意思就是"模型现在就在关的位置"。加一扇门时如果它模型是关的，往这里加一条。
+        /// </summary>
+        private static readonly string[] DoorsClosedByDefault =
+        {
+            "ActZal/Door/Entrance_01",
+        };
+
+        private static bool DoorStartsClosed(string twinId)
+        {
+            for (int i = 0; i < DoorsClosedByDefault.Length; i++)
+            {
+                if (string.Equals(DoorsClosedByDefault[i], twinId, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
 
         private void SeedOne(string twinId, ref int seeded, ref int unresolved)
         {
@@ -203,7 +250,13 @@ namespace SchoolTwin.Command
                 case "Door":
                     // 场景里的门模型是**开着的**（Door07a 实例都摆成半开姿态），
                     // 初始状态就得是「开」，否则卡片和三维对不上。
-                    SetState(twinId, "Open", 1f);
+                    //
+                    // 【P19 例外】礼堂那扇双开门 `DoorDouble02` 的模型是**关着的**
+                    // （实测关门角 = 0°，见 `TwinP17Diag` 的输出）。
+                    // 如果也按 1 播种，按 Play 的一瞬间这扇门会自己往外转 90° ——
+                    // 用户会以为"门自己开了"。初始状态必须等于场景里模型现在的姿态，
+                    // 这一条比"所有门都一样"重要。
+                    SetState(twinId, "Open", DoorStartsClosed(twinId) ? 0f : 1f);
                     seeded++;
                     break;
 
@@ -213,6 +266,23 @@ namespace SchoolTwin.Command
                     // 功率从 1800 跳成别的数 —— 那会被误当成"有人在操作"。
                     SetState(twinId, "Power", 1800f);
                     SetState(twinId, "OnCount", 10f);
+                    seeded++;
+                    break;
+
+                case "Projector":
+                    // 【P19】默认「开着」。两台投影仪都在教室里、和灯一样是上课就开的东西。
+                    // 310W 与 ApplyState 里「开」的取值必须一致（理由同上一条）。
+                    SetState(twinId, "Power", 310f);
+                    SetState(twinId, "LampHours", 1240f);   // 灯泡已用 1240 小时（量程 0~10000）
+                    seeded++;
+                    break;
+
+                case "Bell":
+                    // 【P19】默认「不在响」。打铃是脉冲动作，静止状态永远是 0。
+                    // 不压住的话 `Ring` 会被正弦波压成 0.12~0.88，界面按「≥0.5 算响」判断
+                    // → 铃会自己一直在响（和门的 `Open` 是同一类问题，99 号清单第 17 条）。
+                    SetState(twinId, "Ring", 0f);
+                    SetState(twinId, "Volume", 70f);
                     seeded++;
                     break;
             }
@@ -306,6 +376,10 @@ namespace SchoolTwin.Command
 
         private void Update()
         {
+            // 脉冲型设备的「到点自己停」先跑 —— 它和命令队列无关，
+            // 而且**必须在 `_jobs.Count == 0` 时也跑**（否则打铃后没人再发命令，就永远不会复位）。
+            TickAutoOff();
+
             if (_jobs.Count == 0) return;
 
             float now = Time.unscaledTime;
@@ -354,6 +428,8 @@ namespace SchoolTwin.Command
                         // 量程 0~3000W（整间 10 台 × 300W）。开 = 10 台 × 180W = 1800W，
                         // 与 SeedInitialState 的初值必须一致，否则「点开」会看起来像跳变。
                         case "PC": watt = on ? 1800f : 0f; break;
+                        // 【P19】投影仪：量程 0~400W，开 = 310W（灯泡 + 风扇 + 信号板）
+                        case "Projector": watt = on ? 310f : 0f; break;
                         default: watt = on ? 1f : 0f; break;
                     }
                     SetState(twinId, "Power", watt);
@@ -381,6 +457,101 @@ namespace SchoolTwin.Command
                 case CommandAction.SetOpen:
                     SetState(twinId, "Open", value >= 0.5f ? 1f : 0f);
                     break;
+
+                case CommandAction.SetRing:
+                {
+                    bool ring = value >= 0.5f;
+                    SetState(twinId, "Ring", ring ? 1f : 0f);
+
+                    // 响 → 排一个 3 秒后的复位；停 → 撤掉待复位（防止「点停之后 3 秒又被复位一次」，
+                    // 那会在日志里多出一条看不懂的状态变化）
+                    if (ring) ScheduleAutoOff(twinId, "Ring", _bellRingSeconds);
+                    else CancelAutoOff(twinId, "Ring");
+                    break;
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- 脉冲型设备
+
+        /// <summary>
+        /// 设备侧的定时打铃 —— **不是上位机下命令**。
+        ///
+        /// 【为什么定时打铃不能走命令中心】真实校园里打铃器自带时钟，到点自己响；
+        /// 上位机（孪生体）只是**读**它的状态。如果定时打铃也发一条 `twin/cmd/...`，
+        /// 那「命令」这个词就被用坏了 —— 将来接真实网关时，网关会收到一条
+        /// 没人按过的命令，而真实打铃器根本不接受外部定时。
+        ///
+        /// 所以这里的分界是：
+        ///   · 定时 → 调这个方法（扮演设备内部的时钟）
+        ///   · 手动 → 走 `TwinCommandCenter.TrySend(SetRing)` → 收命令 → ApplyState
+        /// 两条路最后都落到同一个 `SetState`，表现层只认 `Ring` 这个值，不关心是谁触发的。
+        /// </summary>
+        public void RingNow(string twinId, float seconds)
+        {
+            if (string.IsNullOrEmpty(twinId)) return;
+            float dur = seconds > 0.1f ? seconds : _bellRingSeconds;
+
+            SetState(twinId, "Ring", 1f);
+            ScheduleAutoOff(twinId, "Ring", dur);
+
+            Debug.Log("[TwinCmd] 定时打铃：「" + twinId + "」响 " + dur.ToString("0.#") + " 秒" +
+                      "（设备侧定时器触发，不是上位机命令）");
+        }
+
+        /// <summary>这台设备此刻在不在响。</summary>
+        public bool IsRinging(string twinId)
+        {
+            TwinAnchor anchor = FindAnchor(twinId);
+            TwinValue v;
+            return anchor != null && anchor.TryGetValue("Ring", out v) && v.Value > 0.5f;
+        }
+
+        private static TwinAnchor FindAnchor(string twinId)
+        {
+            TwinRuntime runtime = TwinRuntime.Instance;
+            TwinAnchor a;
+            if (runtime != null && runtime.Registry != null && runtime.Registry.TryGet(twinId, out a))
+                return a;
+            return null;
+        }
+
+        private void ScheduleAutoOff(string twinId, string metric, float seconds)
+        {
+            CancelAutoOff(twinId, metric);
+
+            AutoOff a = new AutoOff();
+            a.TwinId = twinId;
+            a.Metric = metric;
+            a.DueTime = Time.unscaledTime + Mathf.Max(0.1f, seconds);
+            _autoOff.Add(a);
+        }
+
+        private void CancelAutoOff(string twinId, string metric)
+        {
+            for (int i = _autoOff.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(_autoOff[i].TwinId, twinId, StringComparison.Ordinal) &&
+                    string.Equals(_autoOff[i].Metric, metric, StringComparison.Ordinal))
+                    _autoOff.RemoveAt(i);
+            }
+        }
+
+        private void TickAutoOff()
+        {
+            if (_autoOff.Count == 0) return;
+
+            float now = Time.unscaledTime;
+            for (int i = _autoOff.Count - 1; i >= 0; i--)
+            {
+                AutoOff a = _autoOff[i];
+                if (now < a.DueTime) continue;
+
+                SetState(a.TwinId, a.Metric, 0f);
+                _autoOff.RemoveAt(i);
+
+                if (_logEveryCommand)
+                    Debug.Log("[TwinCmd] 设备自动复位：「" + a.TwinId + "」的 " + a.Metric + " → 0");
             }
         }
 

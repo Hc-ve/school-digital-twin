@@ -76,3 +76,9 @@ crashlytics-build.properties
 /add_lamps.txt
 /Recordings/
 /PerfLogs/twin-perf.csv
+
+# ---------- P19 绑定/诊断报告（每次执行都会重写，不入库）----------
+/p19_plan.txt
+/p19_apply.txt
+/p19_diag.txt
+/p19_survey.txt

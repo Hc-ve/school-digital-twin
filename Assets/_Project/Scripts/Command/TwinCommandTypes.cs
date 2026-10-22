@@ -28,6 +28,8 @@ namespace SchoolTwin.Command
         SetMode = 2,
         SetOpen = 3,
         SetValve = 4,
+        /// <summary>【P19】打铃。与其他动作不同：它不是"保持某个稳态"，而是"响一下然后自己停"。</summary>
+        SetRing = 5,
     }
 
     /// <summary>失败原因码。数值与协议错误码对齐（0~5），6 以后是本机内部的。</summary>
@@ -145,6 +147,7 @@ namespace SchoolTwin.Command
                 case CommandAction.SetMode: return "SetMode";
                 case CommandAction.SetOpen: return "SetOpen";
                 case CommandAction.SetValve: return "SetValve";
+                case CommandAction.SetRing: return "SetRing";
                 default: return action.ToString();
             }
         }
@@ -160,6 +163,7 @@ namespace SchoolTwin.Command
                 case "SetMode": action = CommandAction.SetMode; return true;
                 case "SetOpen": action = CommandAction.SetOpen; return true;
                 case "SetValve": action = CommandAction.SetValve; return true;
+                case "SetRing": action = CommandAction.SetRing; return true;
                 default: return false;
             }
         }
@@ -174,6 +178,7 @@ namespace SchoolTwin.Command
                 case CommandAction.SetMode: return "设定模式";
                 case CommandAction.SetOpen: return "开门";
                 case CommandAction.SetValve: return "设定阀门";
+                case CommandAction.SetRing: return "打铃";
                 default: return action.ToString();
             }
         }

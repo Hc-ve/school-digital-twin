@@ -166,6 +166,17 @@ namespace SchoolTwin.Present
             public bool IsOpen;
 
             /// <summary>
+            /// 【P19】双开门的两片门叶。`null` = 单开门（`Door07a` 那种，整个物体就是一个门扇）。
+            ///
+            /// 为什么需要单独一份：`Door07a` 预制体**只有一个 GameObject**，原点就在门轴上，
+            /// 所以转它自己就是转门扇。而礼堂的 `DoorDouble02` 是**两片独立门叶挂在根节点下**
+            /// （`DoorDouble0` / `DoorDouble`），转根节点会把两片当成一块整板扫过去 ——
+            /// 看起来像"整扇门被拆下来转了一圈"。
+            /// 所以双开门要逐片转，而且两片**方向相反**。
+            /// </summary>
+            public DoorLeaf[] Leaves;
+
+            /// <summary>
             /// 是否已经读到过一次状态。
             ///
             /// 【为什么需要】`IsOpen` 默认 false，而 TickDoors 是逐帧跑的、比 0.1 秒的轮询更早。
@@ -173,6 +184,15 @@ namespace SchoolTwin.Present
             /// 因为还没收到数据，它就先按"关"开始动了。
             /// </summary>
             public bool HasState;
+        }
+
+        /// <summary>双开门的一片门叶。</summary>
+        private sealed class DoorLeaf
+        {
+            public Transform T;
+            public Quaternion BaseRotation;
+            /// <summary>+1 / -1：两片往相反方向转，才会同时往里/往外开。</summary>
+            public float Sign;
         }
 
         private readonly Dictionary<string, LampVisual> _lamps =
@@ -273,6 +293,24 @@ namespace SchoolTwin.Present
             _doors.Clear();
             _noVisual.Clear();
 
+            // 【P19】运行时材质副本必须自己销毁 —— 它们不在任何资产的引用图里，
+            // 不 Destroy 就会在每次进出 Play 时泄漏一份（材质 + 遮罩贴图）。
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                if (kv.Value != null && kv.Value.Material != null) Destroy(kv.Value.Material);
+            }
+            _screens.Clear();
+
+            foreach (KeyValuePair<string, ProjectorVisual> kv in _projectors)
+            {
+                if (kv.Value != null && kv.Value.CanvasMaterial != null) Destroy(kv.Value.CanvasMaterial);
+            }
+            _projectors.Clear();
+            _bells.Clear();
+
+            if (_screenMask != null) { Destroy(_screenMask); _screenMask = null; }
+            if (_bellChime != null) { Destroy(_bellChime); _bellChime = null; }
+
             if (_beep != null) Destroy(_beep);
             if (Instance == this) Instance = null;
         }
@@ -321,6 +359,12 @@ namespace SchoolTwin.Present
                 SyncLamp(twinId, anchor);
             else if (string.Equals(model.Type, "Door", StringComparison.Ordinal))
                 SyncDoor(twinId, anchor);
+            else if (string.Equals(model.Type, "PC", StringComparison.Ordinal))
+                SyncScreen(twinId, anchor);
+            else if (string.Equals(model.Type, "Projector", StringComparison.Ordinal))
+                SyncProjector(twinId, anchor);
+            else if (string.Equals(model.Type, "Bell", StringComparison.Ordinal))
+                SyncBell(twinId, anchor);
 
             // AC 目前没有可视化部件，只有提示音（见 OnCommandChanged）
         }
@@ -672,7 +716,21 @@ namespace SchoolTwin.Present
                 if (Mathf.Abs(next - v.Angle) < 0.001f) continue;
 
                 v.Angle = next;
-                v.T.rotation = Quaternion.AngleAxis(v.Angle, Vector3.up) * v.BaseRotation;
+
+                if (v.Leaves != null)
+                {
+                    // 双开门：逐片转，两片方向相反（见 DoorVisual.Leaves 的说明）
+                    for (int i = 0; i < v.Leaves.Length; i++)
+                    {
+                        DoorLeaf leaf = v.Leaves[i];
+                        if (leaf == null || leaf.T == null) continue;
+                        leaf.T.rotation = Quaternion.AngleAxis(v.Angle * leaf.Sign, Vector3.up) * leaf.BaseRotation;
+                    }
+                }
+                else
+                {
+                    v.T.rotation = Quaternion.AngleAxis(v.Angle, Vector3.up) * v.BaseRotation;
+                }
             }
         }
 
@@ -757,6 +815,7 @@ namespace SchoolTwin.Present
             v.ClosedAngle = closedAngle;
             v.OpenAngle = openAngle;
             v.Angle = 0f;
+            v.Leaves = CollectDoorLeaves(t);
 
             Debug.Log("[TwinPresent] 门已接管：" + anchor.TwinId + "（" + t.name + "）" +
                       " 墙向=" + (wallAlongX ? "X" : "Z") +
@@ -764,9 +823,60 @@ namespace SchoolTwin.Present
                       "（" + closeReason + "）" +
                       " 关门角=" + closedAngle.ToString("0.0") + "°" +
                       " 开门角=" + openAngle.ToString("0.0") + "°" +
+                      (v.Leaves != null ? " 双开门=" + v.Leaves.Length + " 片门叶" : " 单门叶") +
                       "（角度相对模型当前姿态，0° = 原样）");
 
             return v;
+        }
+
+        /// <summary>
+        /// 判断这是不是一扇双开门，是的话把两片门叶收集出来。
+        ///
+        /// 判据：根节点下**带渲染器的直接子物体 ≥ 2 个**。
+        /// `Door07a` 预制体只有 1 个 GameObject（门扇就是它自己），所以返回 null；
+        /// `DoorDouble02` 根下有 `DoorDouble0` 和 `DoorDouble` 两片，返回 2 片。
+        ///
+        /// 转向：按门叶在**墙方向上的位置**排序，靠前的一片转 +，靠后的一片转 -。
+        /// 双开门的两个门轴分别在外侧两端，所以「往同一个物理方向开」= 数学上方向相反。
+        /// </summary>
+        private static DoorLeaf[] CollectDoorLeaves(Transform root)
+        {
+            if (root == null) return null;
+
+            List<Transform> kids = new List<Transform>(4);
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform c = root.GetChild(i);
+                if (c == null) continue;
+                if (c.GetComponentInChildren<Renderer>(true) == null) continue;
+                kids.Add(c);
+            }
+
+            if (kids.Count < 2) return null;
+
+            // 按「在墙方向上谁更靠前」排序 —— 用世界坐标在 root.right 上的投影
+            Vector3 axis = root.right;
+            axis.y = 0f;
+            if (axis.sqrMagnitude < 0.0001f) axis = Vector3.right;
+            axis.Normalize();
+
+            kids.Sort(delegate (Transform a, Transform b)
+            {
+                float pa = Vector3.Dot(a.position, axis);
+                float pb = Vector3.Dot(b.position, axis);
+                return pa.CompareTo(pb);
+            });
+
+            DoorLeaf[] leaves = new DoorLeaf[kids.Count];
+            for (int i = 0; i < kids.Count; i++)
+            {
+                DoorLeaf leaf = new DoorLeaf();
+                leaf.T = kids[i];
+                leaf.BaseRotation = kids[i].rotation;
+                leaf.Sign = (i % 2 == 0) ? 1f : -1f;
+                leaves[i] = leaf;
+            }
+            return leaves;
         }
 
         /// <summary>
@@ -985,6 +1095,474 @@ namespace SchoolTwin.Present
             return true;
         }
 
+        // ---------------------------------------------------------------- 电脑显示器（P19）
+        //
+        // 【P18 为什么判过「做不出来」，P19 为什么又能做了】
+        // P18 的结论是：`Monitor04` 是**单网格单材质**，贴图图集里没有独立的「屏幕」子物体，
+        // 所以「开机 = 屏幕亮」无从下手。这个结论只对了一半 ——
+        // 图集里确实没有独立的**网格**，但屏幕在**贴图**里是一块规整的纯黑矩形：
+        //   实测 `Monitor04.png`（2048×2048）里，屏幕区 = x∈[90,1476]、y∈[89,944]，
+        //   共 1,185,030 像素，与 `sum(rgb)<30` 的像素数 1,186,519 几乎相等 → 是一整块实心矩形。
+        // 于是可以生成一张**只在那块矩形里是白色**的 `_EmissionMap`，
+        // 开机时把 `_EmissionColor` 点亮 —— 亮的就只有屏幕，边框和支架一点都不亮。
+        //
+        // 遮罩是**运行时按 UV 生成**的（`BuildScreenMask`），不落资源文件：
+        // 一来不用往 `Resources/` 塞东西、不用维护 .meta，
+        // 二来 UV 矩形就写在下面几个常量里，将来换了显示器模型改一行就够。
+
+        /// <summary>屏幕在 `Monitor04.png` 里的像素范围（左, 右, 上, 下）。**量出来的，不是估的**。</summary>
+        private const float MaskTexWidth = 2048f;
+        private const float MaskTexHeight = 2048f;
+        private const float ScreenPxLeft = 90f;
+        private const float ScreenPxRight = 1476f;
+        private const float ScreenPxTop = 89f;
+        private const float ScreenPxBottom = 944f;
+
+        [Header("电脑显示器（P19）")]
+        [Tooltip("开机时屏幕的自发光颜色。**可以超过 1** —— 屏幕 albedo 是纯黑，" +
+                 "最终颜色就等于这个值，不超过 1 的话它比周围被照亮的墙还暗，看起来像「关机」")]
+        [SerializeField] private Color _screenEmission = new Color(0.85f, 0.95f, 1.10f, 1f);
+
+        [Tooltip("屏幕遮罩的内缩像素。往内收一点，避免屏幕边框被一起点亮")]
+        [SerializeField] private float _screenMaskInset = 6f;
+
+        private sealed class ScreenVisual
+        {
+            /// <summary>这台点位管的所有显示器（机房是 19 台）。</summary>
+            public Renderer[] Renderers;
+            /// <summary>运行时材质副本，带 `_EmissionMap` 遮罩。19 台共用这一个。</summary>
+            public Material Material;
+            /// <summary>见 `LampVisual.HasApplied`：不能只判 IsOn，否则「第一次就是关」会早退（99 号清单第 20 条）。</summary>
+            public bool HasApplied;
+            public bool IsOn;
+        }
+
+        private readonly Dictionary<string, ScreenVisual> _screens =
+            new Dictionary<string, ScreenVisual>(2, StringComparer.Ordinal);
+
+        private Texture2D _screenMask;
+
+        private void SyncScreen(string twinId, TwinAnchor anchor)
+        {
+            if (_noVisual.Contains(twinId)) return;
+
+            ScreenVisual v;
+            if (!_screens.TryGetValue(twinId, out v))
+            {
+                v = BuildScreen(anchor);
+                if (v == null) { _noVisual.Add(twinId); return; }
+                _screens[twinId] = v;
+            }
+
+            TwinValue power;
+            bool on = anchor.TryGetValue("Power", out power) && power.Value > 0.5f;
+
+            // 断电时屏幕必须是黑的 —— 和灯同一条理由（见 SyncLamp）
+            if (!TwinCircuit.IsPowered(twinId)) on = false;
+
+            ApplyScreen(v, on);
+        }
+
+        private ScreenVisual BuildScreen(TwinAnchor anchor)
+        {
+            // 【为什么按「材质名 + 分区」找，而不是按名字找】
+            // `Monitor04 (7)` 这种编号是 Unity 复制实例时加的，删一个再加一个就全变
+            // （99 号清单第 7 条：名字不是身份）。而材质是模型自带的，改不了。
+            // 分区再收一道，是为了「教师办公室那台 PC 不能点亮机房的显示器」——
+            // 两个 PC 点位在同一个楼层、隔着几米，只靠材质名会互相串。
+            List<Renderer> hits = new List<Renderer>(24);
+            Renderer[] all = FindObjectsOfType<Renderer>(true);
+            string zone = anchor.Zone;
+            bool hasBounds = !string.IsNullOrEmpty(zone) && TwinRoomBounds.Has(zone);
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.sharedMaterial == null) continue;
+                if (!r.sharedMaterial.name.StartsWith("Monitor04", StringComparison.Ordinal)) continue;
+
+                if (hasBounds)
+                {
+                    Vector3 p = r.transform.position;
+                    if (!TwinRoomBounds.Contains(zone, p.x, p.z)) continue;
+                }
+                hits.Add(r);
+            }
+
+            if (hits.Count == 0)
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」找不到任何显示器（材质名 Monitor04*），" +
+                          "这个点位不会有画面反应。若换了显示器模型，改 BuildScreen 里的材质名前缀。");
+                return null;
+            }
+
+            Material variant = new Material(hits[0].sharedMaterial);
+            variant.name = "TwinScreen_" + (string.IsNullOrEmpty(zone) ? "any" : zone);
+            variant.SetTexture("_EmissionMap", BuildScreenMask());
+            variant.EnableKeyword("_EMISSION");
+            variant.SetColor(EmissionId, Color.black);
+
+            // 只换带 `_EmissionMap` 的那种（标准着色器）。别的着色器换了会丢贴图。
+            if (!variant.HasProperty(EmissionId))
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」的显示器材质没有 _EmissionColor，" +
+                          "无法做「开机屏幕亮」。");
+                Destroy(variant);
+                return null;
+            }
+
+            for (int i = 0; i < hits.Count; i++) hits[i].sharedMaterial = variant;
+
+            ScreenVisual v = new ScreenVisual();
+            v.Renderers = hits.ToArray();
+            v.Material = variant;
+
+            Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」接管了 " + hits.Count +
+                      " 台显示器（分区 " + (string.IsNullOrEmpty(zone) ? "未指定" : zone) + "）");
+            return v;
+        }
+
+        /// <summary>
+        /// 生成屏幕发光遮罩：只有屏幕那块 UV 矩形是白的，其余全黑。
+        ///
+        /// 【UV 怎么算的】Unity 的 v 轴从**下**往上，PNG 的 y 从**上**往下，所以要翻一下：
+        ///   u = x / 2048，  v = 1 - y / 2048
+        /// 屏幕 x∈[90,1476] y∈[89,944] →
+        ///   u ∈ [0.0439, 0.7207]，v ∈ [0.5391, 0.9565]
+        /// 不翻的话遮罩会落在图集的**下半部分**（那是机箱背板），屏幕永远不亮。
+        /// </summary>
+        private Texture2D BuildScreenMask()
+        {
+            if (_screenMask != null) return _screenMask;
+
+            const int size = 256;
+            float inset = Mathf.Max(0f, _screenMaskInset);
+
+            float u0 = (ScreenPxLeft + inset) / MaskTexWidth;
+            float u1 = (ScreenPxRight - inset) / MaskTexWidth;
+            float v0 = 1f - (ScreenPxBottom - inset) / MaskTexHeight;
+            float v1 = 1f - (ScreenPxTop + inset) / MaskTexHeight;
+
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.name = "TwinMonitorScreenMask";
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float v = (y + 0.5f) / size;
+                bool inV = v >= v0 && v <= v1;
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size;
+                    bool on = inV && u >= u0 && u <= u1;
+                    px[y * size + x] = on ? Color.white : Color.black;
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+
+            _screenMask = tex;
+            return tex;
+        }
+
+        private void ApplyScreen(ScreenVisual v, bool on)
+        {
+            if (v.HasApplied && v.IsOn == on) return;
+            v.HasApplied = true;
+            v.IsOn = on;
+
+            if (v.Material == null) return;
+            if (!v.Material.HasProperty(EmissionId)) return;
+
+            v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
+        }
+
+        // ---------------------------------------------------------------- 投影仪（P19）
+
+        [Header("投影仪（P19）")]
+        [Tooltip("幕布点亮时的自发光颜色。投影出来的画面偏冷白")]
+        [SerializeField] private Color _screenCanvasEmission = new Color(0.55f, 0.60f, 0.66f, 1f);
+
+        private sealed class ProjectorVisual
+        {
+            public Renderer Canvas;
+            public Material CanvasMaterial;
+            public bool HasApplied;
+            public bool IsOn;
+        }
+
+        private readonly Dictionary<string, ProjectorVisual> _projectors =
+            new Dictionary<string, ProjectorVisual>(2, StringComparer.Ordinal);
+
+        private void SyncProjector(string twinId, TwinAnchor anchor)
+        {
+            if (_noVisual.Contains(twinId)) return;
+
+            ProjectorVisual v;
+            if (!_projectors.TryGetValue(twinId, out v))
+            {
+                v = BuildProjector(anchor);
+                if (v == null) { _noVisual.Add(twinId); return; }
+                _projectors[twinId] = v;
+            }
+
+            TwinValue power;
+            bool on = anchor.TryGetValue("Power", out power) && power.Value > 0.5f;
+            if (!TwinCircuit.IsPowered(twinId)) on = false;
+
+            if (v.HasApplied && v.IsOn == on) return;
+            v.HasApplied = true;
+            v.IsOn = on;
+
+            if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
+                v.CanvasMaterial.SetColor(EmissionId, on ? _screenCanvasEmission : Color.black);
+        }
+
+        /// <summary>
+        /// 找这台投影仪对应的**幕布**，给它一份带自发光的材质副本。
+        ///
+        /// 【为什么是幕布而不是投影仪本体】投影仪本体是个黑色小盒子，吊在天花板上，
+        /// 开机时它自己几乎不发光 —— 亮了也看不出来。真正"一眼就知道开了"的是**幕布**。
+        ///
+        /// ── 为什么按**层级**找，不按分区矩形、也不按材质 ────────────────
+        /// 2026-10-22 P19 第一版按「分区矩形 + 名字前缀」找，实测**两块幕布都找不到**：
+        ///   · 计算机教室的幕布在 (-11.54, 3.01, 38.01)，而房间矩形 MaxX = -12.4 → x 差 0.86m 落在框外；
+        ///   · 教师办公室的幕布在 (2.81, 6.33, 33.67)，而房间矩形 MinZ = 35.0 → z 差 1.33m 落在框外。
+        /// 原因很实在：**幕布挂在教室最前面（讲台那侧的墙上）**，而房间矩形是照**灯**反推的，
+        /// 灯只铺到座位区，讲台那一条压根不在矩形里。这不是表写错了，是这张表本来就不为它服务。
+        ///   · 也不能按材质找：幕布用的是 `PlasticWhite1` / `PlasticBlack1` 这种**通用**材质，
+        ///     全场到处都在用，按材质名会把半个学校都收进来。
+        /// 层级是唯一零歧义的事实：投影仪和幕布都是 `Interior/<房间>` 的直接子物体。
+        /// </summary>
+        private ProjectorVisual BuildProjector(TwinAnchor anchor)
+        {
+            // 往上走到「父节点叫 Interior」的那一层 —— 那就是房间节点。
+            // 直接取 parent 也行（实测投影仪就挂在房间节点下），但多走两步不花钱，
+            // 而且换成"投影仪挂在吊架下"这种结构时仍然正确。
+            Transform room = anchor.transform;
+            while (room != null && room.parent != null && room.parent.name != "Interior")
+                room = room.parent;
+
+            if (room == null)
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」往上找不到 Interior 房间节点，" +
+                          "投影仪幕布接不上。");
+                return null;
+            }
+
+            Renderer canvas = null;
+            Renderer[] all = room.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.gameObject == null) continue;
+                if (!r.gameObject.name.StartsWith("ProjectorScreen", StringComparison.Ordinal)) continue;
+                canvas = r;
+                break;
+            }
+
+            if (canvas == null || canvas.sharedMaterial == null)
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」在房间节点 " + room.name +
+                          " 下找不到幕布（ProjectorScreen*），开机时不会有画面反应。");
+                return null;
+            }
+
+            Material variant = new Material(canvas.sharedMaterial);
+            variant.name = "TwinScreenCanvas_" + room.name;
+            variant.EnableKeyword("_EMISSION");
+            if (!variant.HasProperty(EmissionId))
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」的幕布材质没有 _EmissionColor，跳过。");
+                Destroy(variant);
+                return null;
+            }
+            variant.SetColor(EmissionId, Color.black);
+            canvas.sharedMaterial = variant;
+
+            ProjectorVisual v = new ProjectorVisual();
+            v.Canvas = canvas;
+            v.CanvasMaterial = variant;
+
+            Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」接管幕布：" + canvas.name +
+                      "（房间节点 " + room.name + "）");
+            return v;
+        }
+
+        // ---------------------------------------------------------------- 上课铃（P19）
+        //
+        // 铃声是**程序生成**的，工程里一个音频文件都没有（`find Assets -name *.wav` 为空）。
+        // 和空调提示音、告警音是同一套做法（`TwinAlarmAudio.MakeBeep`）。
+        //
+        // 三层分工，缺一层都会出问题：
+        //   ① 课表      `TwinBellScheduler` —— 决定什么时候响（设备侧时钟）
+        //   ② 状态位    `MockDeviceAgent.RingNow` / `SetRing` —— `Ring` 置 1，3 秒后自己置 0
+        //   ③ 表现      **本方法** —— 只读 `Ring`，响了就播声音 + 让警报器闪
+        // 所以「谁让它响的」在这里是不知道也不需要知道的：定时和手动走的是同一个值。
+
+        [Header("上课铃（P19）")]
+        [Tooltip("铃声音量（0~1）。程序合成的三音上行铃（E5→G5→C6），长 1.75 秒")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _bellVolume = 0.8f;
+
+        [Tooltip("打铃时警报器的闪烁间隔（秒）。0 = 不闪，只发声")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _bellFlashInterval = 0.25f;
+
+        [Tooltip("闪烁颜色")]
+        [SerializeField] private Color _bellFlashColor = new Color(0.55f, 0.16f, 0.10f, 1f);
+
+        private sealed class BellVisual
+        {
+            public Renderer[] Renderers;
+            public MaterialPropertyBlock Mpb;
+            public bool WasRinging;
+            public float NextFlash;
+            public bool FlashOn;
+        }
+
+        private readonly Dictionary<string, BellVisual> _bells =
+            new Dictionary<string, BellVisual>(2, StringComparer.Ordinal);
+
+        private AudioClip _bellChime;
+
+        private void SyncBell(string twinId, TwinAnchor anchor)
+        {
+            BellVisual v;
+            if (!_bells.TryGetValue(twinId, out v))
+            {
+                v = BuildBell(anchor);
+                _bells[twinId] = v;
+            }
+
+            TwinValue ring;
+            bool ringing = anchor.TryGetValue("Ring", out ring) && ring.Value > 0.5f;
+
+            // ---- 起响：播一次铃声（边沿触发，不是电平触发）----
+            // 用 `WasRinging` 而不是「ringing 就播」：0.1 秒轮询一次，
+            // 电平触发会一秒播 10 遍，叠成一片噪音。
+            if (ringing && !v.WasRinging)
+            {
+                EnsureAudio();
+                if (_bellChime == null) _bellChime = BuildBellChime();
+                if (_audio != null && _bellChime != null)
+                {
+                    _audio.PlayOneShot(_bellChime, Mathf.Clamp01(_bellVolume));
+                    Debug.Log("[TwinPresent] 打铃：「" + twinId + "」播放铃声（" +
+                              _bellChime.length.ToString("0.0") + " 秒）");
+                }
+                v.FlashOn = true;
+                v.NextFlash = 0f;   // 立刻亮第一下
+            }
+
+            // ---- 闪烁 ----
+            if (ringing && v.Renderers != null && v.Renderers.Length > 0 && _bellFlashInterval > 0.001f)
+            {
+                if (Time.unscaledTime >= v.NextFlash)
+                {
+                    v.FlashOn = !v.FlashOn;
+                    v.NextFlash = Time.unscaledTime + _bellFlashInterval;
+                    WriteBellEmission(v, v.FlashOn ? _bellFlashColor : Color.black);
+                }
+            }
+            else if (!ringing && v.WasRinging)
+            {
+                WriteBellEmission(v, Color.black);
+            }
+
+            v.WasRinging = ringing;
+        }
+
+        private BellVisual BuildBell(TwinAnchor anchor)
+        {
+            BellVisual v = new BellVisual();
+            v.Mpb = new MaterialPropertyBlock();
+
+            // 打铃器挂在 `Alarm01` 上（走廊墙上的消防声光警报器）。
+            // 锚点就在它身上，所以直接用它自己的渲染器 —— 不找别的。
+            GameObject target = anchor.VisualTarget;
+            if (target == null) target = anchor.gameObject;
+            v.Renderers = target.GetComponentsInChildren<Renderer>(true);
+
+            if (v.Renderers == null || v.Renderers.Length == 0)
+            {
+                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」没有渲染器，打铃只有声音没有画面。");
+                v.Renderers = null;
+            }
+
+            Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」打铃器就位（" +
+                      (v.Renderers == null ? 0 : v.Renderers.Length) + " 个渲染器）");
+            return v;
+        }
+
+        private static void WriteBellEmission(BellVisual v, Color c)
+        {
+            if (v.Renderers == null) return;
+            for (int i = 0; i < v.Renderers.Length; i++)
+            {
+                Renderer r = v.Renderers[i];
+                if (r == null || r.sharedMaterial == null) continue;
+                if (!r.sharedMaterial.HasProperty(EmissionId)) continue;
+
+                r.GetPropertyBlock(v.Mpb);
+                v.Mpb.SetColor(EmissionId, c);
+                r.SetPropertyBlock(v.Mpb);
+                v.Mpb.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 合成一段三音上行铃（E5 → G5 → C6，每音 0.55 秒，指数衰减）。
+        ///
+        /// 【为什么是三个音而不是一声「叮」】学校的上课铃是**有旋律的**，
+        /// 一声短促的「叮」听上去像门铃或者报错提示。三个音上行是全世界校园铃的通用语汇。
+        ///
+        /// 【为什么要 4ms 起音】直接从中值开始振动，波形上是阶跃，扬声器会「咔哒」一声。
+        /// 【为什么要二次谐波】纯正弦像测试音，加一点谐波才像金属铃。
+        /// </summary>
+        private AudioClip BuildBellChime()
+        {
+            const int sampleRate = 44100;
+            const float noteSeconds = 0.55f;
+            const float gapSeconds = 0.05f;
+
+            float[] notes = { 659.25f, 783.99f, 1046.50f };   // E5 / G5 / C6
+
+            int noteLen = Mathf.RoundToInt(sampleRate * noteSeconds);
+            int gapLen = Mathf.RoundToInt(sampleRate * gapSeconds);
+            int total = notes.Length * noteLen + (notes.Length - 1) * gapLen;
+
+            float[] data = new float[total];
+            for (int n = 0; n < notes.Length; n++)
+            {
+                int start = n * (noteLen + gapLen);
+                for (int i = 0; i < noteLen; i++)
+                {
+                    int idx = start + i;
+                    if (idx >= total) break;
+
+                    float t = i / (float)sampleRate;
+                    float progress = i / (float)noteLen;
+
+                    float attack = Mathf.Clamp01(t / 0.004f);
+                    float decay = Mathf.Exp(-3.2f * progress);
+                    float env = attack * decay;
+
+                    float s = Mathf.Sin(2f * Mathf.PI * notes[n] * t)
+                            + 0.30f * Mathf.Sin(2f * Mathf.PI * notes[n] * 2f * t)
+                            + 0.12f * Mathf.Sin(2f * Mathf.PI * notes[n] * 3f * t);
+
+                    data[idx] = s * env * 0.30f;
+                }
+            }
+
+            AudioClip clip = AudioClip.Create("TwinBellChime", total, 1, sampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
         // ---------------------------------------------------------------- 提示音
 
         private void OnCommandChanged(TwinCommand cmd)
@@ -1010,6 +1588,25 @@ namespace SchoolTwin.Present
             _audio.loop = false;
             _audio.spatialBlend = 0f;    // 2D：相机在走廊另一头也听得到
             _audio.volume = 1f;          // 波形本身已经压到 0.42，这里不再二次衰减
+            _audio.dopplerLevel = 0f;
+        }
+
+        /// <summary>
+        /// 只要有一个 AudioSource 能放声音就行。
+        ///
+        /// 【为什么单独一个方法】`BuildAudio` 只在 `_beepOnReceive` 打开时跑（Awake 里）。
+        /// 但上课铃的声音和那个开关**无关** —— 有人把空调提示音关掉了，
+        /// 结果打铃也不响了，这种耦合很难查（"我明明开了自动打铃"）。
+        /// 所以铃声走这条独立入口，用到时才建。
+        /// </summary>
+        private void EnsureAudio()
+        {
+            if (_audio != null) return;
+            _audio = gameObject.AddComponent<AudioSource>();
+            _audio.playOnAwake = false;
+            _audio.loop = false;
+            _audio.spatialBlend = 0f;
+            _audio.volume = 1f;
             _audio.dopplerLevel = 0f;
         }
 

@@ -197,9 +197,12 @@ namespace SchoolTwin.UI
             _center = TwinCommandCenter.Ensure();
 
             // 门的按钮说「开门 / 关门」：一个「开」字放在门上，读起来像"打开这张卡片"
+            // 【P19】上课铃同理，而且语义更紧：「开 / 关」放在铃上会被读成"这个铃启用了/停用了"，
+            // 而它的实际含义是"现在响一下 / 停止"。所以单独一套文案。
             bool isDoor = string.Equals(model.Type, "Door", StringComparison.Ordinal);
-            if (_onText != null) _onText.text = isDoor ? "开门" : "开";
-            if (_offText != null) _offText.text = isDoor ? "关门" : "关";
+            bool isBell = string.Equals(model.Type, "Bell", StringComparison.Ordinal);
+            if (_onText != null) _onText.text = isDoor ? "开门" : (isBell ? "打铃" : "开");
+            if (_offText != null) _offText.text = isDoor ? "关门" : (isBell ? "停止" : "关");
 
             _tempLabel.gameObject.SetActive(_hasTemp);
             _minusBg.gameObject.SetActive(_hasTemp);

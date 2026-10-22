@@ -220,8 +220,26 @@ namespace SchoolTwin.EditorTools
                 bool outX = hinge.x < bx0 || hinge.x > bx1;
                 bool outZ = hinge.z < bz0 || hinge.z > bz1;
                 bool alongX;
-                if (outX != outZ) alongX = outZ;
-                else { sb.AppendLine("  墙向说不清（outX=" + outX + " outZ=" + outZ + "）"); continue; }
+                if (outX != outZ)
+                {
+                    alongX = outZ;
+                }
+                else
+                {
+                    // 【P19 补】P18 给表现层加了一条兜底：两根轴都出界 / 都不出界时，
+                    // 改用**门扇当前朝向**判（`TwinDevicePresenter.TryLeafIsAlongX`）。
+                    // 这个诊断工具是 P17 的副本，没有那条兜底 —— 于是东翼那 3 扇门和礼堂的
+                    // 双开门在这里会打成「墙向说不清」，看起来像"门坏了"，
+                    // 其实表现层是能接管的。这里补上，**诊断要和实现一致**，否则诊断会骗人。
+                    float leafYaw = Mathf.Atan2(-panel.z, panel.x) * Mathf.Rad2Deg;
+                    while (leafYaw > 90f) leafYaw -= 180f;
+                    while (leafYaw <= -90f) leafYaw += 180f;
+
+                    alongX = Mathf.Abs(leafYaw) > 45f;
+                    sb.AppendLine("  ⚠ 房间范围判不出（outX=" + outX + " outZ=" + outZ +
+                                  "）→ 退回门扇朝向：yaw=" + leafYaw.ToString("0.0") +
+                                  "° → 墙向=" + (alongX ? "X" : "Z"));
+                }
                 sb.AppendLine("  墙向=" + (alongX ? "X" : "Z") +
                               "（outX=" + outX + " outZ=" + outZ + "）");
 

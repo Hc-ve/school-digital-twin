@@ -71,6 +71,14 @@ namespace SchoolTwin.Twin
             R("ClassDirector", 2, "主任室"),
             R("Corridor1",     1, "一层走廊"),
             R("Corridor2",     2, "二层走廊"),
+
+            // ---- P19 新增：西翼食堂/礼堂、东翼体育馆 ----
+            // 顺序接在走廊后面 = 面板左树的阅读顺序：先教室，再公共区域。
+            R("Kitchen",       1, "食堂餐厅"),
+            R("ActZal",        2, "礼堂（大教室）"),
+            R("SportRoom1",    1, "体育器材室"),
+            R("SportRoom2",    1, "体育馆（中区）"),
+            R("SportRoom3",    1, "体育馆（东区）"),
         };
 
         private static Dictionary<string, TwinRoomInfo> _index;

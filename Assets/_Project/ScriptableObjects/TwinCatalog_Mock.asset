@@ -1174,3 +1174,260 @@ MonoBehaviour:
       AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: Kitchen/Light/Main_01
+    DisplayName: "\u98DF\u5802\u9910\u5385 \u7167\u660E"
+    Zone: Kitchen
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportRoom1/Light/Main_01
+    DisplayName: "\u4F53\u80B2\u5668\u6750\u5BA4 \u7167\u660E"
+    Zone: SportRoom1
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ActZal/Door/Entrance_01
+    DisplayName: "\u793C\u5802 \u5927\u95E8"
+    Zone: ActZal
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportRoom1/Door/Entrance_01
+    DisplayName: "\u4F53\u80B2\u5668\u6750\u5BA4 \u95E8"
+    Zone: SportRoom1
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportRoom2/Door/Entrance_01
+    DisplayName: "\u4F53\u80B2\u9986\u4E2D\u533A \u95E8"
+    Zone: SportRoom2
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportRoom3/Door/Entrance_01
+    DisplayName: "\u4F53\u80B2\u9986\u4E1C\u533A \u95E8"
+    Zone: SportRoom3
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/Projector/Main_01
+    DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u6295\u5F71\u4EEA"
+    Zone: ClassComputer
+    Category: Projector
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 400
+      WarnLow: 0
+      WarnHigh: 380
+      AlarmLow: 0
+      AlarmHigh: 400
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: LampHours
+      Unit: h
+      Min: 0
+      Max: 10000
+      WarnLow: 0
+      WarnHigh: 9000
+      AlarmLow: 0
+      AlarmHigh: 9800
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassTeachers/Projector/Main_01
+    DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u6295\u5F71\u4EEA"
+    Zone: ClassTeachers
+    Category: Projector
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 400
+      WarnLow: 0
+      WarnHigh: 380
+      AlarmLow: 0
+      AlarmHigh: 400
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: LampHours
+      Unit: h
+      Min: 0
+      Max: 10000
+      WarnLow: 0
+      WarnHigh: 9000
+      AlarmLow: 0
+      AlarmHigh: 9800
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Corridor1/Bell/Speaker_01
+    DisplayName: "\u6821\u56ED\u5E7F\u64AD\u6253\u94C3\u5668"
+    Zone: Corridor1
+    Category: Bell
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Ring
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Volume
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 55
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0

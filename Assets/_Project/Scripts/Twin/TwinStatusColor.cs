@@ -345,12 +345,34 @@ namespace SchoolTwin.Twin
             return _anchor != null && string.Equals(_anchor.Category, "Light", System.StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// 【P19】表现层**只**独占自发光的类别 —— 本组件对这些设备仍然染色，但不写 `_EmissionColor`。
+        ///
+        /// 和 `PresenterOwnsEmission()` 的区别：
+        ///   · 灯：外观全靠发光，染色会把它染成青绿色 → 本组件**整体退出**；
+        ///   · 电脑 / 投影仪 / 上课铃：染色（`_Color`）不影响它们，但自发光是表现层在写的
+        ///     （屏幕亮、幕布亮、警报器闪）。如果本组件也往 `_EmissionColor` 里写状态色，
+        ///     两边每帧互相覆盖 —— 屏幕会一会儿白一会儿绿，很难看出是谁干的。
+        ///
+        /// 所以这里让出的只有自发光这一个属性，状态色仍然从 `_Color` 透出来。
+        /// 这是「一个属性只能有一个主人」的**最小让步**版本：
+        /// 能只让一个属性，就别把整个组件让出去。
+        /// </summary>
+        private bool PresenterOwnsEmissionOnly()
+        {
+            if (_anchor == null) return false;
+            string c = _anchor.Category;
+            return string.Equals(c, "PC", System.StringComparison.Ordinal)
+                || string.Equals(c, "Projector", System.StringComparison.Ordinal)
+                || string.Equals(c, "Bell", System.StringComparison.Ordinal);
+        }
+
         private void Apply(Color statusColor, float strength)
         {
             if (_renderers == null) return;
             if (_mpb == null) _mpb = new MaterialPropertyBlock();
 
-            bool writeEmission = _applyEmission && !PresenterOwnsEmission();
+            bool writeEmission = _applyEmission && !PresenterOwnsEmission() && !PresenterOwnsEmissionOnly();
 
             for (int i = 0; i < _renderers.Length; i++)
             {

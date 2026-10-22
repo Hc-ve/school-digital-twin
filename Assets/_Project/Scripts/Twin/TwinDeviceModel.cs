@@ -229,6 +229,34 @@ namespace SchoolTwin.Twin
                     AddAction(m, "SetOpen", true, "Open", 0f, 1f, 1f, 0.99f, 1.01f, -0.01f, 0.01f);
                     break;
 
+                case "Projector":
+                    // 【P19】投影仪。量程照真实教室吊装投影机（约 300W 灯泡机）。
+                    //
+                    // 为什么带 `LampHours`：投影仪和灯、空调不一样，它有一个**只会往上走**的
+                    // 计数（灯泡寿命）。这是它最该被孪生体盯住的量 —— 比"开没开"更有价值。
+                    // 也让"开机"这件事在卡片上有第二处能看出反应（小时数在涨）。
+                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 400f);
+                    AddProperty(m, "LampHours", "LampHours", TwinPropertyKind.Int, "h", 0f, 10000f);
+                    // 开机 → 约 310W（含风扇与信号板）；关机 → 0W（待机功耗太小，按 0 算）
+                    AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 150f, 400f, 0f, 5f);
+                    m.Events.Add("LampEndOfLife");
+                    break;
+
+                case "Bell":
+                    // 【P19】上课铃（校园广播打铃终端）。
+                    //
+                    // ⚠️ 这是本项目第一个**「动作型」设备** —— 它不是"开/关两种稳态"，
+                    // 而是"响 N 秒然后自己停"。所以：
+                    //   · `Ring` 只是"此刻在不在响"，设备侧 3 秒后自己置 0；
+                    //   · 界面上不能做成常开开关，否则用户会以为铃可以一直响。
+                    // 表现层（`TwinDevicePresenter.SyncBell`）只认 `Ring`，
+                    // 不关心"是谁让它响的"（定时器还是人手点）—— 这条分界和别的设备一致。
+                    AddProperty(m, "Ring", "Ring", TwinPropertyKind.Bool, "0/1", 0f, 1f);
+                    AddProperty(m, "Volume", "Volume", TwinPropertyKind.Float, "%", 0f, 100f);
+                    // 回读判据：响 = Ring ∈ [0.99, 1.01]，停 = Ring ∈ [-0.01, 0.01]
+                    AddAction(m, "SetRing", true, "Ring", 0f, 1f, 1f, 0.99f, 1.01f, -0.01f, 0.01f);
+                    break;
+
                 default:
                     // Sensor / Alarm：只读。没有动作 = 面板上不会出现按钮（不是灰按钮）
                     if (category == "Sensor")
@@ -405,17 +433,20 @@ namespace SchoolTwin.Twin
     /// 「这个按钮是假的」——那比不开放更糟。
     ///
     /// 所以白名单只放「表现层已接管」的设备类型：
-    ///   · Light —— 灯管发光 + 点光源（P13）
-    ///   · AC    —— 收到命令时「滴滴」（P13）
-    ///   · Door  —— 绕门轴转动，开/关有动画（P17 / P18）
+    ///   · Light     —— 灯管发光 + 点光源（P13）
+    ///   · AC        —— 收到命令时「滴滴」（P13）
+    ///   · Door      —— 绕门轴转动，开/关有动画（P17 / P18 / P19）
+    ///   · PC        —— 显示器屏幕整块亮起（P19，靠 `_EmissionMap` 遮罩只点屏幕区）
+    ///   · Projector —— 幕布整块亮起（P19）。**只点幕布**：投影仪本体是个吊在黑板上方的
+    ///                  深色小盒子，亮了也看不出来；幕布才是「一眼就知道开了」的那个面
+    ///   · Bell      —— 播铃声 + 警报器闪烁（P19）
     ///
     /// 还**没**开放的（可命令点位里剩下的这些）：
     ///   · Heat 9 台 —— 没有可视化部件（只有阀门开度数字），点了看不出反应
-    ///   · PC 2 台   —— 【P18 复核结论：不只是「没有可视化部件」】
-    ///                  `Computer06` / `Monitor04` 都是**单网格单材质**，
-    ///                  贴图图集里没有独立的「屏幕」区域，也没有单独的屏幕子物体 ——
-    ///                  所以「开机 = 屏幕亮起来」这件事**做不出来**，除非补一块屏幕面片。
-    ///                  既然三维里不会有反应，就不开放，理由和暖气一样。
+    ///   · PC 1 台   —— `ClassTeachers/PC/Room_01`：那间房是 `Computer03`，
+    ///                  模型只有机箱 + 键鼠，图集里没有屏幕 → 「开机屏幕亮」做不出来。
+    ///                  （`ClassComputer` 那间是 `Monitor04`，屏幕是图集里一块纯黑矩形，
+    ///                   所以能生成 `_EmissionMap` 遮罩 —— 两台 PC 的结论不同，是因为模型不同。）
     ///
     /// 扩展方式：往 Ids 数组里加点位即可，UI、设备代理、表现层三处都从这一处取。
     /// </summary>
@@ -444,15 +475,52 @@ namespace SchoolTwin.Twin
 
             // ---- 门 6 扇（P17 一扇 + P18 补五扇）----
             // 锚点都挂在 `Door07a` 实例本身（不是标记牌），所以三维里点得到、面板里也点得到。
-            // 场景里一共 11 扇 Door07a，剩下 5 扇在南翼（运动教室那一侧）——
-            // 那几间房连分区、房间范围、任何点位都没有，门只能看数字不能转，
-            // 所以**有意不绑**，留给「扩分区」那一步一起做。
+            // 场景里一共 12 扇 Door07a，剩下 6 扇在东翼（体育馆那一侧）——
+            // 那几间房 P18 时还没有分区，门只能看数字不能转，所以当时**有意不绑**。
+            // P19 扩了 `SportRoom1/2/3` 三个分区之后这 6 扇就能绑了，见下面。
             "Class2-1/Door/Entrance_01",
             "ClassComputer/Door/Entrance_01",
             "Class1-2/Door/Entrance_01",
             "Class1-3/Door/Entrance_01",
             "Class1-4/Door/Entrance_01",
             "Class2-2/Door/Entrance_01",
+
+            // ---- 【P19】照明 2 盏（食堂餐厅 / 体育器材室）----
+            // 这两间房以前连分区都没有，点不了灯不是"控制坏了"，是根本没建点位。
+            //
+            // ⚠️ 礼堂（`ActZal`）**故意不在**这里：西翼 20 盏灯全在 y≈3.3（1F 吊顶），
+            //    2F 高度一盏都没有 —— 礼堂是靠高窗采光的，模型里没装吊灯。
+            //    给它建一个照明点位会让「点开灯」什么也看不见，那比不建更糟。
+            //    要补得先补灯具（P17 给三间空房补过 6 盏，做法一样）。
+            "Kitchen/Light/Main_01",
+            "SportRoom1/Light/Main_01",
+
+            // ---- 【P19】门 4 扇（礼堂双开门 + 体育馆三间）----
+            // 礼堂那扇是 `DoorDouble02`（双开），枢轴在 (-43.09, 3.56, 30.69)，
+            // 与 `Door07a` 不是同一个预制体，表现层按「两扇门叶各转一半」处理。
+            "ActZal/Door/Entrance_01",
+            "SportRoom1/Door/Entrance_01",
+            "SportRoom2/Door/Entrance_01",
+            "SportRoom3/Door/Entrance_01",
+
+            // ---- 【P19】投影仪 2 台 ----
+            // 计算机教室（1F）与教师办公室（2F）各一台，都带电动幕布。
+            // 开机 = 幕布亮 + 镜头亮，关机 = 全灭。
+            "ClassComputer/Projector/Main_01",
+            "ClassTeachers/Projector/Main_01",
+
+            // ---- 【P19】机房电脑 ----
+            // 点位语义是「**整间机房**的电脑」，所以开机 = 19 台显示器同时亮。
+            // 教师办公室那台（`ClassTeachers/PC/Room_01`）**不开放**：
+            // 那间房用的是 `Computer03`，模型只有机箱 + 键鼠，图集里**没有屏幕**，
+            // 开机在三维里不会有任何反应 —— 理由和暖气一样，见上面 P18 的注释。
+            "ClassComputer/PC/Room_01",
+
+            // ---- 【P19】上课铃 ----
+            // 场景里没有任何"铃"的模型，只有走廊墙上的 3 台 `Alarm01`（消防声光警报器）。
+            // 其中一台已经被 `Corridor1/Alarm/Fire_01` 占用，铃挂在**另一台**上
+            // （同一个物体上不放两个锚点 —— 一个属性只能有一个主人，99 号清单第 19 条）。
+            "Corridor1/Bell/Speaker_01",
         };
 
         public static bool IsEnabled(string twinId)
