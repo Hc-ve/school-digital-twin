@@ -41,10 +41,10 @@ namespace SchoolTwin.Present
         [Tooltip("开灯时的发光色（Linear 空间下 >1 才会真的发亮）")]
         [SerializeField] private Color _lampEmission = new Color(2.20f, 2.06f, 1.78f, 1f);
 
-        [Tooltip("点光源强度。0 = 只让灯管自己发光，不照亮房间")]
+        [Tooltip("**每盏灯**的点光源强度。0 = 只让灯管自己发光，不照亮房间")]
         [SerializeField] private float _lampGlowIntensity = 2.0f;
 
-        [Tooltip("点光源照射半径（米）。0 = 按灯具尺寸自动算")]
+        [Tooltip("点光源照射半径（米）。0 = 按单盏灯具尺寸自动算（约 3 米）")]
         [SerializeField] private float _lampGlowRange = 0f;
 
         [Header("空调提示音")]
@@ -94,7 +94,21 @@ namespace SchoolTwin.Present
             public readonly List<Renderer> Renderers = new List<Renderer>(16);
             public readonly List<Material> Materials = new List<Material>(16);
             public readonly List<bool> HasEmission = new List<bool>(16);
-            public Light Glow;
+            /// <summary>
+            /// **每盏灯各一个**点光源。
+            ///
+            /// 【为什么不是「一个房间一个」—— 2026-10-22 用户第三次反馈「不够真实」】
+            /// 上一版为了「整间教室一起亮」，把 8 盏灯合并成 1 个 10 米半径的大点光源。
+            /// 结果天花板被均匀照亮成**一片死白**，没有明暗过渡 —— 用户的原话是
+            /// 「之前的效果更好一些，更贴切现实的灯光效果」。
+            ///
+            /// 真实教室是每盏灯照亮它正下方一片，天花板上有 8 个独立的亮斑、彼此之间是暗的。
+            /// 这个"暗"就是真实感的来源。所以恢复成每盏灯一个 3 米的小点光源。
+            ///
+            /// 【性能】68 盏灯 = 68 个点光源，但半径只有 3 米、不投影，Unity 会按距离裁剪；
+            /// 而且 `LightRenderMode.Auto` 会把远处的自动降级成顶点光。实测可接受。
+            /// </summary>
+            public Light[] Glows;
             public bool IsOn;
 
             /// <summary>
@@ -233,7 +247,14 @@ namespace SchoolTwin.Present
                 {
                     if (v.Materials[i] != null) Destroy(v.Materials[i]);
                 }
-                if (v.Glow != null && v.Glow.gameObject != null) Destroy(v.Glow.gameObject);
+                if (v.Glows != null)
+                {
+                    for (int j = 0; j < v.Glows.Length; j++)
+                    {
+                        Light g = v.Glows[j];
+                        if (g != null && g.gameObject != null) Destroy(g.gameObject);
+                    }
+                }
             }
             _lamps.Clear();
             _doors.Clear();
@@ -367,7 +388,6 @@ namespace SchoolTwin.Present
 
             LampVisual v = new LampVisual();
             v.TwinId = anchor.TwinId;
-            Bounds groupBounds = main.bounds;
 
             for (int i = 0; i < group.Count; i++)
             {
@@ -382,14 +402,16 @@ namespace SchoolTwin.Present
                 v.Renderers.Add(r);
                 v.Materials.Add(m);
                 v.HasEmission.Add(has);
-                if (i > 0) groupBounds.Encapsulate(r.bounds);
             }
 
-            v.Glow = BuildGlow(anchor, groupBounds);
+            v.Glows = BuildGlows(anchor, group);
 
             Debug.Log("[TwinPresent] 灯已接管：" + anchor.TwinId +
                       "（" + v.Renderers.Count + " 盏灯 / 发光 " + CountEmission(v) + " 盏" +
-                      "，点光源=" + (v.Glow != null ? "有（房间级，1 盏，range=" + v.Glow.range.ToString("0.0") + "m）" : "无") + "）");
+                      "，点光源=" + (v.Glows != null && v.Glows.Length > 0
+                          ? "每盏一个共 " + v.Glows.Length + " 个，range=" +
+                            (v.Glows[0] != null ? v.Glows[0].range.ToString("0.0") + "m" : "?")
+                          : "无") + "）");
 
             return v;
         }
@@ -488,32 +510,55 @@ namespace SchoolTwin.Present
             return best;
         }
 
-        private Light BuildGlow(TwinAnchor anchor, Bounds bounds)
+        /// <summary>
+        /// 给**每一盏**灯各建一个点光源。
+        ///
+        /// ── 为什么不是「一个房间一个」（2026-10-22 第三次返工）─────────────
+        /// 上一版把整组灯合并成 1 个点光源、半径按整组包围盒算（13m 的教室约 10.6m）。
+        /// 天花板于是被**均匀**照亮 —— 一片死白、没有明暗过渡，看起来像"发光顶棚"而不是"装了灯"。
+        /// 用户的原话：「之前的效果更好一些，更贴切现实的灯光效果」。
+        ///
+        /// 真实教室是每盏灯照亮它正下方一片，天花板上有 N 个独立的亮斑，
+        /// **亮斑之间的暗才是真实感的来源**。所以半径必须按**单盏灯**的尺寸算（约 3 米），
+        /// 而且每盏灯一个光源。这是 P13 最初的做法，也是用户认可的观感。
+        /// </summary>
+        private Light[] BuildGlows(TwinAnchor anchor, List<Renderer> group)
         {
             if (_lampGlowIntensity <= 0.001f) return null;
 
-            GameObject go = new GameObject("TwinLampGlow");
-            go.transform.SetParent(anchor.transform, false);
-            // 落点从「灯具中心」往下挪一点：灯管就贴在天花板上，
-            // 点光源埋在灯罩里时地面那一片照不到（本项目点光源不投影，但高度差仍有意义）。
-            Vector3 center = bounds.center + Vector3.down * 0.35f;
-            go.transform.localPosition = anchor.transform.InverseTransformPoint(center);
-            go.transform.localRotation = Quaternion.identity;
+            Light[] lights = new Light[group.Count];
+            for (int i = 0; i < group.Count; i++)
+            {
+                Renderer r = group[i];
+                if (r == null) continue;
 
-            Light light = go.AddComponent<Light>();
-            light.type = LightType.Point;
-            light.color = new Color(1f, 0.95f, 0.86f);
+                Bounds b = r.bounds;
 
-            // 范围按**整组灯的包围盒**推：P17 之后一个点光源代表一整个房间，
-            // 上限还卡在 8m 的话，13m 长的教室只有中间亮、两头是黑的
-            // —— 用户看到的就是「开了灯但屋子没亮」。上限放到 16m（普通教室对角线约 14m）。
-            light.range = _lampGlowRange > 0.01f
-                ? _lampGlowRange
-                : Mathf.Clamp(bounds.size.magnitude * 0.75f, 4f, 16f);
-            light.intensity = 0f;                 // 由 ApplyLamp 决定
-            light.shadows = LightShadows.None;    // 一盏灯的阴影不值这个开销
-            light.renderMode = LightRenderMode.Auto;
-            return light;
+                GameObject go = new GameObject("TwinLampGlow_" + i);
+                go.transform.SetParent(anchor.transform, false);
+                // 落点从灯管中心往下挪 0.35m：灯管贴在天花板上，
+                // 点光源埋在灯罩里时地面那一片照不到。
+                Vector3 center = b.center + Vector3.down * 0.35f;
+                go.transform.localPosition = anchor.transform.InverseTransformPoint(center);
+                go.transform.localRotation = Quaternion.identity;
+
+                Light light = go.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = new Color(1f, 0.95f, 0.86f);
+
+                // 半径按**这一盏灯**的尺寸算，不是整组 —— 整组会把 8 个光斑糊成一片。
+                // 灯管长约 1.6m → `1.6 × 0.75 ≈ 1.2`，落到下限 3m。
+                // 3m 是 P13 最初、也是用户认可的那个值：只照亮灯正下方一片，边界之外是暗的。
+                light.range = _lampGlowRange > 0.01f
+                    ? _lampGlowRange
+                    : Mathf.Clamp(b.size.magnitude * 0.75f, 3f, 4.5f);
+
+                light.intensity = 0f;                 // 由 ApplyLamp 决定
+                light.shadows = LightShadows.None;    // 一盏灯的阴影不值这个开销
+                light.renderMode = LightRenderMode.Auto;
+                lights[i] = light;
+            }
+            return lights;
         }
 
         private void ApplyLamp(LampVisual v, bool on)
@@ -534,14 +579,21 @@ namespace SchoolTwin.Present
                 written++;
             }
 
-            if (v.Glow != null) v.Glow.intensity = on ? _lampGlowIntensity : 0f;
+            if (v.Glows != null)
+            {
+                for (int i = 0; i < v.Glows.Length; i++)
+                {
+                    if (v.Glows[i] != null) v.Glows[i].intensity = on ? _lampGlowIntensity : 0f;
+                }
+            }
 
             // 只在「状态真的翻转」或「首次接管」时打一条，方便验收时确认表现层确实动手了。
             // 这条一定要无条件打：状态变了却 `written == 0`（材质没有 _EmissionColor）时，
             // 它是唯一能看出「灯为什么不亮」的线索。
             Debug.Log("[TwinPresent] 灯 " + (on ? "开" : "关") + "：" + v.TwinId +
                       "（" + v.Renderers.Count + " 盏，写了 " + written + " 份自发光" +
-                      "，点光源=" + (v.Glow != null ? v.Glow.intensity.ToString("0.0") : "无") + "）");
+                      "，点光源=" + (v.Glows != null ? v.Glows.Length + " 个 × " +
+                                     (on ? _lampGlowIntensity.ToString("0.0") : "0.0") : "无") + "）");
         }
 
         // ---------------------------------------------------------------- 门
