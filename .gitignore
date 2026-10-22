@@ -82,3 +82,6 @@ crashlytics-build.properties
 /p19_apply.txt
 /p19_diag.txt
 /p19_survey.txt
+/p19_door.txt
+/p19_doorfix.txt
+/p19_door_runtime.txt

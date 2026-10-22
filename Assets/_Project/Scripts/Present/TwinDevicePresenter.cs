@@ -170,9 +170,12 @@ namespace SchoolTwin.Present
             ///
             /// 为什么需要单独一份：`Door07a` 预制体**只有一个 GameObject**，原点就在门轴上，
             /// 所以转它自己就是转门扇。而礼堂的 `DoorDouble02` 是**两片独立门叶挂在根节点下**
-            /// （`DoorDouble0` / `DoorDouble`），转根节点会把两片当成一块整板扫过去 ——
-            /// 看起来像"整扇门被拆下来转了一圈"。
-            /// 所以双开门要逐片转，而且两片**方向相反**。
+            /// （`DoorDouble0` / `DoorDouble`，各自有自己的门轴、而且镜像建模），
+            /// 转根节点会把两片当成一块整板扫过去 —— 看起来像"整扇门被拆下来转了一圈"。
+            ///
+            /// 逐片转，**每片用自己的关门角**（见 `DoorLeaf.ClosedAngle`）——
+            /// 不能像第一版那样两片共用一个角度、方向取反，因为这扇门的出厂姿态
+            /// 是「左片关着、右片半开」，两片需要的转角根本不一样。
             /// </summary>
             public DoorLeaf[] Leaves;
 
@@ -191,8 +194,29 @@ namespace SchoolTwin.Present
         {
             public Transform T;
             public Quaternion BaseRotation;
-            /// <summary>+1 / -1：两片往相反方向转，才会同时往里/往外开。</summary>
-            public float Sign;
+
+            /// <summary>
+            /// 这片门叶「关到位」要转多少度（相对它自己的出厂姿态）。
+            ///
+            /// 【为什么不能像第一版那样两片共用一个角度】
+            /// `DoorDouble02` 的两片门叶**各自有自己的门轴**（相距 1.46m），
+            /// 而且出厂姿态**不是两片都关**：左片已经贴平墙面（关着），右片半开着。
+            /// 两片共用「根节点关门角」的后果是：左片被转离墙面、右片转过门洞，
+            /// 状态写着"关闭"、画面里两片都不在原位 —— 2026-10-22 用户实测就是这个。
+            ///
+            /// 现在的规则：**每片算自己的**。已经贴平墙面的那片（|角度| &lt; 8°）
+            /// 直接冻结（`ClosedAngle == OpenAngle == 0`），只有没贴平的那片才动。
+            /// </summary>
+            public float ClosedAngle;
+
+            /// <summary>这片门叶「开」的角度。出厂姿态就是开，所以是 0。</summary>
+            public float OpenAngle;
+
+            /// <summary>当前角度（逐帧朝目标推进）。</summary>
+            public float Angle;
+
+            /// <summary>冻结标记：已经贴平墙面的那片，进出都不动它。</summary>
+            public bool Frozen;
         }
 
         private readonly Dictionary<string, LampVisual> _lamps =
@@ -687,8 +711,71 @@ namespace SchoolTwin.Present
             // 就把它关一下再开一下（那是肉眼可见的抽搐）。
             if (!anchor.TryGetValue("Open", out open)) return;
 
-            v.IsOpen = open.Value >= 0.5f;
+            bool wasOpen = v.HasState && v.IsOpen;
+            bool isOpenNow = open.Value >= 0.5f;
+            bool changed = !v.HasState || wasOpen != isOpenNow;
+
+            v.IsOpen = isOpenNow;
             v.HasState = true;
+
+#if UNITY_EDITOR
+            // 【2026-10-22 临时诊断】礼堂双开门"点了关门不生效"查了三轮都是靠猜截图，
+            // 这次让运行时自己把每片门叶的角度写进文件（p19_door_runtime.txt）。
+            // 只在状态变化时写，不会刷屏；查完就可以删掉这一段。
+            if (changed && string.Equals(twinId, "ActZal/Door/Entrance_01", StringComparison.Ordinal))
+                DoorTrace(twinId, isOpenNow ? "状态→开" : "状态→关", v);
+#endif
+        }
+
+        /// <summary>
+        /// 【临时诊断，2026-10-22】把一扇门的运行时状态写进 `p19_door_runtime.txt`（追加）。
+        ///
+        /// 【为什么需要它】礼堂双开门「点关门不生效」查了三轮，每轮都在靠截图猜：
+        /// 截图分不清「门叶没转」和「转了但目标位置本来就不对」。这个函数把
+        /// **此刻每片门叶的真实角度、目标角度、是否冻结、本地位置与缩放**一次写清楚，
+        /// 一眼就能分辨是哪一种。查完删掉这一段和 `SyncDoor` 里的调用即可。
+        /// </summary>
+        private static void DoorTrace(string twinId, string tag, DoorVisual v)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(512);
+            sb.Append(System.DateTime.Now.ToString("HH:mm:ss.fff")).Append(" [").Append(tag).Append("] ")
+              .Append(twinId)
+              .Append("  IsOpen=").Append(v.IsOpen ? 1 : 0)
+              .Append("  HasState=").Append(v.HasState ? 1 : 0)
+              .Append("  Leaves=").Append(v.Leaves == null ? "null" : v.Leaves.Length + "片")
+              .Append("  根: 关=").Append(v.ClosedAngle.ToString("0.0"))
+              .Append("° 开=").Append(v.OpenAngle.ToString("0.0"))
+              .Append("° 当前=").Append(v.Angle.ToString("0.0")).Append("°");
+
+            if (v.Leaves != null)
+            {
+                for (int i = 0; i < v.Leaves.Length; i++)
+                {
+                    DoorLeaf l = v.Leaves[i];
+                    if (l == null) { sb.Append(" | 片").Append(i).Append("=null"); continue; }
+                    sb.Append(" | 片").Append(i).Append("「").Append(l.T != null ? l.T.name : "null").Append("」")
+                      .Append(" 冻结=").Append(l.Frozen ? 1 : 0)
+                      .Append(" 关=").Append(l.ClosedAngle.ToString("0.0"))
+                      .Append("° 开=").Append(l.OpenAngle.ToString("0.0"))
+                      .Append("° 当前=").Append(l.Angle.ToString("0.0")).Append("°");
+                    if (l.T != null)
+                    {
+                        sb.Append(" 本地pos=").Append(Fmt(l.T.localPosition))
+                          .Append(" 本地scale=").Append(Fmt(l.T.localScale))
+                          .Append(" 世界pos=").Append(Fmt(l.T.position));
+                    }
+                }
+            }
+
+            string line = sb.ToString();
+            Debug.Log(line);
+            try { System.IO.File.AppendAllText("p19_door_runtime.txt", line + "\n"); }
+            catch (Exception) { /* 诊断写不进去不该影响表现层 */ }
+        }
+
+        private static string Fmt(Vector3 v)
+        {
+            return "(" + v.x.ToString("0.000") + "," + v.y.ToString("0.000") + "," + v.z.ToString("0.000") + ")";
         }
 
         /// <summary>
@@ -706,6 +793,27 @@ namespace SchoolTwin.Present
                 DoorVisual v = kv.Value;
                 if (v == null || v.T == null || !v.HasState) continue;
 
+                // 【双开门】每片门叶各走各的角度，根节点不动（见 DoorLeaf 的注释）
+                if (v.Leaves != null)
+                {
+                    for (int i = 0; i < v.Leaves.Length; i++)
+                    {
+                        DoorLeaf leaf = v.Leaves[i];
+                        if (leaf == null || leaf.T == null || leaf.Frozen) continue;
+
+                        float leafTarget = v.IsOpen ? leaf.OpenAngle : leaf.ClosedAngle;
+                        float leafSpan = Mathf.Abs(leaf.OpenAngle - leaf.ClosedAngle);
+                        float leafSpeed = leafSpan / Mathf.Max(0.2f, _doorSwingSeconds);
+
+                        float leafNext = Mathf.MoveTowards(leaf.Angle, leafTarget, leafSpeed * step);
+                        if (Mathf.Abs(leafNext - leaf.Angle) < 0.001f) continue;
+
+                        leaf.Angle = leafNext;
+                        leaf.T.rotation = Quaternion.AngleAxis(leaf.Angle, Vector3.up) * leaf.BaseRotation;
+                    }
+                    continue;   // 根节点不参与
+                }
+
                 float target = v.IsOpen ? v.OpenAngle : v.ClosedAngle;
                 float span = Mathf.Abs(v.OpenAngle - v.ClosedAngle);
                 // 0.2s 是 [Range] 的下限：序列化里没有这个键时（旧场景资产），
@@ -716,21 +824,7 @@ namespace SchoolTwin.Present
                 if (Mathf.Abs(next - v.Angle) < 0.001f) continue;
 
                 v.Angle = next;
-
-                if (v.Leaves != null)
-                {
-                    // 双开门：逐片转，两片方向相反（见 DoorVisual.Leaves 的说明）
-                    for (int i = 0; i < v.Leaves.Length; i++)
-                    {
-                        DoorLeaf leaf = v.Leaves[i];
-                        if (leaf == null || leaf.T == null) continue;
-                        leaf.T.rotation = Quaternion.AngleAxis(v.Angle * leaf.Sign, Vector3.up) * leaf.BaseRotation;
-                    }
-                }
-                else
-                {
-                    v.T.rotation = Quaternion.AngleAxis(v.Angle, Vector3.up) * v.BaseRotation;
-                }
+                v.T.rotation = Quaternion.AngleAxis(v.Angle, Vector3.up) * v.BaseRotation;
             }
         }
 
@@ -815,31 +909,46 @@ namespace SchoolTwin.Present
             v.ClosedAngle = closedAngle;
             v.OpenAngle = openAngle;
             v.Angle = 0f;
-            v.Leaves = CollectDoorLeaves(t);
+            // 【双开门】根节点**不转**，只有没贴平墙面的那片门叶转（见 CollectDoorLeaves）。
+            // 所以根节点自己的两个角度都置 0，避免 TickDoors 里两套逻辑打架。
+            v.Leaves = CollectDoorLeaves(t, wallDir);
+            if (v.Leaves != null)
+            {
+                v.ClosedAngle = 0f;
+                v.OpenAngle = 0f;
+            }
+
+#if UNITY_EDITOR
+            if (string.Equals(anchor.TwinId, "ActZal/Door/Entrance_01", StringComparison.Ordinal))
+                DoorTrace(anchor.TwinId, "构建完成", v);
+#endif
 
             Debug.Log("[TwinPresent] 门已接管：" + anchor.TwinId + "（" + t.name + "）" +
                       " 墙向=" + (wallAlongX ? "X" : "Z") +
-                      " 关门方向=" + (Vector3.Dot(closedDir, wallDir) > 0f ? "+" : "-") + wallDir.ToString() +
-                      "（" + closeReason + "）" +
-                      " 关门角=" + closedAngle.ToString("0.0") + "°" +
-                      " 开门角=" + openAngle.ToString("0.0") + "°" +
-                      (v.Leaves != null ? " 双开门=" + v.Leaves.Length + " 片门叶" : " 单门叶") +
-                      "（角度相对模型当前姿态，0° = 原样）");
+                      (v.Leaves != null
+                          ? " 双开门 " + v.Leaves.Length + " 片门叶（根节点不转，逐片转；详见上面的门叶日志）"
+                          : " 关门方向=" + (Vector3.Dot(closedDir, wallDir) > 0f ? "+" : "-") + wallDir.ToString() +
+                            "（" + closeReason + "）" +
+                            " 关门角=" + closedAngle.ToString("0.0") + "°" +
+                            " 开门角=" + openAngle.ToString("0.0") + "°" +
+                            "（角度相对模型当前姿态，0° = 原样）"));
 
             return v;
         }
 
         /// <summary>
-        /// 判断这是不是一扇双开门，是的话把两片门叶收集出来。
+        /// 判断这是不是一扇双开门，是的话把两片门叶收集出来，并**逐片**算出关门角。
         ///
         /// 判据：根节点下**带渲染器的直接子物体 ≥ 2 个**。
         /// `Door07a` 预制体只有 1 个 GameObject（门扇就是它自己），所以返回 null；
         /// `DoorDouble02` 根下有 `DoorDouble0` 和 `DoorDouble` 两片，返回 2 片。
         ///
-        /// 转向：按门叶在**墙方向上的位置**排序，靠前的一片转 +，靠后的一片转 -。
-        /// 双开门的两个门轴分别在外侧两端，所以「往同一个物理方向开」= 数学上方向相反。
+        /// 【2026-10-22 第二版：一片一个角度】
+        /// 第一版按「靠前的一片转 +、靠后的一片转 -」共用一个关门角，实测是错的 ——
+        /// 因为这扇门的出厂姿态是「左片关着、右片半开」，不是「两片都关」。
+        /// 现在每片自己算：谁已经贴平墙面谁冻结，谁没贴平谁动。
         /// </summary>
-        private static DoorLeaf[] CollectDoorLeaves(Transform root)
+        private static DoorLeaf[] CollectDoorLeaves(Transform root, Vector3 wallDir)
         {
             if (root == null) return null;
 
@@ -854,8 +963,8 @@ namespace SchoolTwin.Present
 
             if (kids.Count < 2) return null;
 
-            // 按「在墙方向上谁更靠前」排序 —— 用世界坐标在 root.right 上的投影
-            Vector3 axis = root.right;
+            // 按「在墙方向上谁更靠前」排序，日志读起来稳定（不影响角度计算）
+            Vector3 axis = wallDir;
             axis.y = 0f;
             if (axis.sqrMagnitude < 0.0001f) axis = Vector3.right;
             axis.Normalize();
@@ -873,10 +982,87 @@ namespace SchoolTwin.Present
                 DoorLeaf leaf = new DoorLeaf();
                 leaf.T = kids[i];
                 leaf.BaseRotation = kids[i].rotation;
-                leaf.Sign = (i % 2 == 0) ? 1f : -1f;
+
+                Vector3 panel = LeafPanelDir(kids[i], out string panelHow);
+                // 两个「贴平墙面」的方向，取离当前姿态更近的那个 ——
+                // 半开的门离「关」一定比离「反方向」近，所以这就是"顺手关上"的那个方向。
+                Vector3 a = wallDir;
+                Vector3 b = -wallDir;
+                float angA = Vector3.SignedAngle(panel, a, Vector3.up);
+                float angB = Vector3.SignedAngle(panel, b, Vector3.up);
+                float closedAngle = Mathf.Abs(angA) <= Mathf.Abs(angB) ? angA : angB;
+
+                // 已经贴平墙面（< 8°）→ 这片本来就是关的，冻结它，进出都不动。
+                leaf.Frozen = Mathf.Abs(closedAngle) < 8f;
+                leaf.ClosedAngle = leaf.Frozen ? 0f : closedAngle;
+                leaf.OpenAngle = 0f;      // 出厂姿态 = 开
+                leaf.Angle = 0f;
+
+                Debug.Log("[TwinPresent] 门叶「" + kids[i].name + "」门扇=" + panelHow +
+                          " 关门角=" + closedAngle.ToString("0.0") + "°" +
+                          (leaf.Frozen ? " → 已贴平墙面，冻结（不参与动画）" : " → 参与动画"));
+
+                // ⚠️ 这一行漏了就等于整个双开门动画不存在。
+                // 2026-10-22 踩过：数组 new 出来是 [null, null]，TickDoors 里
+                // `if (leaf == null) continue;` 把它全跳过了 —— 日志照打、角度照算、
+                // 就是一片门叶都不转。表现是「点关门没生效」，而 Console 里一行错都没有。
                 leaves[i] = leaf;
             }
+
+            // 防呆：数组里不许有 null。
+            // 「漏赋值」这种 bug 的表现是**完全静默**的 —— 日志正常、角度正常、一帧都不转。
+            // 与其让人再查三轮，不如在这里直接把话说破。
+            for (int i = 0; i < leaves.Length; i++)
+            {
+                if (leaves[i] != null) continue;
+                Debug.LogError("[TwinPresent] 双开门「" + root.name + "」第 " + i +
+                               " 片门叶是 null —— CollectDoorLeaves 漏了赋值，动画不会生效。");
+                return null;
+            }
+
             return leaves;
+        }
+
+        /// <summary>
+        /// 门叶的**门扇朝向**：沿着门叶的长轴，并且指向**自由边**那一侧。
+        ///
+        /// 【为什么不能直接用 `transform.right`】`DoorDouble02` 的两片门叶是镜像建模的：
+        /// `DoorDouble0` 的 BoxCollider center.x = +0.42（往本地 +X 长），
+        /// `DoorDouble` 的 center.x = -0.42（往本地 -X 长）。
+        /// 直接用 `right` 的话，其中一片永远算成反方向 —— 转起来就是"一片进、一片出"。
+        /// 拿 BoxCollider 的 center 判方向是**模型自己的事实**，不依赖任何假设。
+        /// </summary>
+        private static Vector3 LeafPanelDir(Transform leaf, out string how)
+        {
+            how = "transform.right（没有 BoxCollider，退回旧假设）";
+            Vector3 axis = Vector3.right;
+            float sign = 1f;
+
+            BoxCollider bc = leaf.GetComponent<BoxCollider>();
+            if (bc == null) bc = leaf.GetComponentInChildren<BoxCollider>(true);
+
+            if (bc != null)
+            {
+                if (bc.size.x >= bc.size.z)
+                {
+                    axis = Vector3.right;
+                    sign = bc.center.x >= 0f ? 1f : -1f;
+                    how = "长轴=本地X→" + (sign > 0f ? "+X" : "-X") + "（collider.center.x=" +
+                          bc.center.x.ToString("0.00") + "）";
+                }
+                else
+                {
+                    axis = Vector3.forward;
+                    sign = bc.center.z >= 0f ? 1f : -1f;
+                    how = "长轴=本地Z→" + (sign > 0f ? "+Z" : "-Z") + "（collider.center.z=" +
+                          bc.center.z.ToString("0.00") + "）";
+                }
+            }
+
+            Vector3 dir = leaf.TransformDirection(axis * sign);
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.0001f) return leaf.right;
+            return dir.normalized;
         }
 
         /// <summary>

@@ -202,16 +202,16 @@ namespace SchoolTwin.Command
         };
 
         /// <summary>
-        /// 【P19】场景里模型本来就是**关着**的门。
+        /// 场景里模型本来就是**关着**的门。
         ///
-        /// 12 扇 `Door07a` 都是半开姿态，所以默认播种「开」；但礼堂那扇 `DoorDouble02`
-        /// 是关着的。差别不能靠猜 —— `TwinP17Diag` 打印的「关门角」是 0°，
-        /// 意思就是"模型现在就在关的位置"。加一扇门时如果它模型是关的，往这里加一条。
+        /// 12 扇 `Door07a` 都是半开姿态，所以默认播种「开」，礼堂 `DoorDouble02` 也一样 ——
+        /// 它的模型是"一片关、一片半开"，播「开」时画面和卡片一致。
+        ///
+        /// ⚠️ 曾经把它放进这张表（按「关」播种），理由是 `TwinP17Diag` 打出「关门角 = 0°」。
+        /// 那个数字只看**根节点**，而 `DoorDouble02` 的根只是个容器，真正摆姿态的是下面两片门叶。
+        /// 按「关」播种的表现是：卡片写关闭、画面里门开着（2026-10-22 用户实测）。
         /// </summary>
-        private static readonly string[] DoorsClosedByDefault =
-        {
-            "ActZal/Door/Entrance_01",
-        };
+        private static readonly string[] DoorsClosedByDefault = new string[0];
 
         private static bool DoorStartsClosed(string twinId)
         {
