@@ -75,3 +75,4 @@ crashlytics-build.properties
 /_scratch/
 /add_lamps.txt
 /Recordings/
+/PerfLogs/twin-perf.csv

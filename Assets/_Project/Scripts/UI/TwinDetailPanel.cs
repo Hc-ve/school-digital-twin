@@ -2556,7 +2556,16 @@ namespace SchoolTwin.UI
 
             if (!_flyToOnClick) return;
             FreeCameraController controller = FindObjectOfType<FreeCameraController>();
-            if (controller != null) controller.FocusOn(anchor.transform, _flyDistance);
+            if (controller == null) return;
+
+            // 【2026-10-22】有真实设备时，相机要看向**设备**，不是锚点。
+            // 锚点还在标记牌上（数据在牌子上），而牌子挂在墙中间；灯在天花板上。
+            // 只按锚点飞过去，镜头对着墙中间，用户会以为「灯根本没做」——
+            // 这正是当时的实际反馈。改成：房间朝向仍按锚点算（锚点知道自己在哪个分区），
+            // 但落点用 VisualTarget，镜头就会抬起来看天花板上的那盏灯。
+            GameObject visual = anchor.VisualTarget;
+            if (visual != null) controller.FocusOn(anchor.transform, _flyDistance, visual.transform.position);
+            else controller.FocusOn(anchor.transform, _flyDistance);
         }
 
         public void SetVisible(bool visible)

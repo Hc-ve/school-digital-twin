@@ -214,10 +214,28 @@ namespace SchoolTwin.Interaction
         public void FocusOn(Transform target, float distance = 6f)
         {
             if (target == null) return;
+            FocusOn(target, distance, target.position);
+        }
+
+        /// <summary>
+        /// 带**落点覆盖**的版本：`target` 只用来算「房间在哪边、退多远、相机多高」，
+        /// 镜头真正看向 `focusPoint`。
+        ///
+        /// 【为什么需要它（2026-10-22）】
+        /// 补灯的三个点位，锚点留在标记牌上（数据在牌子上），而牌子挂在墙中间、灯在天花板。
+        /// 只按锚点飞，镜头对着墙中间 —— 用户看到的就是「还是一块牌子」，会以为灯没做。
+        /// 把落点换成 `VisualTarget`（真实设备）之后，镜头会抬起来看那盏灯。
+        ///
+        /// 房间朝向仍然按 `target`（锚点）算，因为只有锚点知道自己属于哪个分区；
+        /// 拿灯去算会走到「分区里没有点位」的兜底分支。
+        /// </summary>
+        public void FocusOn(Transform target, float distance, Vector3 focusPoint)
+        {
+            if (target == null) return;
 
             distance = Mathf.Max(0.5f, distance);
 
-            Vector3 focus = target.position;
+            Vector3 focus = focusPoint;
             Vector3 dir;
             float camY;
             float d = distance;

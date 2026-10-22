@@ -85,8 +85,46 @@ namespace SchoolTwin.Twin
         private void OnEnable()
         {
             ResolveAnchor();
+
+            // 【2026-10-22】这个点位已经有真实设备模型了 → 不建牌子。
+            //
+            // 牌子的定位是「没有实物时的替代表达」（见类注释）。一旦锚点的 VisualTarget
+            // 指向了另一个物体（灯、空调这类真实模型），再挂一块牌子就是**两套表达并存**：
+            // 用户看到墙上浮着一块「主任室 照明 亮度80% 功率42W」，会以为灯根本没做 ——
+            // 而实际上灯就在天花板上，只是被牌子挡住了注意力。
+            //
+            // 注意只关**牌子**，不动锚点：锚点还是数据入口，注册、告警、面板全都靠它。
+            // 也没有把 GameObject 关掉 —— 关了锚点就不在 Registry 里了，这个点位会从
+            // 总控面板和点位清单里消失。
+            GameObject visual = HasRealDevice();
+            if (visual != null)
+            {
+                // 顺手把碰撞体关掉：牌子都不显示了，留一个看不见但点得中的盒子
+                // 比没有更糟（点到空气里冒出一张卡片）。选中走总控面板 / 点位清单。
+                Collider box = GetComponent<Collider>();
+                if (box != null) box.enabled = false;
+
+                Debug.Log("[TwinMarker] 「" + name + "」已有真实设备（" + visual.name +
+                          "），不再显示标记牌；选中请用 G 总控面板或 T 点位清单");
+                return;
+            }
+
             Build();
             Refresh(true);
+        }
+
+        /// <summary>
+        /// 有真实设备就返回它，否则返回 null。
+        ///
+        /// 判据是「VisualTarget 指向的不是自己」：`TwinAnchor.VisualTarget` 在没配的时候
+        /// 会退回 `gameObject` 本身，所以不能只判 `!= null`，否则所有点位都会被当成有设备。
+        /// </summary>
+        private GameObject HasRealDevice()
+        {
+            if (_anchor == null) return null;
+            GameObject visual = _anchor.VisualTarget;
+            if (visual == null) return null;
+            return visual == gameObject ? null : visual;
         }
 
         private void LateUpdate()
