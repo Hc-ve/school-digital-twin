@@ -536,26 +536,34 @@ namespace SchoolTwin.Present
 
                 GameObject go = new GameObject("TwinLampGlow_" + i);
                 go.transform.SetParent(anchor.transform, false);
-                // 落点从灯管中心往下挪 0.35m：灯管贴在天花板上，
-                // 点光源埋在灯罩里时地面那一片照不到。
-                Vector3 center = b.center + Vector3.down * 0.35f;
-                go.transform.localPosition = anchor.transform.InverseTransformPoint(center);
+                // 【精确还原 P13】落点就是灯管的包围盒中心，**不做任何偏移**。
+                // 中间有一版我把它下移了 0.35m（想让地面照得亮些），结果灯管本身
+                // 落在光源上方、接收不到光，看起来比之前暗 —— 而用户认可的正是 P13 的观感。
+                go.transform.localPosition = anchor.transform.InverseTransformPoint(b.center);
                 go.transform.localRotation = Quaternion.identity;
 
                 Light light = go.AddComponent<Light>();
                 light.type = LightType.Point;
                 light.color = new Color(1f, 0.95f, 0.86f);
 
-                // 半径按**这一盏灯**的尺寸算，不是整组 —— 整组会把 8 个光斑糊成一片。
-                // 灯管长约 1.6m → `1.6 × 0.75 ≈ 1.2`，落到下限 3m。
-                // 3m 是 P13 最初、也是用户认可的那个值：只照亮灯正下方一片，边界之外是暗的。
+                // 【精确还原 P13】`Clamp(单盏尺寸 × 0.75, 3, 8)`，灯管约 1.6m → 3m。
                 light.range = _lampGlowRange > 0.01f
                     ? _lampGlowRange
-                    : Mathf.Clamp(b.size.magnitude * 0.75f, 3f, 4.5f);
+                    : Mathf.Clamp(b.size.magnitude * 0.75f, 3f, 8f);
 
                 light.intensity = 0f;                 // 由 ApplyLamp 决定
                 light.shadows = LightShadows.None;    // 一盏灯的阴影不值这个开销
-                light.renderMode = LightRenderMode.Auto;
+
+                // 【为什么是 ForcePixel 而不是 Auto —— 2026-10-22 第五轮】
+                // 场景里本来就有 69 盏 15~25 米的大点光源。加上我们的 8 个，
+                // 这个区域同时被 70 多个光源影响。Built-in 前向渲染的逐像素灯上限
+                // 默认只有 4 盏，超出的会被降级成**顶点光** —— 而顶点光打在天花板
+                // 这种只有两个三角面的大网格上，插值出来几乎看不出亮度。
+                //
+                // 症状：Console 里 `点光源=8 个 × 2.0` 一切正常，画面上灯管雪白，
+                // 但**灯管周围的天花板一点都没亮**。参数全对、日志全对、就是不亮。
+                // Auto 是按"重要性"排序的，3 米的小光源在 20 米的大光源面前排不上号。
+                light.renderMode = LightRenderMode.ForcePixel;
                 lights[i] = light;
             }
             return lights;
