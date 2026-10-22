@@ -38,8 +38,21 @@ namespace SchoolTwin.Present
         // ---------------------------------------------------------------- 调参
 
         [Header("灯")]
-        [Tooltip("开灯时的发光色（Linear 空间下 >1 才会真的发亮）")]
-        [SerializeField] private Color _lampEmission = new Color(2.20f, 2.06f, 1.78f, 1f);
+        [Tooltip("开灯时的自发光颜色。**数值不要超过 1**，否则灯管会糊成一块纯白")]
+        [SerializeField] private Color _lampEmission = new Color(0.35f, 0.33f, 0.28f, 1f);
+        // 【为什么从 2.2 降到 0.35 —— 2026-10-22 第六轮，用户原话「灯本体的材质还是过曝」】
+        //
+        // Unity Standard shader 的最终颜色是：   albedo × 光照 + emission
+        // 灯管 albedo 是白色 1.0；这个场景是**烘焙光照**，灯管处拿到的烘焙光约 0.7。
+        // 于是 emission = 2.2 时，总亮度 = 0.7 + 2.2 = **2.9** —— 远超 1.0，
+        // 被直接裁剪成一块**纯白**，灯管的形状、接缝、明暗全都看不见了。这就是"过曝"。
+        //
+        // 而且这个项目**没有 Bloom 后处理**（Packages/manifest.json 里没有 postprocessing 包），
+        // 所以过曝区域不会像真实相机那样溢出成柔和光晕，只会变成死白一片 —— 更假。
+        //
+        // 0.35 让总亮度 ≈ 1.05：刚好"白"，但还留着形状和边缘。
+        // 【调参方向】觉得还是白 → 往下调；觉得发灰、不够亮 → 往上调，
+        // 但**别超过 0.6**，超过就又开始糊了。真正的亮度感来自每盏灯那个点光源，不是这里。
 
         [Tooltip("**每盏灯**的点光源强度。0 = 只让灯管自己发光，不照亮房间")]
         [SerializeField] private float _lampGlowIntensity = 2.0f;
