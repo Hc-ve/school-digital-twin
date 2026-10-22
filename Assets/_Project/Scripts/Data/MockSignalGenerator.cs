@@ -63,6 +63,11 @@ namespace SchoolTwin.Data
         {
             if (metric == null) return 0f;
 
+            // ── ⓪ 开关量不发波形 ──
+            // 见 IsDiscrete 的说明：0/1 信号被正弦压成 0.12~0.88，
+            // 界面按「≥0.5 算开」判断 → 门一会儿「已开」一会儿「已关」。
+            if (IsDiscrete(metric)) return metric.Max;
+
             float lo = metric.Min;
             float hi = metric.Max;
             if (hi <= lo) return lo;
@@ -116,6 +121,31 @@ namespace SchoolTwin.Data
             }
 
             return Clamp(value, lo, hi);
+        }
+
+        /// <summary>
+        /// 这个指标是不是**开关量**（Bool）。
+        ///
+        /// 判据：量程从 0 起、宽度不超过 1。本项目里只有门的 `Open`（0/1）满足。
+        ///
+        /// 【为什么必须区分】2026-10-22 用户报「2-1教室里的门明明处于开启状态，状态却写的关闭」。
+        /// 根因不是绑定错、也不是阈值错，而是**开关量被当成连续量模拟**：
+        /// 阈值带是 0~1，基线内收 12% 之后在 0.12~0.88 之间做正弦，
+        /// 而界面（`TwinControlRow.StateText` / 卡片 / 标记牌）都按「≥0.5 算开」判断 ——
+        /// 于是这扇门每隔十几秒就自己翻一次"开/关"。
+        ///
+        /// 开关量只有一个稳定值，不存在"中间态"。Mock 阶段固定为量程上限（开），
+        /// 真实状态由设备代理收到命令后改变（`MockDataSource.SetOverride` 优先于波形）。
+        ///
+        /// ⚠️ 这个判据只影响量程宽度 ≤ 1 的指标：功率 0~120W、亮度 0~100%、
+        /// 阀门 0~100%、温度 10~35℃ 全都不受影响。将来真要加一个 0~1 的**连续**指标
+        /// （比如归一化系数），得在这里开个口子，不能默默按开关量处理。
+        /// </summary>
+        public static bool IsDiscrete(TwinMetricDefinition metric)
+        {
+            if (metric == null) return false;
+            if (metric.Min < -0.0001f || metric.Min > 0.0001f) return false;
+            return metric.Max - metric.Min <= 1.0001f;
         }
 
         /// <summary>自定义 Clamp —— 刻意不用 Mathf，保证本类不依赖 Unity 运行时。</summary>

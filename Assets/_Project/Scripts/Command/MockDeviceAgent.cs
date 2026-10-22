@@ -124,13 +124,57 @@ namespace SchoolTwin.Command
         /// 【为什么必须做】不压住的话，这些「开关量」仍然走正弦波 ——
         /// 面板上写着「已开」，功率却在 0~110W 之间来回摆，自相矛盾。
         /// 受控设备的状态从此由设备代理负责，这才是「设备」该有的语义。
+        ///
+        /// 【2026-10-22 为什么要改成遍历白名单】原来只写死 Class2-1 的灯和空调，
+        /// 另外 9 盏灯、4 台空调、还有那扇门从来没被压住过。门的后果最明显：
+        /// `Open` 的量程是 0~1，正弦波把它压成 0.12~0.88 来回摆，
+        /// 界面按「≥0.5 算开」判断 —— 于是**门明明是开着的（场景里的模型就是开的），
+        /// 卡片上却一会儿「已开」一会儿「已关」**。用户看到的就是"状态写错了"。
+        ///
+        /// 现在的规矩：**白名单里的每一台设备都必须有一个明确的初始状态**，
+        /// 不再挑着写。新增受控设备时忘了给初值，会在这里体现为"状态在乱跳"。
         /// </summary>
         private void SeedInitialState()
         {
-            SetState("Class2-1/Light/Main_01", "Power", 42f);
-            SetState("Class2-1/Light/Main_01", "Brightness", 80f);
-            SetState("Class2-1/AC/Unit_01", "Power", 1.2f);
-            SetState("Class2-1/AC/Unit_01", "SetTemp", 26f);
+            IReadOnlyList<string> ids = TwinControlScope.All;
+            int seeded = 0;
+
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string twinId = ids[i];
+                TwinDeviceModel model = ResolveModel(twinId);
+                if (model == null)
+                {
+                    Debug.LogWarning("[TwinCmd] 受控点位「" + twinId + "」解析不出设备模型，" +
+                                     "初始状态没定 —— 它的状态会跟着模拟波形乱跳");
+                    continue;
+                }
+
+                switch (model.Type)
+                {
+                    case "Light":
+                        SetState(twinId, "Power", 42f);        // 量程 0~120W，警告线 110
+                        SetState(twinId, "Brightness", 80f);   // 警告带 20~100
+                        seeded++;
+                        break;
+
+                    case "AC":
+                        SetState(twinId, "Power", 1.2f);       // 量程 0~3.5kW，警告线 3
+                        SetState(twinId, "SetTemp", 26f);      // 警告带 18~26
+                        seeded++;
+                        break;
+
+                    case "Door":
+                        // 场景里的门模型是**开着的**（Door07a 实例都摆成半开姿态），
+                        // 初始状态就得是「开」，否则卡片和三维对不上。
+                        SetState(twinId, "Open", 1f);
+                        seeded++;
+                        break;
+                }
+            }
+
+            Debug.Log("[TwinCmd] 已给 " + seeded + " 台受控设备定下初始状态（白名单共 " +
+                      ids.Count + " 个点位）。状态由设备代理负责，模拟波形不再改它。");
         }
 
         // ---------------------------------------------------------------- 收命令

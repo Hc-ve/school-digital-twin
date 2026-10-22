@@ -981,13 +981,30 @@ namespace SchoolTwin.UI
             if (center == null) return;
 
             string reject;
-            if (!center.TrySend(e.Anchor.TwinId, CommandAction.SetPower, on ? 1f : 0f, out reject))
+            if (!center.TrySend(e.Anchor.TwinId, SwitchActionOf(e), on ? 1f : 0f, out reject))
             {
                 // 被拒的原因直接写在这一行上，不要只丢进 Console
                 e.RejectText = string.IsNullOrEmpty(reject) ? "操作被拒绝" : reject;
                 e.RejectUntil = Time.unscaledTime + 3f;
             }
             Refresh(true);
+        }
+
+        /// <summary>
+        /// 这一行的「开 / 关」该发哪个动作 —— 从设备模型取，不写死。
+        ///
+        /// 门只有 `SetOpen`。写死 `SetPower` 的话，总控面板上门的按钮会被
+        /// 命令中心以「不支持」拒掉，而界面上只是闪一下红字。
+        /// </summary>
+        private static CommandAction SwitchActionOf(DevEntry e)
+        {
+            TwinActionDefinition def = e != null && e.Model != null ? e.Model.PrimarySwitchAction : null;
+            if (def != null)
+            {
+                CommandAction parsed;
+                if (CommandText.TryParseAction(def.Name, out parsed)) return parsed;
+            }
+            return CommandAction.SetPower;
         }
 
         private void StepTemperature(int rowIndex, float delta)
@@ -1053,7 +1070,7 @@ namespace SchoolTwin.UI
                 if (e == null || e.Anchor == null || !e.CanPower) continue;
 
                 string reject;
-                if (center.TrySend(e.Anchor.TwinId, CommandAction.SetPower, value, out reject))
+                if (center.TrySend(e.Anchor.TwinId, SwitchActionOf(e), value, out reject))
                 {
                     _batchIds.Add(e.Anchor.TwinId);
                 }
@@ -1372,7 +1389,7 @@ namespace SchoolTwin.UI
                     e.Anchor = a;
                     e.Model = TwinDeviceModels.Resolve(a.TwinId);
                     e.InScope = TwinControlScope.IsEnabled(a.TwinId);
-                    e.CanPower = e.InScope && e.Model != null && e.Model.FindAction("SetPower") != null;
+                    e.CanPower = e.InScope && e.Model != null && e.Model.PrimarySwitchAction != null;
                     e.CanTemp = e.InScope && e.Model != null && e.Model.FindAction("SetTemperature") != null;
                     e.RejectText = "";
                     e.RejectUntil = 0f;

@@ -80,8 +80,9 @@ namespace SchoolTwin.UI
             // ---- 第一行：开 / 关 + 状态文字 ----
             _onBg = MakeButton("On", "开", out _onText, out _onBtn);
             _offBg = MakeButton("Off", "关", out _offText, out _offBtn);
-            _onBtn.onClick.AddListener(delegate { Send(CommandAction.SetPower, 1f); });
-            _offBtn.onClick.AddListener(delegate { Send(CommandAction.SetPower, 0f); });
+            // 动作名不写死：灯/空调/电脑是 SetPower，门是 SetOpen（见 SendSwitch）
+            _onBtn.onClick.AddListener(delegate { SendSwitch(true); });
+            _offBtn.onClick.AddListener(delegate { SendSwitch(false); });
 
             _status = TwinUIFactory.Label(_root, "Status", _fsStatus, TextAnchor.MiddleLeft,
                 TwinStatusPalette.TextSecondary);
@@ -194,6 +195,11 @@ namespace SchoolTwin.UI
             _model = model;
             _hasTemp = model.FindAction("SetTemperature") != null;
             _center = TwinCommandCenter.Ensure();
+
+            // 门的按钮说「开门 / 关门」：一个「开」字放在门上，读起来像"打开这张卡片"
+            bool isDoor = string.Equals(model.Type, "Door", StringComparison.Ordinal);
+            if (_onText != null) _onText.text = isDoor ? "开门" : "开";
+            if (_offText != null) _offText.text = isDoor ? "关门" : "关";
 
             _tempLabel.gameObject.SetActive(_hasTemp);
             _minusBg.gameObject.SetActive(_hasTemp);
@@ -432,9 +438,32 @@ namespace SchoolTwin.UI
             Send(CommandAction.SetTemperature, next);
         }
 
-        private void Send(CommandAction action, float value)
+        /// <summary>
+        /// 「开 / 关」按钮的统一入口 —— 动作名从设备模型里取，不写死。
+        ///
+        /// 【为什么必须这样】门只有 `SetOpen` 一个动作。写死 `SetPower` 的话，
+        /// 门点「开」会被命令中心以「不支持」拒掉（`TrySend` 里 `FindAction` 返回 null），
+        /// 而界面上只是闪一下红字 —— 看起来像"门的控制没做"。
+        ///
+        /// 拿不到主开关动作就退回 `SetPower`：宁可让命令中心明确拒绝并写清原因，
+        /// 也不要在这里悄悄什么都不做。
+        /// </summary>
+        private void SendSwitch(bool on)
         {
-            if (_anchor == null || _center == null) return;
+            CommandAction action = CommandAction.SetPower;
+
+            TwinActionDefinition def = _model != null ? _model.PrimarySwitchAction : null;
+            if (def != null)
+            {
+                CommandAction parsed;
+                if (CommandText.TryParseAction(def.Name, out parsed)) action = parsed;
+            }
+
+            Send(action, on ? 1f : 0f);
+        }
+
+        private void Send(CommandAction action, float value)
+        {            if (_anchor == null || _center == null) return;
 
             string reject;
             if (!_center.TrySend(_anchor.TwinId, action, value, out reject))

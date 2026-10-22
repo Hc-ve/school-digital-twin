@@ -133,6 +133,15 @@ namespace SchoolTwin.Data
             Debug.Log("[Twin] Mock 数据源启动：" + points.Length + " 个点位 / " + totalMetrics +
                       " 个指标 / " + _hz.ToString("0.#") + "Hz");
 
+            int discreteCount = CountDiscrete(points);
+            if (discreteCount > 0)
+            {
+                // 说出来，别让它默默发生：开关量固定为量程上限（开），状态由命令改变。
+                Debug.Log("[Twin] 其中 " + discreteCount + " 个是开关量指标（量程 0~1）：不发正弦波、" +
+                          "不加噪声，固定为量程上限。它们的状态由设备代理在收到命令后改变，" +
+                          "否则会出现「门一会儿已开一会儿已关」。");
+            }
+
             while (!token.IsCancellationRequested)
             {
                 double t = clock.Elapsed.TotalSeconds;
@@ -171,6 +180,10 @@ namespace SchoolTwin.Data
 
                         float span = metric.Max - metric.Min;
 
+                        // 开关量（门的 Open）不能加噪声：0/1 信号加了 ±0.03 的抖动
+                        // 就不再是"开"或"关"，而是一个谁都不认识的小数。
+                        bool discrete = MockSignalGenerator.IsDiscrete(metric);
+
                         // 平时在正常区间内波动，偶发短暂越界。
                         // 与 MqttLoopbackPublisher 共用 MockSignalGenerator，
                         // 保证「换数据源」时画面表现一致（P1 架构承诺的延伸）。
@@ -182,7 +195,8 @@ namespace SchoolTwin.Data
                             ExcursionDepth = _excursionDepth
                         };
                         float value = MockSignalGenerator.Next(metric, t, PhaseOf(i, k, seq), in cfg);
-                        value += (float)((rng.NextDouble() - 0.5) * 2.0) * span * _noiseRatio;
+                        if (!discrete)
+                            value += (float)((rng.NextDouble() - 0.5) * 2.0) * span * _noiseRatio;
 
                         float overridden;
                         if (s_overrides.TryGetValue(Key(point.TwinId, metric.Metric), out overridden))
@@ -221,6 +235,21 @@ namespace SchoolTwin.Data
             for (int i = 0; i < points.Length; i++)
             {
                 if (points[i] != null && points[i].Metrics != null) n += points[i].Metrics.Count;
+            }
+            return n;
+        }
+
+        private static int CountDiscrete(TwinPointDefinition[] points)
+        {
+            int n = 0;
+            for (int i = 0; i < points.Length; i++)
+            {
+                TwinPointDefinition p = points[i];
+                if (p == null || p.Metrics == null) continue;
+                for (int k = 0; k < p.Metrics.Count; k++)
+                {
+                    if (MockSignalGenerator.IsDiscrete(p.Metrics[k])) n++;
+                }
             }
             return n;
         }

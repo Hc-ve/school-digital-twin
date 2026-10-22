@@ -121,6 +121,32 @@ namespace SchoolTwin.Twin
             return null;
         }
 
+        /// <summary>
+        /// 主开关动作 —— 这个设备「开 / 关」对应的那一个动作。
+        ///
+        /// 【为什么不能继续写死 SetPower】
+        /// 门只有 SetOpen 一个动作。界面上那颗「开」按钮如果一律发 SetPower，
+        /// 门点下去会被命令中心以「不支持」拒掉（`TrySend` 里 `FindAction` 返回 null），
+        /// 而界面上只表现为闪一下红字 —— 看不出是动作名不对，看起来像"门的控制没做"。
+        ///
+        /// 判据用 `Discrete`（开关量），不用动作名：新增一个只有 SetOpen / SetMode 的
+        /// 设备类型时，按钮会自动跟着走，不需要再改界面代码。
+        /// 暖气（只有 SetValve，连续量）返回 null —— 与改动前「找不到 SetPower 就不给按钮」一致。
+        /// </summary>
+        public TwinActionDefinition PrimarySwitchAction
+        {
+            get
+            {
+                if (Actions == null) return null;
+                for (int i = 0; i < Actions.Count; i++)
+                {
+                    TwinActionDefinition a = Actions[i];
+                    if (a != null && a.Discrete) return a;
+                }
+                return null;
+            }
+        }
+
         public TwinPropertyDefinition FindProperty(string metricName)
         {
             if (Properties == null || string.IsNullOrEmpty(metricName)) return null;
@@ -362,13 +388,13 @@ namespace SchoolTwin.Twin
     /// 「这个按钮是假的」——那比不开放更糟。
     ///
     /// 所以白名单只放「表现层已接管」的设备类型：
-    ///   · Light —— 灯管发光 + 点光源（P13 已做）
-    ///   · AC    —— 收到命令时「滴滴」（P13 已做）
+    ///   · Light —— 灯管发光 + 点光源（P13）
+    ///   · AC    —— 收到命令时「滴滴」（P13）
+    ///   · Door  —— 绕门轴转动，开/关有动画（P17）
     ///
     /// 还**没**开放的（27 个可命令点位里的另外 12 个）：
     ///   · Heat 9 台 —— 没有可视化部件（只有阀门开度数字），点了看不出反应
     ///   · PC 2 台   —— 同上，只能看功耗数字
-    ///   · Door 1 台 —— 需要绕门轴旋转，而轴心位置必须实测反推（P4 的教训），还没做
     ///
     /// 扩展方式：往 Ids 数组里加点位即可，UI、设备代理、表现层三处都从这一处取。
     /// </summary>
@@ -376,7 +402,7 @@ namespace SchoolTwin.Twin
     {
         private static readonly string[] Ids =
         {
-            // ---- 照明 10 盏（10 个房间各一盏）----
+            // ---- 照明 10 盏（10 个房间各一盏，一个点位代表**整个房间的照明**）----
             "Class1-2/Light/Main_01",
             "Class1-3/Light/Main_01",
             "Class1-4/Light/Main_01",
@@ -394,6 +420,10 @@ namespace SchoolTwin.Twin
             "Class1-4/AC/Unit_01",
             "Class2-1/AC/Unit_01",
             "ClassDirector/AC/Unit_01",
+
+            // ---- 门 1 扇（P17）----
+            // 锚点就挂在那扇 Door07a 上（不是标记牌），所以三维里点得到、面板里也点得到。
+            "Class2-1/Door/Entrance_01",
         };
 
         public static bool IsEnabled(string twinId)
