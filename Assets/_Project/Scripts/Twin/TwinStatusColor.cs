@@ -90,6 +90,23 @@ namespace SchoolTwin.Twin
             ResolveAnchor();
             CollectRenderers();
 
+            // 【灯：本组件彻底退出】
+            // 灯管的外观（亮/灭、自发光、点光源）归 `TwinDevicePresenter` 独占。
+            // 这里必须**连 `_Color` 一起放手**，不能只让出自发光 ——
+            // 灯管用的是自发光材质，`_Color` 会**乘到** `_EmissionColor` 上：
+            // 表现层把自发光写成暖白 (2.2, 2.06, 1.78)，本组件只要把 `_Color`
+            // 染成状态绿 (0.20, 0.80, 0.35)，算出来就是 (0.44, 1.65, 0.62) ——
+            // 一根**青绿色**的灯管。用户看到的就是「灯变青了，不像灯」。
+            //
+            // 灯出异常时靠标记牌、详情卡片、告警面板表达，不从灯管颜色里透出来。
+            // 这是「一个属性只能有一个主人」（99 号清单第 21 条）在渲染层的同一道理。
+            if (PresenterOwnsEmission())
+            {
+                RestoreBaseColors();   // 清掉可能残留的 MPB 覆盖，回落材质原样
+                enabled = false;
+                return;
+            }
+
             TwinStatus status = EffectiveStatus();
             _current = ColorFor(status);
             _target = _current;

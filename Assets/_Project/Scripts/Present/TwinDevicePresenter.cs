@@ -90,11 +90,28 @@ namespace SchoolTwin.Present
         /// </summary>
         private sealed class LampVisual
         {
+            public string TwinId;
             public readonly List<Renderer> Renderers = new List<Renderer>(16);
             public readonly List<Material> Materials = new List<Material>(16);
             public readonly List<bool> HasEmission = new List<bool>(16);
             public Light Glow;
             public bool IsOn;
+
+            /// <summary>
+            /// 是否已经**真的把状态写进材质**过一次。
+            ///
+            /// 【为什么需要它 —— 2026-10-22 用户实测「已关但灯还亮着」】
+            /// 旧写法是 `if (IsOn == on) return;`，而 `IsOn` 默认 `false`。
+            /// 于是「一进 Play 灯就是关的」这条最常见的路径，第一次 `ApplyLamp(v, false)`
+            /// 直接命中早退 —— **材质一次都没被写过**，灯保持预制体自带的发光状态。
+            /// 表现层看起来"接管了"，实际上什么都没做：点开能亮（状态翻转），
+            /// 点关却灭不掉（还是同一个早退，只是这次 `IsOn` 已经是 true）。
+            ///
+            /// 教训：**「值没变」不等于「已经生效」**。默认值恰好等于目标值时，
+            /// 任何「只在变化时执行」的逻辑都必须再配一个「是否已应用」的标记。
+            /// 这和 `DoorVisual.HasState`（99 号清单第 20 条）是同一类问题的两个方向。
+            /// </summary>
+            public bool HasApplied;
         }
 
         private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
@@ -349,6 +366,7 @@ namespace SchoolTwin.Present
             List<Renderer> group = CollectLampGroup(anchor, main);
 
             LampVisual v = new LampVisual();
+            v.TwinId = anchor.TwinId;
             Bounds groupBounds = main.bounds;
 
             for (int i = 0; i < group.Count; i++)
@@ -500,17 +518,30 @@ namespace SchoolTwin.Present
 
         private void ApplyLamp(LampVisual v, bool on)
         {
-            if (v.IsOn == on) return;
+            // 【必须判 HasApplied，不能只判 IsOn】见 `LampVisual.HasApplied` 的注释：
+            // 「第一次 Sync 时灯就是关的」会让 IsOn==on 成立 → 早退 → 材质从没被写过。
+            if (v.HasApplied && v.IsOn == on) return;
+
+            v.HasApplied = true;
             v.IsOn = on;
 
+            int written = 0;
             for (int i = 0; i < v.Materials.Count; i++)
             {
                 Material m = v.Materials[i];
                 if (m == null || !v.HasEmission[i]) continue;
                 m.SetColor(EmissionId, on ? _lampEmission : Color.black);
+                written++;
             }
 
             if (v.Glow != null) v.Glow.intensity = on ? _lampGlowIntensity : 0f;
+
+            // 只在「状态真的翻转」或「首次接管」时打一条，方便验收时确认表现层确实动手了。
+            // 这条一定要无条件打：状态变了却 `written == 0`（材质没有 _EmissionColor）时，
+            // 它是唯一能看出「灯为什么不亮」的线索。
+            Debug.Log("[TwinPresent] 灯 " + (on ? "开" : "关") + "：" + v.TwinId +
+                      "（" + v.Renderers.Count + " 盏，写了 " + written + " 份自发光" +
+                      "，点光源=" + (v.Glow != null ? v.Glow.intensity.ToString("0.0") : "无") + "）");
         }
 
         // ---------------------------------------------------------------- 门
