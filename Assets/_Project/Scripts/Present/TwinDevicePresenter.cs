@@ -371,7 +371,7 @@ namespace SchoolTwin.Present
 
             Debug.Log("[TwinPresent] 灯已接管：" + anchor.TwinId +
                       "（" + v.Renderers.Count + " 盏灯 / 发光 " + CountEmission(v) + " 盏" +
-                      "，点光源=" + (v.Glow != null ? "有（房间级，1 盏）" : "无") + "）");
+                      "，点光源=" + (v.Glow != null ? "有（房间级，1 盏，range=" + v.Glow.range.ToString("0.0") + "m）" : "无") + "）");
 
             return v;
         }
@@ -424,8 +424,10 @@ namespace SchoolTwin.Present
             Transform container = main.transform.parent;
             if (container == null || container.childCount <= 1) return group;
 
-            // 同层判据的基准：代表灯自己的高度
-            float floorY = main.bounds.center.y;
+            // 同层判据的基准：**代表灯的挂点高度**，不是 `bounds.center.y`。
+            // 用包围盒中心的话，灯的网格如果往一侧偏（吊杆、灯罩），基准会跟着漂，
+            // 而 1F / 2F 的走廊 XZ 完全重合，基准一漂就会把上下两层混在一起。
+            float floorY = main.transform.position.y;
 
             for (int i = 0; i < container.childCount; i++)
             {
@@ -436,16 +438,36 @@ namespace SchoolTwin.Present
                 if (Mathf.Abs(p.y - floorY) > 1.6f) continue;
                 if (!TwinRoomBounds.Contains(zone, p.x, p.z)) continue;
 
-                Renderer[] rs = child.GetComponentsInChildren<Renderer>(true);
-                for (int k = 0; k < rs.Length; k++)
-                {
-                    Renderer r = rs[k];
-                    if (r == null || group.Contains(r)) continue;
-                    group.Add(r);
-                }
+                // 每盏灯只取**它自己**体积最大的那个 Renderer（灯管），
+                // 而不是把它下面所有 Renderer 都收进来。
+                //
+                // 【为什么】灯具预制体可能带灯架、吊杆、反光罩。把整棵子树都设成
+                // 自发光，整根灯会白成一片、没有质感 —— 看起来像"灯炸了"而不是"灯亮了"。
+                // 只点亮灯管，才是真实灯具的样子。现在 `LightLum01_01` 只有 1 个
+                // Renderer（单网格），这条对它是无操作，但对以后换模型是必要的。
+                Renderer body = LargestRenderer(child);
+                if (body == null || group.Contains(body)) continue;
+                group.Add(body);
             }
 
             return group;
+        }
+
+        /// <summary>取一个节点（含子节点）里体积最大的 Renderer —— 灯具的主体（灯管）。</summary>
+        private static Renderer LargestRenderer(Transform t)
+        {
+            if (t == null) return null;
+            Renderer[] rs = t.GetComponentsInChildren<Renderer>(true);
+            Renderer best = null;
+            float bestSize = -1f;
+            for (int i = 0; i < rs.Length; i++)
+            {
+                Renderer r = rs[i];
+                if (r == null) continue;
+                float size = r.bounds.size.sqrMagnitude;
+                if (size > bestSize) { bestSize = size; best = r; }
+            }
+            return best;
         }
 
         private Light BuildGlow(TwinAnchor anchor, Bounds bounds)
@@ -454,15 +476,22 @@ namespace SchoolTwin.Present
 
             GameObject go = new GameObject("TwinLampGlow");
             go.transform.SetParent(anchor.transform, false);
-            go.transform.localPosition = anchor.transform.InverseTransformPoint(bounds.center);
+            // 落点从「灯具中心」往下挪一点：灯管就贴在天花板上，
+            // 点光源埋在灯罩里时地面那一片照不到（本项目点光源不投影，但高度差仍有意义）。
+            Vector3 center = bounds.center + Vector3.down * 0.35f;
+            go.transform.localPosition = anchor.transform.InverseTransformPoint(center);
             go.transform.localRotation = Quaternion.identity;
 
             Light light = go.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = new Color(1f, 0.95f, 0.86f);
+
+            // 范围按**整组灯的包围盒**推：P17 之后一个点光源代表一整个房间，
+            // 上限还卡在 8m 的话，13m 长的教室只有中间亮、两头是黑的
+            // —— 用户看到的就是「开了灯但屋子没亮」。上限放到 16m（普通教室对角线约 14m）。
             light.range = _lampGlowRange > 0.01f
                 ? _lampGlowRange
-                : Mathf.Clamp(bounds.size.magnitude * 0.75f, 3f, 8f);
+                : Mathf.Clamp(bounds.size.magnitude * 0.75f, 4f, 16f);
             light.intensity = 0f;                 // 由 ApplyLamp 决定
             light.shadows = LightShadows.None;    // 一盏灯的阴影不值这个开销
             light.renderMode = LightRenderMode.Auto;
@@ -602,7 +631,8 @@ namespace SchoolTwin.Present
             }
 
             Vector3 wallDir = wallAlongX ? Vector3.right : Vector3.forward;
-            Vector3 closedDir = Vector3.Dot(panel, wallDir) >= 0f ? wallDir : -wallDir;
+            string closeReason;
+            Vector3 closedDir = PickClosedDir(anchor, t.position, panel, wallDir, out closeReason);
 
             // 把当前姿态转到「贴平墙面」需要的角度
             float closedAngle = Vector3.SignedAngle(panel, closedDir, Vector3.up);
@@ -626,11 +656,88 @@ namespace SchoolTwin.Present
 
             Debug.Log("[TwinPresent] 门已接管：" + anchor.TwinId + "（" + t.name + "）" +
                       " 墙向=" + (wallAlongX ? "X" : "Z") +
+                      " 关门方向=" + (Vector3.Dot(closedDir, wallDir) > 0f ? "+" : "-") + wallDir.ToString() +
+                      "（" + closeReason + "）" +
                       " 关门角=" + closedAngle.ToString("0.0") + "°" +
                       " 开门角=" + openAngle.ToString("0.0") + "°" +
                       "（角度相对模型当前姿态，0° = 原样）");
 
             return v;
+        }
+
+        /// <summary>
+        /// Door07a 的门扇长度：它自带的 BoxCollider 是 `x∈[-0.006, 0.835]`。
+        /// 「门关到位时门边落在哪」要用到它。
+        /// </summary>
+        private const float DoorLeafLength = 0.835f;
+
+        /// <summary>
+        /// 门关上时门扇贴平墙面 —— 但「贴哪一侧」有两个答案，选错了门会转到门洞外面，
+        /// 看起来就像**根本没关**（门扇贴在门洞旁边的墙上）。
+        ///
+        /// 2026-10-22 用户实测就是这个问题：「门关反了，是往教室里面关，才是关门」。
+        /// 当时用的是「取与门扇当前方向同侧的那个」，它把 2-1班 的门判到了 +X 侧，
+        /// 门边落点 x=-11.73 —— 房间东界是 -12.4，**门扇整个跑到隔壁去了**。
+        ///
+        /// ── 判据（依次降级）──────────────────────────────────────────
+        ///   ① **门边落点落在房间的「沿墙跨度」内** → 取那一侧。
+        ///      门洞开在房间自己的那段墙上，所以门扇收回去必然还在这段墙的跨度里；
+        ///      转到另一侧，门边就跑到房间外（隔壁 / 墙外）去了。
+        ///   ② 两侧都在 / 都不在跨度内 → 取**朝向房间中心**的那一侧。
+        ///   ③ 连房间范围都没登记 → 退回「与门扇当前方向同侧」（旧行为）。
+        ///
+        /// ── 为什么只比「沿墙那根轴」，不比整个矩形 ────────────────────
+        /// 门扇关到位时是**躺在墙里**的，垂直方向本来就在房间范围之外
+        /// （2-1班：门枢轴 z=33.49，房间 z 从 34.5 起，差 1.01m 就是墙厚）。
+        /// 拿整个矩形去比，两侧都判「不在房间内」，①永远不成立 —— 这条规则就白写了。
+        ///
+        /// 为什么不能只看 ③：它只保证「转得少」，不保证「转到门洞上」。
+        /// </summary>
+        private Vector3 PickClosedDir(TwinAnchor anchor, Vector3 hinge, Vector3 panel,
+                                      Vector3 wallDir, out string reason)
+        {
+            Vector3 a = wallDir;
+            Vector3 b = -wallDir;
+            bool alongX = Mathf.Abs(wallDir.x) > Mathf.Abs(wallDir.z);
+
+            // 先给默认值：`&&` 短路时 `TryGetBounds` 根本不会被调用，
+            // 它的 out 参数就没被赋值 —— C# 会直接报 CS0165（"使用了未赋值的局部变量"）。
+            // 这跟踩坑清单第 15 条是同一类问题。
+            float bx0 = 0f, bx1 = 0f, bz0 = 0f, bz1 = 0f;
+            bool hasBox = false;
+            if (!string.IsNullOrEmpty(anchor.Zone))
+            {
+                hasBox = TwinRoomBounds.TryGetBounds(anchor.Zone, out bx0, out bx1, out bz0, out bz1);
+            }
+
+            if (hasBox)
+            {
+                // 只看沿墙那根轴：门扇躺回墙里之后，它必须还在这段墙的跨度内
+                float ea = alongX ? hinge.x + DoorLeafLength : hinge.z + DoorLeafLength;
+                float eb = alongX ? hinge.x - DoorLeafLength : hinge.z - DoorLeafLength;
+                bool inA = alongX ? (ea >= bx0 && ea <= bx1) : (ea >= bz0 && ea <= bz1);
+                bool inB = alongX ? (eb >= bx0 && eb <= bx1) : (eb >= bz0 && eb <= bz1);
+
+                if (inA != inB)
+                {
+                    reason = "门边落点只有 " + (inA ? "+" : "-") + (alongX ? "X" : "Z") + " 侧还在这段墙的跨度内";
+                    return inA ? a : b;
+                }
+
+                Vector3 center = new Vector3((bx0 + bx1) * 0.5f, hinge.y, (bz0 + bz1) * 0.5f);
+                Vector3 toCenter = center - hinge;
+                toCenter.y = 0f;
+                float da = Vector3.Dot(toCenter, a);
+                float db = Vector3.Dot(toCenter, b);
+                if (Mathf.Abs(da - db) > 0.01f)
+                {
+                    reason = "两侧都" + (inA ? "在" : "不在") + "跨度内，取朝向房间中心的一侧";
+                    return da > db ? a : b;
+                }
+            }
+
+            reason = "房间范围用不上，退回与门扇同侧（旧规则）";
+            return Vector3.Dot(panel, a) >= 0f ? a : b;
         }
 
         /// <summary>

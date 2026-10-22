@@ -306,10 +306,34 @@ namespace SchoolTwin.Twin
             }
         }
 
+        /// <summary>
+        /// 这台设备的「亮/灭」是不是由 `TwinDevicePresenter` 独占。
+        ///
+        /// 【2026-10-22 实测踩到的坑】灯的 `_EmissionColor` 只有一个，两套系统同时在写：
+        ///   · 表现层：开 = 2.2 的暖白（写在**材质**上）；
+        ///   · 本组件：状态色按强度混进自发光（写在 **MaterialPropertyBlock** 上）。
+        /// MPB 的优先级**高于**材质属性，而「正常」状态的强度是 0
+        /// （`_tintOnlyWhenAbnormal`），于是 MPB 把自发光写成了纯黑 ——
+        /// **材质上写得再亮也被盖掉**。
+        ///
+        /// 症状极其隐蔽：一间教室 8 盏灯，只有锚点挂着的那一盏不亮
+        /// （其它 7 盏身上没有本组件），卡片上却写着「已开」。
+        /// 用户的原话是「原本这个照明状态正常的灯，现在也被你改的变得不正常了，不亮了」。
+        ///
+        /// 所以灯的发光归表现层，本组件对灯**只染色、不碰自发光**。
+        /// 灯出异常时靠 `_Color` 染色依然看得出来（红/黄/灰），只是不再从灯管里透出来。
+        /// </summary>
+        private bool PresenterOwnsEmission()
+        {
+            return _anchor != null && string.Equals(_anchor.Category, "Light", System.StringComparison.Ordinal);
+        }
+
         private void Apply(Color statusColor, float strength)
         {
             if (_renderers == null) return;
             if (_mpb == null) _mpb = new MaterialPropertyBlock();
+
+            bool writeEmission = _applyEmission && !PresenterOwnsEmission();
 
             for (int i = 0; i < _renderers.Length; i++)
             {
@@ -328,7 +352,7 @@ namespace SchoolTwin.Twin
                 r.GetPropertyBlock(_mpb);
                 if (shared.HasProperty(s_colorId)) _mpb.SetColor(s_colorId, final);
                 if (shared.HasProperty(s_baseColorId)) _mpb.SetColor(s_baseColorId, final);
-                if (_applyEmission && shared.HasProperty(s_emissionId))
+                if (writeEmission && shared.HasProperty(s_emissionId))
                 {
                     // 自发光同样按强度混合：低强度时几乎不发光，
                     // 否则「淡淡的泛色」会被自发光放大成整块发亮的绿。
