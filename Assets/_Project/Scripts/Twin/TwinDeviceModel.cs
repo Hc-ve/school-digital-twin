@@ -203,8 +203,25 @@ namespace SchoolTwin.Twin
                     break;
 
                 case "PC":
-                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 300f);
-                    AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 80f, 220f, 0f, 1f);
+                    // 【2026-10-22 量程修正：0~300W → 0~3000W】
+                    // 0~300W 是**单台**电脑的量程，可这个点位的语义是「**整间**机房的电脑」——
+                    // 计算机教室有 10 台 Computer06，满负荷 10×300 = 3000W。
+                    //
+                    // 用单台量程去卡整间总功耗，两种表现都是错的：
+                    //   · 按真实总功耗算 → 1800W 直接顶穿 300W 上限，永远报警；
+                    //   · 按单台功耗算   → 永远「健康」，量程形同虚设（这就是改动前的状态）。
+                    // 而且 MockSignalGenerator 的基线是**从阈值派生**的，
+                    // 阈值区间不对，模拟出来的波形也就不对 —— 那条「292W 告警」其实是假告警。
+                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 3000f);
+
+                    // 【为什么加 OnCount】房间级点位最容易回答的问题不是「耗多少瓦」，
+                    // 而是「开了几台」。10 台 × 180W 的功耗数字看不出「有 2 台没开」。
+                    AddProperty(m, "OnCount", "OnCount", TwinPropertyKind.Int, "台", 0f, 30f);
+
+                    // 开 = 10 台 × 180W = 1800W；关 = 0W。
+                    // 回读区间放到 800~2200：机房不一定满编 10 台，
+                    // 卡太死会让「确实开了 6 台」被判成「执行了但状态没变」。
+                    AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 800f, 2200f, 0f, 1f);
                     break;
 
                 case "Door":
@@ -390,11 +407,15 @@ namespace SchoolTwin.Twin
     /// 所以白名单只放「表现层已接管」的设备类型：
     ///   · Light —— 灯管发光 + 点光源（P13）
     ///   · AC    —— 收到命令时「滴滴」（P13）
-    ///   · Door  —— 绕门轴转动，开/关有动画（P17）
+    ///   · Door  —— 绕门轴转动，开/关有动画（P17 / P18）
     ///
-    /// 还**没**开放的（27 个可命令点位里的另外 12 个）：
+    /// 还**没**开放的（可命令点位里剩下的这些）：
     ///   · Heat 9 台 —— 没有可视化部件（只有阀门开度数字），点了看不出反应
-    ///   · PC 2 台   —— 同上，只能看功耗数字
+    ///   · PC 2 台   —— 【P18 复核结论：不只是「没有可视化部件」】
+    ///                  `Computer06` / `Monitor04` 都是**单网格单材质**，
+    ///                  贴图图集里没有独立的「屏幕」区域，也没有单独的屏幕子物体 ——
+    ///                  所以「开机 = 屏幕亮起来」这件事**做不出来**，除非补一块屏幕面片。
+    ///                  既然三维里不会有反应，就不开放，理由和暖气一样。
     ///
     /// 扩展方式：往 Ids 数组里加点位即可，UI、设备代理、表现层三处都从这一处取。
     /// </summary>
@@ -421,9 +442,17 @@ namespace SchoolTwin.Twin
             "Class2-1/AC/Unit_01",
             "ClassDirector/AC/Unit_01",
 
-            // ---- 门 1 扇（P17）----
-            // 锚点就挂在那扇 Door07a 上（不是标记牌），所以三维里点得到、面板里也点得到。
+            // ---- 门 6 扇（P17 一扇 + P18 补五扇）----
+            // 锚点都挂在 `Door07a` 实例本身（不是标记牌），所以三维里点得到、面板里也点得到。
+            // 场景里一共 11 扇 Door07a，剩下 5 扇在南翼（运动教室那一侧）——
+            // 那几间房连分区、房间范围、任何点位都没有，门只能看数字不能转，
+            // 所以**有意不绑**，留给「扩分区」那一步一起做。
             "Class2-1/Door/Entrance_01",
+            "ClassComputer/Door/Entrance_01",
+            "Class1-2/Door/Entrance_01",
+            "Class1-3/Door/Entrance_01",
+            "Class1-4/Door/Entrance_01",
+            "Class2-2/Door/Entrance_01",
         };
 
         public static bool IsEnabled(string twinId)

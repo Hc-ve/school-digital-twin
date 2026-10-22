@@ -18,6 +18,13 @@ MonoBehaviour:
     Zone: Class2-1
     Category: Sensor
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Temperature
       Unit: "\xB0C"
@@ -28,6 +35,7 @@ MonoBehaviour:
       AlarmLow: 10
       AlarmHigh: 32
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Humidity
       Unit: '%RH'
       Min: 20
@@ -37,11 +45,19 @@ MonoBehaviour:
       AlarmLow: 20
       AlarmHigh: 75
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-1/Sensor/CO2_01
     DisplayName: "2-1\u73ED CO\u2082 \u4F20\u611F\u5668"
     Zone: Class2-1
     Category: Sensor
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: CO2
       Unit: ppm
@@ -52,11 +68,19 @@ MonoBehaviour:
       AlarmLow: 400
       AlarmHigh: 1500
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-1/Light/Main_01
     DisplayName: "2-1\u73ED \u4E3B\u7167\u660E"
     Zone: Class2-1
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -67,6 +91,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -76,11 +101,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-1/AC/Unit_01
     DisplayName: "2-1\u73ED \u7A7A\u8C03\u673A\u7EC4"
     Zone: Class2-1
     Category: AC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SetTemp
       Unit: "\xB0C"
@@ -91,6 +124,7 @@ MonoBehaviour:
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: kW
       Min: 0
@@ -100,11 +134,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 3.5
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-1/Door/Entrance_01
     DisplayName: "2-1\u73ED \u524D\u95E8"
     Zone: Class2-1
     Category: Door
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Open
       Unit: 0/1
@@ -115,11 +157,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 1
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-2/Light/Main_01
     DisplayName: "1-2\u73ED \u7167\u660E"
     Zone: Class1-2
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -130,6 +180,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -139,11 +190,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-2/Heat/Radiator_01
     DisplayName: "1-2\u73ED \u6696\u6C14"
     Zone: Class1-2
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -154,6 +213,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -163,11 +223,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-2/AC/Unit_01
     DisplayName: "1-2\u73ED \u7A7A\u8C03\u673A\u7EC4"
     Zone: Class1-2
     Category: AC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SetTemp
       Unit: "\xB0C"
@@ -178,6 +246,7 @@ MonoBehaviour:
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: kW
       Min: 0
@@ -187,11 +256,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 3.5
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-2/Sensor/Temp_01
     DisplayName: "1-2\u73ED \u73AF\u5883\u4F20\u611F\u5668"
     Zone: Class1-2
     Category: Sensor
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Temperature
       Unit: "\xB0C"
@@ -202,6 +279,7 @@ MonoBehaviour:
       AlarmLow: 10
       AlarmHigh: 32
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Humidity
       Unit: '%RH'
       Min: 20
@@ -211,11 +289,19 @@ MonoBehaviour:
       AlarmLow: 20
       AlarmHigh: 75
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-3/Light/Main_01
     DisplayName: "1-3\u73ED \u7167\u660E"
     Zone: Class1-3
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -226,6 +312,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -235,11 +322,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-3/Heat/Radiator_01
     DisplayName: "1-3\u73ED \u6696\u6C14"
     Zone: Class1-3
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -250,6 +345,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -259,11 +355,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-3/AC/Unit_01
     DisplayName: "1-3\u73ED \u7A7A\u8C03\u673A\u7EC4"
     Zone: Class1-3
     Category: AC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SetTemp
       Unit: "\xB0C"
@@ -274,6 +378,7 @@ MonoBehaviour:
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: kW
       Min: 0
@@ -283,11 +388,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 3.5
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-4/Light/Main_01
     DisplayName: "1-4\u73ED \u7167\u660E"
     Zone: Class1-4
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -298,6 +411,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -307,11 +421,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-4/Heat/Radiator_01
     DisplayName: "1-4\u73ED \u6696\u6C14"
     Zone: Class1-4
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -322,6 +444,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -331,11 +454,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class1-4/AC/Unit_01
     DisplayName: "1-4\u73ED \u7A7A\u8C03\u673A\u7EC4"
     Zone: Class1-4
     Category: AC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SetTemp
       Unit: "\xB0C"
@@ -346,6 +477,7 @@ MonoBehaviour:
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: kW
       Min: 0
@@ -355,11 +487,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 3.5
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-2/Light/Main_01
     DisplayName: "2-2\u73ED \u7167\u660E"
     Zone: Class2-2
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -370,6 +510,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -379,11 +520,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Class2-2/Heat/Radiator_01
     DisplayName: "2-2\u73ED \u6696\u6C14"
     Zone: Class2-2
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -394,6 +543,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -403,11 +553,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassComputer/Light/Main_01
     DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u7167\u660E"
     Zone: ClassComputer
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -418,6 +576,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -427,11 +586,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassComputer/Heat/Radiator_01
     DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u6696\u6C14"
     Zone: ClassComputer
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -442,6 +609,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -451,21 +619,40 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassComputer/PC/Room_01
     DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u673A\u623F\u7535\u8111"
     Zone: ClassComputer
     Category: PC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 300
+      Max: 3000
       WarnLow: 0
-      WarnHigh: 260
+      WarnHigh: 2600
       AlarmLow: 0
-      AlarmHigh: 300
+      AlarmHigh: 2900
       Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 30
+      WarnLow: 0
+      WarnHigh: 30
+      AlarmLow: 0
+      AlarmHigh: 30
+      Epsilon: 0.05
+      Hysteresis: 0
     - Metric: CPULoad
       Unit: '%'
       Min: 0
@@ -475,11 +662,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 98
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassComputer/Sensor/Temp_01
     DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u73AF\u5883\u4F20\u611F\u5668"
     Zone: ClassComputer
     Category: Sensor
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Temperature
       Unit: "\xB0C"
@@ -490,6 +685,7 @@ MonoBehaviour:
       AlarmLow: 10
       AlarmHigh: 32
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Humidity
       Unit: '%RH'
       Min: 20
@@ -499,11 +695,19 @@ MonoBehaviour:
       AlarmLow: 20
       AlarmHigh: 75
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassTeachers/Light/Main_01
     DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u7167\u660E"
     Zone: ClassTeachers
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -514,6 +718,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -523,11 +728,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassTeachers/Heat/Radiator_01
     DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u6696\u6C14"
     Zone: ClassTeachers
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -538,6 +751,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -547,21 +761,40 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassTeachers/PC/Room_01
-    DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u673A\u623F\u7535\u8111"
+    DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u529E\u516C\u7535\u8111"
     Zone: ClassTeachers
     Category: PC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 300
+      Max: 3000
       WarnLow: 0
-      WarnHigh: 260
+      WarnHigh: 2600
       AlarmLow: 0
-      AlarmHigh: 300
+      AlarmHigh: 2900
       Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 30
+      WarnLow: 0
+      WarnHigh: 30
+      AlarmLow: 0
+      AlarmHigh: 30
+      Epsilon: 0.05
+      Hysteresis: 0
     - Metric: CPULoad
       Unit: '%'
       Min: 0
@@ -571,11 +804,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 98
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassDirector/Light/Main_01
     DisplayName: "\u4E3B\u4EFB\u5BA4 \u7167\u660E"
     Zone: ClassDirector
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -586,6 +827,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -595,11 +837,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassDirector/Heat/Radiator_01
     DisplayName: "\u4E3B\u4EFB\u5BA4 \u6696\u6C14"
     Zone: ClassDirector
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -610,6 +860,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -619,11 +870,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: ClassDirector/AC/Unit_01
     DisplayName: "\u4E3B\u4EFB\u5BA4 \u7A7A\u8C03\u673A\u7EC4"
     Zone: ClassDirector
     Category: AC
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SetTemp
       Unit: "\xB0C"
@@ -634,6 +893,7 @@ MonoBehaviour:
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: kW
       Min: 0
@@ -643,11 +903,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 3.5
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Corridor1/Light/Main_01
     DisplayName: "\u4E00\u5C42\u8D70\u5ECA \u7167\u660E"
     Zone: Corridor1
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -658,6 +926,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -667,11 +936,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Corridor1/Heat/Radiator_01
     DisplayName: "\u4E00\u5C42\u8D70\u5ECA \u6696\u6C14"
     Zone: Corridor1
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -682,6 +959,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -691,11 +969,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Corridor1/Alarm/Fire_01
     DisplayName: "\u4E00\u5C42\u8D70\u5ECA \u70DF\u611F"
     Zone: Corridor1
     Category: Alarm
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Smoke
       Unit: obs/m
@@ -706,11 +992,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 60
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Corridor2/Light/Main_01
     DisplayName: "\u4E8C\u5C42\u8D70\u5ECA \u7167\u660E"
     Zone: Corridor2
     Category: Light
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: Brightness
       Unit: '%'
@@ -721,6 +1015,7 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: Power
       Unit: W
       Min: 0
@@ -730,11 +1025,19 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 120
       Epsilon: 0.05
+      Hysteresis: 0
   - TwinId: Corridor2/Heat/Radiator_01
     DisplayName: "\u4E8C\u5C42\u8D70\u5ECA \u6696\u6C14"
     Zone: Corridor2
     Category: Heat
     SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
     Metrics:
     - Metric: SupplyTemp
       Unit: "\xB0C"
@@ -745,6 +1048,7 @@ MonoBehaviour:
       AlarmLow: 40
       AlarmHigh: 80
       Epsilon: 0.05
+      Hysteresis: 0
     - Metric: ValveOpen
       Unit: '%'
       Min: 0
@@ -754,3 +1058,119 @@ MonoBehaviour:
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/Door/Entrance_01
+    DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u95E8"
+    Zone: ClassComputer
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class1-2/Door/Entrance_01
+    DisplayName: "1-2\u73ED \u95E8"
+    Zone: Class1-2
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class1-3/Door/Entrance_01
+    DisplayName: "1-3\u73ED \u95E8"
+    Zone: Class1-3
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class1-4/Door/Entrance_01
+    DisplayName: "1-4\u73ED \u95E8"
+    Zone: Class1-4
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class2-2/Door/Entrance_01
+    DisplayName: "2-2\u73ED \u95E8"
+    Zone: Class2-2
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0

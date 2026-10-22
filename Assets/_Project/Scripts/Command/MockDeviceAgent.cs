@@ -137,44 +137,85 @@ namespace SchoolTwin.Command
         private void SeedInitialState()
         {
             IReadOnlyList<string> ids = TwinControlScope.All;
-            int seeded = 0;
+            int seeded = 0, unresolved = 0;
 
             for (int i = 0; i < ids.Count; i++)
-            {
-                string twinId = ids[i];
-                TwinDeviceModel model = ResolveModel(twinId);
-                if (model == null)
-                {
-                    Debug.LogWarning("[TwinCmd] 受控点位「" + twinId + "」解析不出设备模型，" +
-                                     "初始状态没定 —— 它的状态会跟着模拟波形乱跳");
-                    continue;
-                }
+                SeedOne(ids[i], ref seeded, ref unresolved);
 
-                switch (model.Type)
-                {
-                    case "Light":
-                        SetState(twinId, "Power", 42f);        // 量程 0~120W，警告线 110
-                        SetState(twinId, "Brightness", 80f);   // 警告带 20~100
-                        seeded++;
-                        break;
-
-                    case "AC":
-                        SetState(twinId, "Power", 1.2f);       // 量程 0~3.5kW，警告线 3
-                        SetState(twinId, "SetTemp", 26f);      // 警告带 18~26
-                        seeded++;
-                        break;
-
-                    case "Door":
-                        // 场景里的门模型是**开着的**（Door07a 实例都摆成半开姿态），
-                        // 初始状态就得是「开」，否则卡片和三维对不上。
-                        SetState(twinId, "Open", 1f);
-                        seeded++;
-                        break;
-                }
-            }
+            // 白名单之外、但**同样有明确静止状态**的点位也要压住。
+            // 见 SeedOnlyIds 的说明：不压住的话它们会走正弦波，产生假告警。
+            for (int i = 0; i < SeedOnlyIds.Length; i++)
+                SeedOne(SeedOnlyIds[i], ref seeded, ref unresolved);
 
             Debug.Log("[TwinCmd] 已给 " + seeded + " 台受控设备定下初始状态（白名单共 " +
-                      ids.Count + " 个点位）。状态由设备代理负责，模拟波形不再改它。");
+                      ids.Count + " 个点位，另有 " + SeedOnlyIds.Length + " 个只定状态不开放控制）。" +
+                      "状态由设备代理负责，模拟波形不再改它。");
+
+            if (unresolved > 0)
+                Debug.LogWarning("[TwinCmd] 有 " + unresolved + " 个点位解析不出设备模型，初始状态没定 —— " +
+                                 "它们的状态会跟着模拟波形乱跳。多半是点位目录里还没有这一条。");
+        }
+
+        /// <summary>
+        /// 暂不开放控制、但**有明确静止状态**的点位。
+        ///
+        /// 【为什么不能只靠白名单】
+        /// 白名单的语义是「界面上给不给按钮」，不是「这个设备有没有确定状态」。
+        /// 电脑暂时不给按钮（三维里没有可视化部件，见 TwinControlScope 的注释），
+        /// 但它的功率**必须**有个确定值 —— 否则 `MockSignalGenerator` 会把它当连续量，
+        /// 在 [WarnLow, WarnHigh] 里做正弦，再按周期往量程边界冲。
+        ///
+        /// 2026-10-22 用户看到的那条「教师办公室 机房电脑 功率 292.66W」就是假的：
+        /// 那时候 PC 既没在 SeedInitialState 里、量程又是单台的 0~300W，
+        /// 波形自然就在 0~300 之间来回冲线。**没有设备负责的状态，一律是假的。**
+        /// </summary>
+        private static readonly string[] SeedOnlyIds =
+        {
+            "ClassComputer/PC/Room_01",
+            "ClassTeachers/PC/Room_01",
+        };
+
+        private void SeedOne(string twinId, ref int seeded, ref int unresolved)
+        {
+            TwinDeviceModel model = ResolveModel(twinId);
+            if (model == null)
+            {
+                Debug.LogWarning("[TwinCmd] 受控点位「" + twinId + "」解析不出设备模型，" +
+                                 "初始状态没定 —— 它的状态会跟着模拟波形乱跳");
+                unresolved++;
+                return;
+            }
+
+            switch (model.Type)
+            {
+                case "Light":
+                    SetState(twinId, "Power", 42f);        // 量程 0~120W，警告线 110
+                    SetState(twinId, "Brightness", 80f);   // 警告带 20~100
+                    seeded++;
+                    break;
+
+                case "AC":
+                    SetState(twinId, "Power", 1.2f);       // 量程 0~3.5kW，警告线 3
+                    SetState(twinId, "SetTemp", 26f);      // 警告带 18~26
+                    seeded++;
+                    break;
+
+                case "Door":
+                    // 场景里的门模型是**开着的**（Door07a 实例都摆成半开姿态），
+                    // 初始状态就得是「开」，否则卡片和三维对不上。
+                    SetState(twinId, "Open", 1f);
+                    seeded++;
+                    break;
+
+                case "PC":
+                    // 机房默认「10 台都开着」：10 × 180W = 1800W（量程 0~3000，警告线 2600）。
+                    // 这个值必须和 ApplyState 里「开」的取值一致，否则按 Play 后会看到
+                    // 功率从 1800 跳成别的数 —— 那会被误当成"有人在操作"。
+                    SetState(twinId, "Power", 1800f);
+                    SetState(twinId, "OnCount", 10f);
+                    seeded++;
+                    break;
+            }
         }
 
         // ---------------------------------------------------------------- 收命令
@@ -310,7 +351,9 @@ namespace SchoolTwin.Command
                     {
                         case "Light": watt = on ? 42f : 0f; break;    // 量程 0~120W，警告线 110
                         case "AC": watt = on ? 1.2f : 0f; break;      // 量程 0~3.5kW，警告线 3
-                        case "PC": watt = on ? 180f : 0f; break;      // 量程 0~300W，警告线 260
+                        // 量程 0~3000W（整间 10 台 × 300W）。开 = 10 台 × 180W = 1800W，
+                        // 与 SeedInitialState 的初值必须一致，否则「点开」会看起来像跳变。
+                        case "PC": watt = on ? 1800f : 0f; break;
                         default: watt = on ? 1f : 0f; break;
                     }
                     SetState(twinId, "Power", watt);
@@ -320,6 +363,10 @@ namespace SchoolTwin.Command
                     // 亮度是灯具自己的属性，跟着开关一起走才对。
                     if (string.Equals(type, "Light", StringComparison.Ordinal))
                         SetState(twinId, "Brightness", on ? 80f : 0f);
+
+                    // 电脑同理：只改总功率不改开机台数，卡片上会写「已关」而「开机 10 台」。
+                    if (string.Equals(type, "PC", StringComparison.Ordinal))
+                        SetState(twinId, "OnCount", on ? 10f : 0f);
                     break;
                 }
 

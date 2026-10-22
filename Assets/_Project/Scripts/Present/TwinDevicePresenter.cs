@@ -885,6 +885,27 @@ namespace SchoolTwin.Present
                     alongX = outZ;          // 只有 Z 跑出去 → 墙沿 X
                     return true;
                 }
+
+                // 【2026-10-22 P18 补：两根轴「一样」的时候，改用门扇朝向判】
+                //
+                // 为什么必须补：P18 新绑的 5 扇门里，`Class1-2`（门 x=-0.56，
+                // 房间 x∈[-12.4,-0.7]）和 `Class1-3`（门 x=11.44，房间 x∈[-0.7,11.3]）
+                // 的门枢轴**同时**在 X 和 Z 上跑出房间范围 —— 门洞就开在房间的东南角上，
+                // 两个方向的超出量分别只有 **0.14m 和 0.01m**。
+                //
+                // 这种量级的差是「房间范围表是照灯反推的、门在它外沿」造成的，不是几何事实：
+                // 把 `TwinRoomBounds` 里 1F 的 MinZ 从 33.5 改成 33.4，这 0.01m 就没了，
+                // 判据会当场翻成「东西墙」。**判据不能建立在 1cm 的余量上。**
+                //
+                // 换一个和房间表无关的事实：**门扇现在摆在什么角度**。
+                // 场景里 11 扇门都是半开 64.4°，于是
+                //   · 南北墙（墙沿 X）上的门 → 门扇 yaw 落在 ±(45°, 90°]
+                //   · 东西墙（墙沿 Z）上的门 → 门扇 yaw 落在 ±[0°, 45°]
+                // 实测 6 扇门 yaw 全部 = 64.40°（`_scratch` 里算的），全部判南北墙。
+                // yaw 先归一到 (-90°, 90°]：一扇朝 +X 半开的门 yaw 可能是 115.6°，
+                // 不归一会被判成东西墙。
+                if (outX == outZ && TryLeafIsAlongX(door, out alongX))
+                    return true;
             }
 
             // ---- 兜底：同分区非门锚点的包围盒 ----
@@ -926,6 +947,41 @@ namespace SchoolTwin.Present
 
             // 两个都跑出去 → 取跑得更远的那个方向（门在外面更"明显"）
             alongX = dz <= dx;
+            return true;
+        }
+
+        /// <summary>
+        /// 用**门扇当前朝向来**判墙向：门半开时，门扇方向与墙的夹角就是开合角（约 64°），
+        /// 所以「门扇 yaw 落在 45°~90°」就说明它挂在南北墙上（墙沿 X）。
+        ///
+        /// 【为什么这个判据比房间范围表可靠】
+        /// 房间范围表是**照灯反推**的，门在它的外沿上，超出量常常只有 1~15cm
+        /// （Class1-2 门在 x=-0.56、房间边界 -0.7，差 0.14m；z 方向差 0.01m）。
+        /// 用 1cm 的余量去判「门在哪面墙上」，改一次表就翻。
+        /// 门扇朝向是模型自己的姿态，和表无关。
+        ///
+        /// 前提：门是**半开**的（本场景 11 扇全是 64.4°）。如果哪天把门模型改成关着的，
+        /// 门扇 yaw 会接近 0°，这个判据就失效 —— 那种情况下房间范围判据通常能接住。
+        /// </summary>
+        private static bool TryLeafIsAlongX(TwinAnchor door, out bool alongX)
+        {
+            alongX = false;
+            if (door == null) return false;
+
+            Vector3 panel = door.transform.right;
+            panel.y = 0f;
+            if (panel.sqrMagnitude < 0.0001f) return false;
+            panel.Normalize();
+
+            // Unity 里把 +X 绕 Y 转 yaw 得到 (cos yaw, 0, -sin yaw) → yaw = atan2(-z, x)
+            float leafYaw = Mathf.Atan2(-panel.z, panel.x) * Mathf.Rad2Deg;
+
+            // 归一到 (-90°, 90°]：朝 +X 半开的门 yaw 可能是 115.6°，
+            // 不归一会被当成「贴着东西墙」。
+            while (leafYaw > 90f) leafYaw -= 180f;
+            while (leafYaw <= -90f) leafYaw += 180f;
+
+            alongX = Mathf.Abs(leafYaw) > 45f;
             return true;
         }
 
