@@ -1255,6 +1255,24 @@ namespace SchoolTwin.Present
                 hasBox = TwinRoomBounds.TryGetBounds(anchor.Zone, out bx0, out bx1, out bz0, out bz1);
             }
 
+            // 【先按「最短路径」判】门模都是半开姿态（64.4° / 34° / 32°），
+            // 这种姿态下"往回转"是唯一合理的关法，而且这个判据和房间表无关、不会错。
+            //
+            // 2026-10-23 实测踩过：Class2-1 的门轴在 x=-12.57，房间表东边界 -12.4（照灯反推的，
+            // 差 0.17m），门边落点 -11.73 就"落在房间外面"了 → 跨度判据把方向判成反向，
+            // 门扇转到门洞**旁边的墙上**，看着像根本没关。
+            // 只有两个方向一样近（模型接近 90° 垂直打开）时才真的没法判，那时才用跨度/门框。
+            float angA = Vector3.SignedAngle(panel, a, Vector3.up);
+            float angB = Vector3.SignedAngle(panel, b, Vector3.up);
+            bool ambiguous = Mathf.Abs(Mathf.Abs(angA) - Mathf.Abs(angB)) < 25f;
+            if (!ambiguous)
+            {
+                reason = "门扇离 " + (Mathf.Abs(angA) <= Mathf.Abs(angB) ? "+" : "-") +
+                         (alongX ? "X" : "Z") + " 侧更近（" + angA.ToString("0.0") + "° vs " +
+                         angB.ToString("0.0") + "°），按最短路径关";
+                return Mathf.Abs(angA) <= Mathf.Abs(angB) ? a : b;
+            }
+
             if (hasBox)
             {
                 // 只看沿墙那根轴：门扇躺回墙里之后，它必须还在这段墙的跨度内
