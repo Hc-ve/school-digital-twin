@@ -180,6 +180,13 @@ namespace SchoolTwin.EditorTools
             anim.applyRootMotion = false;   // 位移交给 TwinPlayerController
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
+            // 【必须显式指定 Avatar】只给 runtimeAnimatorController 是不够的：
+            // Humanoid 的 Animator 没有 Avatar 就不知道驱动哪套骨骼 → 模型永远 T-pose，
+            // 而且 Console 一行错都没有（2026-10-23 实测踩过）。
+            Avatar avatar = FindAvatar(ModelFbx);
+            anim.avatar = avatar;
+            sb.AppendLine("[P22] Animator.Avatar = " + (avatar == null ? "(空！动画不会播)" : avatar.name));
+
             go.AddComponent<TwinPlayerController>();
 
             // ---- 模型 ----
