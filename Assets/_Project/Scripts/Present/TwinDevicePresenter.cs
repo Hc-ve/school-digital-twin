@@ -724,11 +724,10 @@ namespace SchoolTwin.Present
             v.HasState = true;
 
 #if UNITY_EDITOR
-            // 【2026-10-22 临时诊断】礼堂双开门"点了关门不生效"查了三轮都是靠猜截图，
-            // 这次让运行时自己把每片门叶的角度写进文件（p19_door_runtime.txt）。
-            // 只在状态变化时写，不会刷屏；查完就可以删掉这一段。
-            if (changed && string.Equals(twinId, "ActZal/Door/Entrance_01", StringComparison.Ordinal))
-                DoorTrace(twinId, isOpenNow ? "状态→开" : "状态→关", v);
+            // 【临时诊断】门的表现层出问题时，靠截图猜方向效率极低。
+            // 这里在**每次状态变化**时把每片门叶的角度写进 p19_door_runtime.txt，
+            // 一行就能看出是"没转"还是"转错方向"。查完删掉这一段即可。
+            if (changed) DoorTrace(twinId, isOpenNow ? "状态→开" : "状态→关", v);
 #endif
         }
 
@@ -924,8 +923,7 @@ namespace SchoolTwin.Present
             }
 
 #if UNITY_EDITOR
-            if (string.Equals(anchor.TwinId, "ActZal/Door/Entrance_01", StringComparison.Ordinal))
-                DoorTrace(anchor.TwinId, "构建完成", v);
+            DoorTrace(anchor.TwinId, "构建完成", v);
 #endif
 
             Debug.Log("[TwinPresent] 门已接管：" + anchor.TwinId + "（" + t.name + "）" +
