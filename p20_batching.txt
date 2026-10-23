@@ -1,0 +1,26 @@
+﻿[P20Fix] ===== 清除门的静态合批 =====
+[P20Fix] 清掉 Door02Wood1 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 DoorAnchor 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 door02_1 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 glass 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (6) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 DoorDouble02 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 DoorDouble 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 DoorDouble0 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (5) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (7) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (3) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (1) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 ToiletPosterFemale 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (4) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door02Wood1 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 DoorAnchor 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 door02_1 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 glass 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (8) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 Door07a (2) 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 清掉 ToiletPosterMale 的 BatchingStatic（原标记 2147483647）
+[P20Fix] 门点位 13 个，清掉合批标记的物体 22 个
+[P20Fix] 场景保存：成功
+[P20Fix] ===== 结束 =====

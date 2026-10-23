@@ -137,11 +137,33 @@ namespace SchoolTwin.Player
                 _nextProbe = Time.unscaledTime + 1f;
                 if (speed > 0.05f)
                 {
+                    // 把「当前实际在播哪些片段、各占多少权重、片段多长」打出来 ——
+                    // 这是判断"混合树有没有真的在混合"的唯一直接证据。
+                    // 只有一个片段权重 1.0 = 树没混；有多个片段带权重 = 树在混，问题在片段本身。
+                    string clips = "(无)";
+                    if (_anim != null)
+                    {
+                        AnimatorClipInfo[] infos = _anim.GetCurrentAnimatorClipInfo(0);
+                        if (infos != null && infos.Length > 0)
+                        {
+                            System.Text.StringBuilder cb = new System.Text.StringBuilder();
+                            for (int ci = 0; ci < infos.Length; ci++)
+                            {
+                                AnimationClip c = infos[ci].clip;
+                                cb.Append(c != null ? c.name : "null")
+                                  .Append("(权重 ").Append(infos[ci].weight.ToString("0.00"))
+                                  .Append(", 长 ").Append(c != null ? c.length.ToString("0.00") : "?")
+                                  .Append("s) ");
+                            }
+                            clips = cb.ToString();
+                        }
+                    }
+
                     AnimatorStateInfo st = _anim != null ? _anim.GetCurrentAnimatorStateInfo(0) : default(AnimatorStateInfo);
                     Debug.Log("[TwinPlayer] Speed=" + speed.ToString("0.00") +
                               "  参数实测=" + (_anim != null ? _anim.GetFloat("Speed").ToString("0.00") : "n/a") +
-                              "  状态=" + (st.shortNameHash != 0 ? "hash " + st.shortNameHash : "?") +
-                              "  归一化时间=" + st.normalizedTime.ToString("0.00"));
+                              "  归一化时间=" + st.normalizedTime.ToString("0.00") +
+                              "  在播片段=" + clips);
                 }
             }
         }
