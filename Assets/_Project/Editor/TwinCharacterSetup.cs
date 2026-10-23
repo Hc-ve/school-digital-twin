@@ -190,17 +190,14 @@ namespace SchoolTwin.EditorTools
             cc.slopeLimit = 45f;
             cc.skinWidth = 0.03f;
 
-            Animator anim = go.AddComponent<Animator>();
-            anim.runtimeAnimatorController = ctrl;
-            anim.applyRootMotion = false;   // 位移交给 TwinPlayerController
-            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            // 【Animator 必须挂在模型自己身上】不要挂在 TwinPlayer 根上：
+            // `Y Bot.fbx` 导入时 Unity 会自动给模型根节点挂一个 Animator，
+            // 父级再挂一个的话，**父级在播（参数/权重都对）但骨骼被子级那个空 Animator 接管**
+            // → 视觉永远停在原地，而 Console 里一切正常（2026-10-23 实测踩过）。
+            // 所以：模型自带就用它，没有就加一个；根上一律不留。
+            Animator rootAnim = go.GetComponent<Animator>();
+            if (rootAnim != null) UnityEngine.Object.DestroyImmediate(rootAnim);
 
-            // 【必须显式指定 Avatar】只给 runtimeAnimatorController 是不够的：
-            // Humanoid 的 Animator 没有 Avatar 就不知道驱动哪套骨骼 → 模型永远 T-pose，
-            // 而且 Console 一行错都没有（2026-10-23 实测踩过）。
-            Avatar avatar = FindAvatar(ModelFbx);
-            anim.avatar = avatar;
-            sb.AppendLine("[P22] Animator.Avatar = " + (avatar == null ? "(空！动画不会播)" : avatar.name));
 
             go.AddComponent<TwinPlayerController>();
 
@@ -213,6 +210,24 @@ namespace SchoolTwin.EditorTools
             // 脚底对齐 y=0：Mixamo 的轴心不在脚底，不挪的话角色会悬空或陷进地板
             float feet = MeasureFeet(model);
             model.transform.localPosition = new Vector3(0f, -feet, 0f);
+
+            // 动画挂在模型根上
+            Animator anim = model.GetComponent<Animator>();
+            bool hadOwn = anim != null;
+            if (anim == null) anim = model.AddComponent<Animator>();
+            anim.runtimeAnimatorController = ctrl;
+            anim.applyRootMotion = false;   // 位移交给 TwinPlayerController
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            // 【必须显式指定 Avatar】只给 runtimeAnimatorController 是不够的：
+            // Humanoid 的 Animator 没有 Avatar 就不知道驱动哪套骨骼 → 模型永远 T-pose，
+            // 而且 Console 一行错都没有。
+            Avatar avatar = FindAvatar(ModelFbx);
+            anim.avatar = avatar;
+
+            sb.AppendLine("[P22] 模型自带 Animator=" + hadOwn + "  Avatar=" +
+                          (avatar == null ? "(空！动画不会播)" : avatar.name) +
+                          "  Controller=" + ctrl.name);
             sb.AppendLine("[P22] 模型脚底对齐：localPosition.y = " + (-feet).ToString("0.000") +
                           "m（" + (feet < 0f ? "整体上移 " : "整体下移 ") + Mathf.Abs(feet).ToString("0.000") + "m）");
 
