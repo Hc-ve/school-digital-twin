@@ -207,7 +207,8 @@ namespace SchoolTwin.EditorTools
             offender.localPosition = offender.localPosition + shiftLocal;
 
             // 沿墙方向：把门轴挪到「门框离参考叶更远的那一端」
-            Vector3 wallAxis = refPanel; wallAxis.y = 0f; wallAxis.Normalize();
+            // 复用上面的 wallAxis（`xScore > zScore ? Vector3.right : Vector3.forward`，
+            // 已经是单位向量；参考叶的门扇方向与它同轴，所以不用再算一次）。
             Vector3 frameC; float frameHalf;
             if (FindFrame(offender, wallAxis, out frameC, out frameHalf))
             {
@@ -228,6 +229,10 @@ namespace SchoolTwin.EditorTools
             {
                 sb.AppendLine("[P19Fix]   ⚠ 没找到门框，门轴沿墙位置没动 —— 可能挂在门洞外面，看下面的数。");
             }
+
+            // 门轴挪过之后，「参考叶上离它最近的端点」可能变了，重新算一次。
+            // 不重算的话，长度会按旧位置算，差出来的那截正好是门洞的缝。
+            refNear = ClosestOnSegment(refPos0, refFree0, offender.position);
 
             // ② 拉长：让自由边正好落在「参考叶最近端点」上
             //    用 world 距离算，避免本地轴/缩放换算的误差
