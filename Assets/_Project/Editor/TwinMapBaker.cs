@@ -15,14 +15,19 @@ namespace SchoolTwin.EditorTools
     /// 并把「每张图覆盖的世界矩形」写进 `TwinMapAtlas`。
     ///
     /// ── 为什么是烘焙，不是实时渲染 ────────────────────────────────
-    /// 场景有 2000+ 渲染器，挂第二个正交相机等于每帧把整个场景画两遍。
-    /// 地图是静态的，拍一次就够。
+    /// 场景有 2000+ 渲染器，挂第二个正交相机等于每帧把整个场景画两遍。地图是静态的，拍一次就够。
     ///
     /// ── 怎么做到「只拍一层」─────────────────────────────────────
     /// 相机在上方朝下看，用 near/far 卡出一个水平薄片：
-    ///   near = 相机高度 − 该层天花高度      （天花以上不拍 → 屋顶/上层自然消失）
-    ///   far  = 相机高度 − 该层地面高度      （地面以下不拍）
-    /// 一层：y ∈ [−0.6, 3.45]；二层：y ∈ [3.2, 7.0]；室外：y ∈ [−2, 12]（含屋顶）。
+    ///   near = 相机高度 − 该层天花高度   （天花以上不拍 → 屋顶/上层自然消失）
+    ///   far  = 相机高度 − 该层地面高度
+    /// 一层 y∈[−0.6, 3.45]；二层 y∈[3.2, 7.0]；室外 y∈[−6, 12]（含屋顶）。
+    ///
+    /// ── 为什么要「按像素自动裁边」────────────────────────────────
+    /// 拍摄范围是靠「房间矩形 + 邻近物件包围盒」估出来的，估大了四周就是一大圈空背景，
+    /// 地图主体被压小（2026-10-23 实测：内容只占中间一半）。
+    /// 所以渲染完**扫像素找真实内容边界**，三张图用**同一个**裁剪框（否则切楼层会跳），
+    /// 再把裁剪后的像素范围换算回世界矩形写进图集。
     ///
     /// 用法：菜单 `P21 地图 → ① 烘焙三张底图`。**不要在 Play 模式下跑。**
     /// </summary>
@@ -35,13 +40,26 @@ namespace SchoolTwin.EditorTools
         /// <summary>底图宽度（像素）。高度按世界矩形的长宽比算，不会变形。</summary>
         private const int TexWidth = 2048;
 
-        /// <summary>四周留白（米）。留一点，免得建筑贴边。</summary>
-        private const float Margin = 8f;
+        /// <summary>裁边时四周留的像素，免得内容贴边。</summary>
+        private const int CropPadding = 12;
+
+        /// <summary>判断「这是背景色」的容差（0~1，按每通道）。</summary>
+        private const float ClearTolerance = 0.02f;
 
         // 各层的水平切片（世界 y）
         private const float F1Bottom = -0.6f, F1Top = 3.45f;
         private const float F2Bottom = 3.20f, F2Top = 7.00f;
-        private const float OutBottom = -2.0f, OutTop = 12.0f;
+        private const float OutBottom = -6.0f, OutTop = 12.0f;
+
+        private static readonly Color ClearColor = new Color(0.90f, 0.89f, 0.86f, 1f);
+
+        private sealed class Raw
+        {
+            public string Key;
+            public int Floor;
+            public Texture2D Tex;
+            public float YBottom, YTop;
+        }
 
         [MenuItem("P21 地图/① 烘焙三张底图（室外 / 1F / 2F）", false, 10)]
         public static void BakeMenu()
@@ -57,7 +75,7 @@ namespace SchoolTwin.EditorTools
             Debug.Log(report);
             EditorUtility.DisplayDialog("P21 烘焙完成",
                 "结果已打印到 Console，并写入 p21_bake.txt。\n\n" +
-                "底图在 Assets/_Project/Map/，图集在 Assets/_Project/Resources/TwinMapAtlas.asset（运行时 Resources.Load 取）。", "好");
+                "底图在 Assets/_Project/Map/，图集在 Assets/_Project/Resources/TwinMapAtlas.asset。", "好");
         }
 
         public static string Bake()
@@ -76,19 +94,15 @@ namespace SchoolTwin.EditorTools
                 Write(sb.ToString());
                 return sb.ToString();
             }
-            sb.AppendLine("[P21Bake] 世界范围：x[" + rect.xMin.ToString("0.0") + ", " + rect.xMax.ToString("0.0") +
+            sb.AppendLine("[P21Bake] 拍摄范围：x[" + rect.xMin.ToString("0.0") + ", " + rect.xMax.ToString("0.0") +
                           "]  z[" + rect.yMin.ToString("0.0") + ", " + rect.yMax.ToString("0.0") +
                           "]  宽 " + rect.width.ToString("0.0") + " × 深 " + rect.height.ToString("0.0") + " m");
 
             int texH = Mathf.Max(64, Mathf.RoundToInt(TexWidth * rect.height / Mathf.Max(0.001f, rect.width)));
-            sb.AppendLine("[P21Bake] 底图尺寸：" + TexWidth + " × " + texH + "（按长宽比算，不变形）");
+            sb.AppendLine("[P21Bake] 原始画幅：" + TexWidth + " × " + texH + "（按长宽比算，不变形）");
 
-            if (!AssetDatabase.IsValidFolder(OutDir))
-            {
-                AssetDatabase.CreateFolder("Assets/_Project", "Map");
-            }
+            if (!AssetDatabase.IsValidFolder(OutDir)) AssetDatabase.CreateFolder("Assets/_Project", "Map");
 
-            // ---- 临时相机 + 临时补光（拍完原样恢复）----
             GameObject go = new GameObject("[MapBaker]");
             Camera cam = go.AddComponent<Camera>();
             GameObject lightGo = null;
@@ -99,28 +113,28 @@ namespace SchoolTwin.EditorTools
             bool oldFog = RenderSettings.fog;
 
             TwinMapAtlas atlas = LoadOrCreateAtlas(sb);
-            List<TwinMapAtlas.Entry> entries = new List<TwinMapAtlas.Entry>(3);
+            List<Raw> raws = new List<Raw>(3);
 
             try
             {
-                // 场景是烘焙光照，编辑器里临时相机拍出来可能偏暗 → 临时加一盏顶光 + 提亮环境光。
-                // 只影响这三张图，拍完立刻恢复（finally 里）。
+                // 场景是烘焙光照，编辑器里临时相机拍出来会偏暗 → 临时加顶光 + 提亮环境光。
+                // 只影响这三张图，拍完在 finally 里原样恢复。
                 RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-                RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.62f);
+                RenderSettings.ambientLight = new Color(0.55f, 0.55f, 0.55f);
                 RenderSettings.ambientIntensity = 1f;
                 RenderSettings.fog = false;
 
                 lightGo = new GameObject("[MapBaker] Light");
                 Light l = lightGo.AddComponent<Light>();
                 l.type = LightType.Directional;
-                l.intensity = 0.85f;
+                l.intensity = 0.75f;
                 l.color = Color.white;
                 l.shadows = LightShadows.None;
-                lightGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);   // 正上方朝下
+                lightGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
                 cam.orthographic = true;
                 cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = new Color(0.90f, 0.89f, 0.86f, 1f);
+                cam.backgroundColor = ClearColor;
                 cam.cullingMask = ~0;
                 cam.allowHDR = false;
                 cam.allowMSAA = false;
@@ -128,9 +142,9 @@ namespace SchoolTwin.EditorTools
                 cam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
                 cam.transform.position = new Vector3(rect.center.x, 0f, rect.center.y);
 
-                entries.Add(BakeOne(cam, rect, texH, TwinMapAtlas.KeyCampus, 0, 40f, OutBottom, OutTop, sb));
-                entries.Add(BakeOne(cam, rect, texH, TwinMapAtlas.KeyFloor1, 1, 12f, F1Bottom, F1Top, sb));
-                entries.Add(BakeOne(cam, rect, texH, TwinMapAtlas.KeyFloor2, 2, 12f, F2Bottom, F2Top, sb));
+                raws.Add(RenderRaw(cam, texH, TwinMapAtlas.KeyCampus, 0, 40f, OutBottom, OutTop));
+                raws.Add(RenderRaw(cam, texH, TwinMapAtlas.KeyFloor1, 1, 12f, F1Bottom, F1Top));
+                raws.Add(RenderRaw(cam, texH, TwinMapAtlas.KeyFloor2, 2, 12f, F2Bottom, F2Top));
             }
             catch (Exception e)
             {
@@ -147,13 +161,67 @@ namespace SchoolTwin.EditorTools
                 RenderSettings.fog = oldFog;
             }
 
-            // ---- 写图集 ----
+            // ---- 三张图共用一个裁剪框 ----
+            int x0 = TexWidth, x1 = -1, y0 = texH, y1 = -1;
+            for (int i = 0; i < raws.Count; i++)
+            {
+                int a, b, c, d;
+                if (!ContentBox(raws[i].Tex, out a, out b, out c, out d)) continue;
+                x0 = Mathf.Min(x0, a); x1 = Mathf.Max(x1, b);
+                y0 = Mathf.Min(y0, c); y1 = Mathf.Max(y1, d);
+            }
+
+            if (x1 < x0 || y1 < y0)
+            {
+                sb.AppendLine("[P21Bake] ✘ 三张图都是纯背景色，没找到内容 —— 相机朝向/裁剪平面可能不对，没写任何文件。");
+                Write(sb.ToString());
+                return sb.ToString();
+            }
+
+            x0 = Mathf.Max(0, x0 - CropPadding); y0 = Mathf.Max(0, y0 - CropPadding);
+            x1 = Mathf.Min(TexWidth - 1, x1 + CropPadding); y1 = Mathf.Min(texH - 1, y1 + CropPadding);
+
+            int cw = x1 - x0 + 1;
+            int ch = y1 - y0 + 1;
+            sb.AppendLine("[P21Bake] 内容边界：像素 x[" + x0 + ", " + x1 + "] y[" + y0 + ", " + y1 +
+                          "]  →  裁剪为 " + cw + " × " + ch +
+                          "（原画幅的 " + (100f * cw / TexWidth).ToString("0") + "% 宽）");
+
+            // 像素范围换算回世界矩形（纹理 y=0 在下方，对应世界 z 最小）
+            Rect world = Rect.MinMaxRect(
+                rect.xMin + rect.width * x0 / TexWidth,
+                rect.yMin + rect.height * y0 / texH,
+                rect.xMin + rect.width * (x1 + 1) / TexWidth,
+                rect.yMin + rect.height * (y1 + 1) / texH);
+            sb.AppendLine("[P21Bake] 裁剪后世界范围：x[" + world.xMin.ToString("0.0") + ", " + world.xMax.ToString("0.0") +
+                          "]  z[" + world.yMin.ToString("0.0") + ", " + world.yMax.ToString("0.0") + "]");
+
+            List<TwinMapAtlas.Entry> entries = new List<TwinMapAtlas.Entry>(3);
+            for (int i = 0; i < raws.Count; i++)
+            {
+                Raw raw = raws[i];
+                if (raw == null || raw.Tex == null) continue;
+
+                TwinMapAtlas.Entry e = SaveCropped(raw, x0, y0, cw, ch, world);
+                if (e != null)
+                {
+                    entries.Add(e);
+                    sb.AppendLine("[P21Bake] ✔ " + raw.Key + "  切片 y[" + raw.YBottom.ToString("0.00") + ", " +
+                                  raw.YTop.ToString("0.00") + "]  →  " + OutDir + "/TwinMap_" + raw.Key + ".png");
+                }
+                UnityEngine.Object.DestroyImmediate(raw.Tex);
+            }
+
             if (entries.Count == 3 && atlas != null)
             {
                 atlas.Entries = entries.ToArray();
                 EditorUtility.SetDirty(atlas);
                 AssetDatabase.SaveAssets();
                 sb.AppendLine("[P21Bake] 图集已更新：" + AtlasPath);
+            }
+            else
+            {
+                sb.AppendLine("[P21Bake] ⚠ 只成功了 " + entries.Count + " 张，图集没有更新。");
             }
 
             sb.AppendLine();
@@ -162,11 +230,10 @@ namespace SchoolTwin.EditorTools
             return sb.ToString();
         }
 
-        // ================================================================ 单张
+        // ================================================================ 渲染 / 裁剪 / 保存
 
-        private static TwinMapAtlas.Entry BakeOne(Camera cam, Rect rect, int texH,
-                                                  string key, int floor, float camY,
-                                                  float yBottom, float yTop, StringBuilder sb)
+        private static Raw RenderRaw(Camera cam, int texH, string key, int floor,
+                                     float camY, float yBottom, float yTop)
         {
             RenderTexture rt = new RenderTexture(TexWidth, texH, 24, RenderTextureFormat.ARGB32);
             rt.antiAliasing = 1;
@@ -176,7 +243,7 @@ namespace SchoolTwin.EditorTools
             pos.y = camY;
             cam.transform.position = pos;
 
-            // 关键：near/far 卡出水平薄片，只拍 [yBottom, yTop] 这一层
+            // near/far 卡出水平薄片：只拍 [yBottom, yTop] 这一层
             cam.nearClipPlane = Mathf.Max(0.05f, camY - yTop);
             cam.farClipPlane = camY - yBottom;
 
@@ -194,14 +261,74 @@ namespace SchoolTwin.EditorTools
             rt.Release();
             UnityEngine.Object.DestroyImmediate(rt);
 
-            byte[] png = tex.EncodeToPNG();
-            string fileName = "TwinMap_" + key + ".png";
-            string assetPath = OutDir + "/" + fileName;
+            Raw raw = new Raw();
+            raw.Key = key;
+            raw.Floor = floor;
+            raw.Tex = tex;
+            raw.YBottom = yBottom;
+            raw.YTop = yTop;
+            return raw;
+        }
+
+        /// <summary>扫像素，找出「不是背景色」的包围盒（像素坐标，原点在左下）。</summary>
+        private static bool ContentBox(Texture2D tex, out int x0, out int x1, out int y0, out int y1)
+        {
+            x0 = tex.width; x1 = -1; y0 = tex.height; y1 = -1;
+            if (tex == null) return false;
+
+            int w = tex.width, h = tex.height;
+
+            // 【背景色用四角多数票确定】不能直接拿 `ClearColor` 比：
+            // 工程是 Linear 色彩空间，相机渲染到 RT 再 ReadPixels 出来的数值可能被做过 sRGB 编码，
+            // 和代码里的 Color 不是同一套数值 —— 直接比会「一个像素都不匹配」，裁边等于没做。
+            // 四角如果基本一致，就以它们为背景色；不一致（内容顶到角上）才退回 ClearColor。
+            Color bg = ClearColor;
+            Color c00 = tex.GetPixel(1, 1);
+            Color c10 = tex.GetPixel(w - 2, 1);
+            Color c01 = tex.GetPixel(1, h - 2);
+            Color c11 = tex.GetPixel(w - 2, h - 2);
+            if (Near(c00, c10) && Near(c00, c01) && Near(c00, c11)) bg = c00;
+
+            Color[] px = tex.GetPixels();
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    Color c = px[row + x];
+                    if (Mathf.Abs(c.r - bg.r) < ClearTolerance &&
+                        Mathf.Abs(c.g - bg.g) < ClearTolerance &&
+                        Mathf.Abs(c.b - bg.b) < ClearTolerance) continue;
+
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+            }
+            return x1 >= x0 && y1 >= y0;
+        }
+
+        private static bool Near(Color a, Color b)
+        {
+            return Mathf.Abs(a.r - b.r) < ClearTolerance * 4f &&
+                   Mathf.Abs(a.g - b.g) < ClearTolerance * 4f &&
+                   Mathf.Abs(a.b - b.b) < ClearTolerance * 4f;
+        }
+
+        private static TwinMapAtlas.Entry SaveCropped(Raw raw, int x0, int y0, int cw, int ch, Rect world)
+        {
+            Texture2D cropped = new Texture2D(cw, ch, TextureFormat.RGB24, false);
+            cropped.SetPixels(raw.Tex.GetPixels(x0, y0, cw, ch));
+            cropped.Apply(false, false);
+
+            byte[] png = cropped.EncodeToPNG();
+            UnityEngine.Object.DestroyImmediate(cropped);
+
+            string assetPath = OutDir + "/TwinMap_" + raw.Key + ".png";
             File.WriteAllBytes(assetPath, png);
-            UnityEngine.Object.DestroyImmediate(tex);
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
 
-            // 贴图导入设置：不压缩、不生成 mipmap（地图要清晰，且只在 UI 上按原尺寸显示）
             TextureImporter imp = AssetImporter.GetAtPath(assetPath) as TextureImporter;
             if (imp != null)
             {
@@ -216,30 +343,26 @@ namespace SchoolTwin.EditorTools
             }
 
             Texture2D saved = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-            if (saved == null)
-            {
-                sb.AppendLine("[P21Bake] ✘ " + key + "：PNG 写入后读不回来（" + assetPath + "）");
-                return null;
-            }
+            if (saved == null) return null;
 
             TwinMapAtlas.Entry e = new TwinMapAtlas.Entry();
-            e.Key = key;
-            e.Floor = floor;
+            e.Key = raw.Key;
+            e.Floor = raw.Floor;
             e.Texture = saved;
-            e.WorldMin = new Vector2(rect.xMin, rect.yMin);
-            e.WorldMax = new Vector2(rect.xMax, rect.yMax);
+            e.WorldMin = new Vector2(world.xMin, world.yMin);
+            e.WorldMax = new Vector2(world.xMax, world.yMax);
             e.BakedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-
-            sb.AppendLine("[P21Bake] ✔ " + key + "  切片 y[" + yBottom.ToString("0.00") + ", " + yTop.ToString("0.00") +
-                          "]  相机高 " + camY.ToString("0.0") + "  →  " + assetPath);
             return e;
         }
 
         // ================================================================ 工具
 
         /// <summary>
-        /// 世界范围 = 所有已登记分区矩形的并集 + 留白。
-        /// 用分区表而不是「所有渲染器的包围盒」：后者会把远景楼（x ≈ −93）也框进来，地图就全废了。
+        /// 拍摄范围 = 所有已登记分区矩形的并集 + 邻近室外物件 + 留白。
+        ///
+        /// 用分区表而不是「所有渲染器包围盒」：后者会把远景楼（x ≈ −93）也框进来。
+        /// 邻近物件（操场/树/围栏）只收 32m 以内的 —— 操场南边缘离房间矩形 29.75m（要收），
+        /// 远景楼在 37.5m 外（必须排除）。估大了也没关系：后面会按像素自动裁边。
         /// </summary>
         private static bool ComputeWorldRect(out Rect rect)
         {
@@ -259,11 +382,6 @@ namespace SchoolTwin.EditorTools
 
             if (n == 0) { rect = new Rect(); return false; }
 
-            // 把「操场 / 树 / 围栏」这类**紧挨着**教学楼的室外几何并进来。
-            // 只用房间矩形的话，玩家站到操场上时地图底下是空的（用户实测：室外覆盖不全）。
-            //
-            // reach 取 32m 是量出来的：操场南边缘离房间矩形 29.75m（要收），
-            // 远景楼 `BuildingsBig02_1` 在 37.5m 外（必须排除，否则地图被撑成一片空地）。
             const float reach = 32f;
             Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
             int grew = 0;
@@ -273,7 +391,7 @@ namespace SchoolTwin.EditorTools
                 if (r == null || r.gameObject == null) continue;
 
                 Bounds b = r.bounds;
-                if (b.size.x > 400f || b.size.z > 400f) continue;   // 天空盒 / 超大地面
+                if (b.size.x > 400f || b.size.z > 400f) continue;
 
                 float dx = Mathf.Max(0f, Mathf.Max(minX - b.center.x, b.center.x - maxX));
                 float dz = Mathf.Max(0f, Mathf.Max(minZ - b.center.z, b.center.z - maxZ));
@@ -284,11 +402,12 @@ namespace SchoolTwin.EditorTools
                 grew++;
             }
 
-            minX -= Margin; maxX += Margin;
-            minZ -= Margin; maxZ += Margin;
+            const float margin = 4f;
+            minX -= margin; maxX += margin;
+            minZ -= margin; maxZ += margin;
             rect = Rect.MinMaxRect(minX, minZ, maxX, maxZ);
 
-            Debug.Log("[P21Bake] 世界范围 = 房间矩形并集 + " + grew + " 个邻近室外物件（操场/树/围栏）");
+            Debug.Log("[P21Bake] 拍摄范围 = 房间矩形并集 + " + grew + " 个邻近物件 + " + margin + "m 留白");
             return true;
         }
 
