@@ -54,6 +54,10 @@ namespace SchoolTwin.UI
         [Tooltip("切房间的滞回（秒）——站在门框上时防止两帧内一进一出")]
         [SerializeField] private float _switchCooldown = 0.5f;
 
+        [Tooltip("离最近的房间矩形多远以内仍算「室内」。用来兜住门洞、墙缝、房间表估算误差 —— " +
+                 "房间矩形是照灯反推的，贴着墙站可能刚好落在矩形外，严格判定会掉成室外。")]
+        [SerializeField] private float _indoorReach = 4f;
+
         // ---------------------------------------------------------------- 运行时
 
         private TwinMapAtlas _atlas;
@@ -329,10 +333,14 @@ namespace SchoolTwin.UI
         private void ResolveZone(Vector3 pos, out int floor, out string zone)
         {
             int rawFloor = pos.y >= _floor2Height ? 2 : 1;
-            string rawZone = FindZone(rawFloor, pos);
+            float dist;
+            string rawZone = FindZone(rawFloor, pos, out dist);
 
-            // 没命中任何分区 = 室外（0）；命中 = 室内，楼层就是 rawFloor
-            int raw = string.IsNullOrEmpty(rawZone) ? 0 : rawFloor;
+            // 【室内判定不看"是否严格落在矩形内"，看"离最近的房间有多远"】
+            // 房间矩形是照灯反推的，贴着墙站常常刚好落在矩形外 0.2~1m；
+            // 门洞、墙缝同理。严格判定会让玩家一走到门口就掉成"室外"，小地图整块换图。
+            // 所以：离最近房间 ≤ _indoorReach 就算室内，房间名取最近的那间。
+            int raw = (!string.IsNullOrEmpty(rawZone) && dist <= _indoorReach) ? rawFloor : 0;
 
             if (_currentFloor >= 0)
             {
@@ -350,24 +358,40 @@ namespace SchoolTwin.UI
             zone = rawZone;
         }
 
-        /// <summary>用 XZ 命中该楼层的分区矩形；重叠时取最近的（和 TwinExpandPoints 同口径）。</summary>
-        private static string FindZone(int floor, Vector3 pos)
+        /// <summary>
+        /// 找该楼层**离玩家最近的房间**，并给出到它矩形的距离（在矩形内 = 0）。
+        /// 重叠时取中心最近的（和 TwinExpandPoints 同口径）。
+        /// </summary>
+        private static string FindZone(int floor, Vector3 pos, out float dist)
         {
             IReadOnlyList<TwinRoomInfo> rooms = TwinSiteLayout.Rooms;
             string bestZone = "";
-            float best = float.MaxValue;
+            float bestCenter = float.MaxValue;
+            dist = float.MaxValue;
 
             for (int i = 0; i < rooms.Count; i++)
             {
                 TwinRoomInfo info = rooms[i];
                 if (info == null || info.Floor != floor) continue;
-                if (!TwinRoomBounds.Contains(info.Zone, pos.x, pos.z)) continue;
 
                 float x0, x1, z0, z1;
                 if (!TwinRoomBounds.TryGetBounds(info.Zone, out x0, out x1, out z0, out z1)) continue;
+
+                // 到矩形的距离（内部为 0）
+                float dx = Mathf.Max(0f, Mathf.Max(x0 - pos.x, pos.x - x1));
+                float dz = Mathf.Max(0f, Mathf.Max(z0 - pos.z, pos.z - z1));
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+
+                // 距离相同再比中心，保证结果稳定
                 float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f;
-                float d = (pos.x - cx) * (pos.x - cx) + (pos.z - cz) * (pos.z - cz);
-                if (d < best) { best = d; bestZone = info.Zone; }
+                float dc = (pos.x - cx) * (pos.x - cx) + (pos.z - cz) * (pos.z - cz);
+
+                if (d < dist - 0.0001f || (Mathf.Abs(d - dist) <= 0.0001f && dc < bestCenter))
+                {
+                    dist = d;
+                    bestCenter = dc;
+                    bestZone = info.Zone;
+                }
             }
             return bestZone;
         }

@@ -161,53 +161,47 @@ namespace SchoolTwin.EditorTools
                 RenderSettings.fog = oldFog;
             }
 
-            // ---- 三张图共用一个裁剪框 ----
-            int x0 = TexWidth, x1 = -1, y0 = texH, y1 = -1;
-            for (int i = 0; i < raws.Count; i++)
-            {
-                int a, b, c, d;
-                if (!ContentBox(raws[i].Tex, out a, out b, out c, out d)) continue;
-                x0 = Mathf.Min(x0, a); x1 = Mathf.Max(x1, b);
-                y0 = Mathf.Min(y0, c); y1 = Mathf.Max(y1, d);
-            }
-
-            if (x1 < x0 || y1 < y0)
-            {
-                sb.AppendLine("[P21Bake] ✘ 三张图都是纯背景色，没找到内容 —— 相机朝向/裁剪平面可能不对，没写任何文件。");
-                Write(sb.ToString());
-                return sb.ToString();
-            }
-
-            x0 = Mathf.Max(0, x0 - CropPadding); y0 = Mathf.Max(0, y0 - CropPadding);
-            x1 = Mathf.Min(TexWidth - 1, x1 + CropPadding); y1 = Mathf.Min(texH - 1, y1 + CropPadding);
-
-            int cw = x1 - x0 + 1;
-            int ch = y1 - y0 + 1;
-            sb.AppendLine("[P21Bake] 内容边界：像素 x[" + x0 + ", " + x1 + "] y[" + y0 + ", " + y1 +
-                          "]  →  裁剪为 " + cw + " × " + ch +
-                          "（原画幅的 " + (100f * cw / TexWidth).ToString("0") + "% 宽）");
-
-            // 像素范围换算回世界矩形（纹理 y=0 在下方，对应世界 z 最小）
-            Rect world = Rect.MinMaxRect(
-                rect.xMin + rect.width * x0 / TexWidth,
-                rect.yMin + rect.height * y0 / texH,
-                rect.xMin + rect.width * (x1 + 1) / TexWidth,
-                rect.yMin + rect.height * (y1 + 1) / texH);
-            sb.AppendLine("[P21Bake] 裁剪后世界范围：x[" + world.xMin.ToString("0.0") + ", " + world.xMax.ToString("0.0") +
-                          "]  z[" + world.yMin.ToString("0.0") + ", " + world.yMax.ToString("0.0") + "]");
-
+            // ---- 每张图**各自**裁剪 ----
+            //
+            // 【为什么不共用裁剪框】2026-10-23 实测：共用的话室内图也被裁成"整个校园"那么大，
+            // 站在 2F 教室角落时圆里一半是楼外空白（用户："二层地图场景会变白"）。
+            // 原神的室内图本来就是"只覆盖室内"的一张独立图 —— 每层各自裁到自己的内容边界才对。
             List<TwinMapAtlas.Entry> entries = new List<TwinMapAtlas.Entry>(3);
             for (int i = 0; i < raws.Count; i++)
             {
                 Raw raw = raws[i];
                 if (raw == null || raw.Tex == null) continue;
 
+                int x0, x1, y0, y1;
+                if (!ContentBox(raw.Tex, out x0, out x1, out y0, out y1))
+                {
+                    sb.AppendLine("[P21Bake] ⚠ " + raw.Key + " 整张都是背景色，跳过（相机朝向/裁剪平面可能不对）");
+                    UnityEngine.Object.DestroyImmediate(raw.Tex);
+                    continue;
+                }
+
+                x0 = Mathf.Max(0, x0 - CropPadding); y0 = Mathf.Max(0, y0 - CropPadding);
+                x1 = Mathf.Min(TexWidth - 1, x1 + CropPadding); y1 = Mathf.Min(texH - 1, y1 + CropPadding);
+
+                int cw = x1 - x0 + 1;
+                int ch = y1 - y0 + 1;
+
+                // 像素范围换算回世界矩形（纹理 y=0 在下方，对应世界 z 最小）
+                Rect world = Rect.MinMaxRect(
+                    rect.xMin + rect.width * x0 / TexWidth,
+                    rect.yMin + rect.height * y0 / texH,
+                    rect.xMin + rect.width * (x1 + 1) / TexWidth,
+                    rect.yMin + rect.height * (y1 + 1) / texH);
+
                 TwinMapAtlas.Entry e = SaveCropped(raw, x0, y0, cw, ch, world);
                 if (e != null)
                 {
                     entries.Add(e);
                     sb.AppendLine("[P21Bake] ✔ " + raw.Key + "  切片 y[" + raw.YBottom.ToString("0.00") + ", " +
-                                  raw.YTop.ToString("0.00") + "]  →  " + OutDir + "/TwinMap_" + raw.Key + ".png");
+                                  raw.YTop.ToString("0.00") + "]  裁剪 " + cw + "×" + ch +
+                                  "（原画幅 " + (100f * cw / TexWidth).ToString("0") + "% 宽）" +
+                                  "  世界 x[" + world.xMin.ToString("0.0") + ", " + world.xMax.ToString("0.0") +
+                                  "] z[" + world.yMin.ToString("0.0") + ", " + world.yMax.ToString("0.0") + "]");
                 }
                 UnityEngine.Object.DestroyImmediate(raw.Tex);
             }
@@ -316,10 +310,29 @@ namespace SchoolTwin.EditorTools
                    Mathf.Abs(a.b - b.b) < ClearTolerance * 4f;
         }
 
+        /// <summary>图外（没有几何体）的填充色：深灰蓝，读起来像"墙外/未开放"，不像白纸。</summary>
+        private static readonly Color VoidColor = new Color(0.16f, 0.17f, 0.19f, 1f);
+
         private static TwinMapAtlas.Entry SaveCropped(Raw raw, int x0, int y0, int cw, int ch, Rect world)
         {
+            Color[] px = raw.Tex.GetPixels(x0, y0, cw, ch);
+
+            // 把「没有几何体」的像素换成深色 —— 原神里地图边界外是压暗的，
+            // 白花花的背景看着像"地图没加载完"。
+            Color bg = raw.Tex.GetPixel(1, 1);
+            for (int i = 0; i < px.Length; i++)
+            {
+                Color c = px[i];
+                if (Mathf.Abs(c.r - bg.r) < ClearTolerance &&
+                    Mathf.Abs(c.g - bg.g) < ClearTolerance &&
+                    Mathf.Abs(c.b - bg.b) < ClearTolerance)
+                {
+                    px[i] = VoidColor;
+                }
+            }
+
             Texture2D cropped = new Texture2D(cw, ch, TextureFormat.RGB24, false);
-            cropped.SetPixels(raw.Tex.GetPixels(x0, y0, cw, ch));
+            cropped.SetPixels(px);
             cropped.Apply(false, false);
 
             byte[] png = cropped.EncodeToPNG();
@@ -358,11 +371,11 @@ namespace SchoolTwin.EditorTools
         // ================================================================ 工具
 
         /// <summary>
-        /// 拍摄范围 = 所有已登记分区矩形的并集 + 邻近室外物件 + 留白。
+        /// 拍摄范围 = 所有已登记分区矩形的并集 + 50m 留白（确定性，不扫场景物件）。
         ///
         /// 用分区表而不是「所有渲染器包围盒」：后者会把远景楼（x ≈ −93）也框进来。
-        /// 邻近物件（操场/树/围栏）只收 32m 以内的 —— 操场南边缘离房间矩形 29.75m（要收），
-        /// 远景楼在 37.5m 外（必须排除）。估大了也没关系：后面会按像素自动裁边。
+        /// 范围给大一点没有代价 —— 每张图后面都会**按像素各自裁边**，多余的部分会被裁掉。
+        /// 反而"扫物件动态扩范围"踩过两次雪球（2061 个物件、345×345m），所以彻底不用了。
         /// </summary>
         private static bool ComputeWorldRect(out Rect rect)
         {
@@ -382,48 +395,19 @@ namespace SchoolTwin.EditorTools
 
             if (n == 0) { rect = new Rect(); return false; }
 
-            // 【必须用「房间并集的快照」当参照，不能边收边扩】
-            // 2026-10-23 踩过：循环里每收进一个物件就更新 minX/maxX，于是下一个物件的
-            // "32m 内"更容易成立 → 雪球滚成 2061 个物件、范围 345×345m，
-            // 学校在里面只占一小块，走到哪都是空白。参照必须固定。
-            float refMinX = minX, refMaxX = maxX, refMinZ = minZ, refMaxZ = maxZ;
-
-            const float reach = 32f;
-            Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
-            int grew = 0;
-            for (int i = 0; i < all.Length; i++)
-            {
-                Renderer r = all[i];
-                if (r == null || r.gameObject == null) continue;
-
-                Bounds b = r.bounds;
-                if (b.size.x > 400f || b.size.z > 400f) continue;
-
-                float dx = Mathf.Max(0f, Mathf.Max(refMinX - b.center.x, b.center.x - refMaxX));
-                float dz = Mathf.Max(0f, Mathf.Max(refMinZ - b.center.z, b.center.z - refMaxZ));
-                if (dx * dx + dz * dz > reach * reach) continue;
-
-                minX = Mathf.Min(minX, b.min.x); maxX = Mathf.Max(maxX, b.max.x);
-                minZ = Mathf.Min(minZ, b.min.z); maxZ = Mathf.Max(maxZ, b.max.z);
-                grew++;
-            }
-
-            // 兜底：真滚大了就退回"房间并集 + 40m"，宁可少盖一点也不能让地图变成一片空地
-            const float maxSpan = 240f;
-            if (maxX - minX > maxSpan || maxZ - minZ > maxSpan)
-            {
-                minX = refMinX - 40f; maxX = refMaxX + 40f;
-                minZ = refMinZ - 40f; maxZ = refMaxZ + 40f;
-                Debug.LogWarning("[P21Bake] 邻近物件把范围撑到 " + (maxX - minX).ToString("0") +
-                                 "m 了，已退回「房间并集 + 40m」。");
-            }
-
-            const float margin = 4f;
+            // 【只按「房间并集 + 固定留白」算，不再去扫场景物件】
+            //
+            // 2026-10-23 两次踩坑都出在"扫物件"上：
+            //   · 第一版边收边扩 → 雪球滚成 2061 个物件、范围 345×345m；
+            //   · 第二版固定参照 + 32m → 校园太密，仍然收进 1960 个，又触发兜底。
+            // 而**每张图现在会按像素各自裁边**，拍摄范围大一点完全没有代价（只是分辨率摊薄）。
+            // 所以这里保持确定性：房间并集 + 50m，足够盖住校园那圈树。
+            const float margin = 50f;
             minX -= margin; maxX += margin;
             minZ -= margin; maxZ += margin;
             rect = Rect.MinMaxRect(minX, minZ, maxX, maxZ);
 
-            Debug.Log("[P21Bake] 拍摄范围 = 房间矩形并集 + " + grew + " 个邻近物件 + " + margin + "m 留白");
+            Debug.Log("[P21Bake] 拍摄范围 = 房间矩形并集 + " + margin + "m 留白（每张图后面会各自裁边）");
             return true;
         }
 
