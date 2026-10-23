@@ -66,13 +66,13 @@ namespace SchoolTwin.EditorTools
                     continue;
                 }
 
-                bool need = imp.animationType != ModelImporterAnimationType.Humanoid ||
+                bool need = imp.animationType != ModelImporterAnimationType.Human ||
                             imp.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel ||
                             !imp.importAnimation;
 
                 if (need)
                 {
-                    imp.animationType = ModelImporterAnimationType.Humanoid;
+                    imp.animationType = ModelImporterAnimationType.Human;
                     imp.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
                     imp.importAnimation = true;
                     imp.SaveAndReimport();
