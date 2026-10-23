@@ -32,18 +32,18 @@ namespace SchoolTwin.UI
         [SerializeField] private Transform _player;
 
         [Tooltip("圆形直径（UI 单位，Canvas 参考分辨率 1920×1080）。")]
-        [SerializeField] private float _diameter = 200f;
+        [SerializeField] private float _diameter = 160f;
 
         [Tooltip("离屏幕左上角的边距")]
         [SerializeField] private Vector2 _margin = new Vector2(24f, 24f);
 
-        [Tooltip("室外缩放（1 = 整张图刚好塞进圆里）")]
+        [Tooltip("室外缩放。**1 = 底图高度正好填满圆**（宽度溢出、被圆形裁掉）")]
         [Range(0.6f, 3f)]
         [SerializeField] private float _zoomOutdoor = 1f;
 
-        [Tooltip("室内缩放（1.8 = 放大到能看清走廊）")]
+        [Tooltip("室内缩放（1.6 = 再放大，看清走廊）")]
         [Range(0.6f, 3f)]
-        [SerializeField] private float _zoomIndoor = 1.8f;
+        [SerializeField] private float _zoomIndoor = 1.6f;
 
         [Tooltip("缩放下限/上限（滚轮可调）")]
         [SerializeField] private Vector2 _zoomRange = new Vector2(0.8f, 2.6f);
@@ -258,9 +258,13 @@ namespace SchoolTwin.UI
             // 底图：按「玩家在整图里的归一化位置」反向平移，让玩家永远落在圆心。
             // 推导：想让图上的点 (px,py)（图内左上原点的像素坐标）落到裁剪区中心 (d/2,d/2)，
             //       底图中心相对裁剪区中心 = (mapW/2 - px, mapH/2 - py)，再把 y 翻成 UGUI 的向上为正。
+            // 【尺寸：让底图**高度**填满圆，宽度溢出被裁】
+            // 底图是 2048×966（2.12:1）。如果按"宽度=直径"算，高度只有直径的 47%，
+            // 圆里上下会各空一大块 —— 这就是第一版"地图没撑满"的原因。
+            // 改成高度=直径×zoom，宽度按长宽比溢出，圆形 Mask 自然裁掉两侧。
             Vector2 uv = entry.WorldToUv(pos);
-            float mapW = _diameter * _zoom;
-            float mapH = mapW * (entry.Texture.height / (float)entry.Texture.width);
+            float mapH = _diameter * _zoom;
+            float mapW = mapH * (entry.Texture.width / (float)entry.Texture.height);
             _map.sizeDelta = new Vector2(mapW, mapH);
 
             float px = uv.x * mapW;

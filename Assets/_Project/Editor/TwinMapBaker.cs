@@ -259,9 +259,36 @@ namespace SchoolTwin.EditorTools
 
             if (n == 0) { rect = new Rect(); return false; }
 
+            // 把「操场 / 树 / 围栏」这类**紧挨着**教学楼的室外几何并进来。
+            // 只用房间矩形的话，玩家站到操场上时地图底下是空的（用户实测：室外覆盖不全）。
+            //
+            // reach 取 32m 是量出来的：操场南边缘离房间矩形 29.75m（要收），
+            // 远景楼 `BuildingsBig02_1` 在 37.5m 外（必须排除，否则地图被撑成一片空地）。
+            const float reach = 32f;
+            Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
+            int grew = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.gameObject == null) continue;
+
+                Bounds b = r.bounds;
+                if (b.size.x > 400f || b.size.z > 400f) continue;   // 天空盒 / 超大地面
+
+                float dx = Mathf.Max(0f, Mathf.Max(minX - b.center.x, b.center.x - maxX));
+                float dz = Mathf.Max(0f, Mathf.Max(minZ - b.center.z, b.center.z - maxZ));
+                if (dx * dx + dz * dz > reach * reach) continue;
+
+                minX = Mathf.Min(minX, b.min.x); maxX = Mathf.Max(maxX, b.max.x);
+                minZ = Mathf.Min(minZ, b.min.z); maxZ = Mathf.Max(maxZ, b.max.z);
+                grew++;
+            }
+
             minX -= Margin; maxX += Margin;
             minZ -= Margin; maxZ += Margin;
             rect = Rect.MinMaxRect(minX, minZ, maxX, maxZ);
+
+            Debug.Log("[P21Bake] 世界范围 = 房间矩形并集 + " + grew + " 个邻近室外物件（操场/树/围栏）");
             return true;
         }
 
