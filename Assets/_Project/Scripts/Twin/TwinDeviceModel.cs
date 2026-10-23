@@ -509,6 +509,11 @@ namespace SchoolTwin.Twin
             // 表现层因此改成"根自己没渲染器时，往下找真正的门扇"（见 CollectDoorLeaves）。
             "SportGate/Door/Entrance_01",
 
+            // ---- 【P20】食堂（餐厅）大门 ----
+            // 和体育馆入口同一套结构：`Door02Wood1`（门扇，模型是开着的）+ `Door02_OpenedWood1`（门框）。
+            // 之前完全没接数据（用户点上去卡片写"未选中点位"）。
+            "Kitchen/Door/Entrance_01",
+
             // ---- 【P19】投影仪 2 台 ----
             // 计算机教室（1F）与教师办公室（2F）各一台，都带电动幕布。
             // 开机 = 幕布亮 + 镜头亮，关机 = 全灭。

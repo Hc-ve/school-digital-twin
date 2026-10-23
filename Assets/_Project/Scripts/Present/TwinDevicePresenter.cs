@@ -964,16 +964,11 @@ namespace SchoolTwin.Present
             List<DoorLeaf> parts = CollectLeafParts(root, out groups);
             if (parts == null || parts.Count == 0) return null;
 
-            // 按「在墙方向上谁更靠前」排序，只为日志读起来稳定（不影响角度计算）
-            Vector3 axis = wallDir;
-            axis.y = 0f;
-            if (axis.sqrMagnitude < 0.0001f) axis = Vector3.right;
-            axis.Normalize();
-            parts.Sort(delegate (DoorLeaf a, DoorLeaf b)
-            {
-                return Vector3.Dot(a.T.position, axis).CompareTo(Vector3.Dot(b.T.position, axis));
-            });
-
+            // ⚠️ 这里**不能**对 parts 排序：groups 是按同一顺序建的，
+            //    只排 parts 会让 parts[i] 和 groups[i] 对不上 —— 左扇拿到右扇的包围盒，
+            //    于是「本该冻结的那片在转、本该转的那片冻结」。
+            //    2026-10-23 实测踩过：礼堂双开门 片0/DoorDouble0 算出 28.9°、片1/DoorDouble 算出 0°。
+            //    顺序 = 层级顺序，本来就稳定，不需要再排。
             DoorLeaf[] leaves = new DoorLeaf[parts.Count];
             for (int i = 0; i < parts.Count; i++)
             {

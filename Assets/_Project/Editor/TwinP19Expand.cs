@@ -144,6 +144,17 @@ namespace SchoolTwin.EditorTools
                 Note = "体育馆走廊入口，带玻璃的木门（模型门扇是开着的）",
             },
 
+            // ---- 【P20】食堂（餐厅）大门 ----
+            // 结构同体育馆入口：`Door02Wood1` 当门扇（根是容器，真正的门扇在孙子 door02_1 上），
+            // 门框来自 `Door02_OpenedWood1`。坐标取自 `p19_doorscan.txt`。
+            new PointSpec
+            {
+                TwinId = "Kitchen/Door/Entrance_01", Zone = "Kitchen", Category = "Door",
+                DisplayName = "食堂 大门", Kind = HostKind.ByPosition,
+                Prefab = "Door02Wood1", X = -43.09f, Y = 0.00f, Z = 31.54f,
+                Note = "食堂东侧的带玻璃木门（模型门扇是开着的）",
+            },
+
             // ---- 投影仪 2 台 ----
             new PointSpec
             {
@@ -701,11 +712,20 @@ namespace SchoolTwin.EditorTools
             return hits;
         }
 
+        /// <summary>层级深度（根 = 0）。用于「同坐标时优先取实例根」。</summary>
+        private static int Depth(Transform t)
+        {
+            int d = 0;
+            while (t != null && t.parent != null) { d++; t = t.parent; }
+            return d;
+        }
+
         private static void ResolveByPosition(PointSpec s, List<Transform> pool, ref HostHit h)
         {
             Vector3 want = new Vector3(s.X, s.Y, s.Z);
             Transform best = null;
             float bestDist = float.MaxValue;
+            int bestDepth = int.MaxValue;
             int candidates = 0;
 
             for (int i = 0; i < pool.Count; i++)
@@ -716,7 +736,19 @@ namespace SchoolTwin.EditorTools
 
                 float d = Vector3.Distance(t.position, want);
                 if (d > PositionTolerance) continue;
-                if (d < bestDist) { bestDist = d; best = t; }
+
+                // 【必须优先取「预制体实例根」，不能取和根同坐标的子网格】
+                // `PrefabOf()` 会把子物体也算成同一个预制体，而 `Door02Wood1` 的
+                // 根 / DoorAnchor / glass / door02_1 **全在同一个坐标**上 ——
+                // 只比距离的话会挑中那块玻璃，于是"只有玻璃在转、门框不动"
+                // （2026-10-23 体育馆入口门实测）。层级越浅越优先，同深度再比距离。
+                int depth = Depth(t);
+                if (depth < bestDepth || (depth == bestDepth && d < bestDist))
+                {
+                    bestDepth = depth;
+                    bestDist = d;
+                    best = t;
+                }
             }
 
             if (best == null)
