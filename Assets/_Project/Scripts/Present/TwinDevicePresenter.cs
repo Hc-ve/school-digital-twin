@@ -190,6 +190,9 @@ namespace SchoolTwin.Present
 
             /// <summary>上次"到位"时记录过的目标角，避免每帧重复打日志。</summary>
             public float LoggedTarget = float.NaN;
+
+            /// <summary>探针：还没到位时每秒记一条，用来判断「Angle 到底有没有在推进」。</summary>
+            public float NextProbe;
         }
 
         /// <summary>双开门的一片门叶。</summary>
@@ -827,6 +830,15 @@ namespace SchoolTwin.Present
                 // 0.2s 是 [Range] 的下限：序列化里没有这个键时（旧场景资产），
                 // Unity 会用字段初始值 1.2；万一拿到 0 也不会变成"瞬间闪一下"。
                 float speed = span / Mathf.Max(0.2f, _doorSwingSeconds);
+
+                // 探针：没到位就每秒记一条 —— 这是判断「Angle 有没有在推进」的唯一办法。
+                // 一直不动 = TickDoors 没跑到这里 / target 不对；慢慢挪 = 速度算错。
+                if (Mathf.Abs(v.Angle - target) > 0.5f && Time.unscaledTime >= v.NextProbe)
+                {
+                    v.NextProbe = Time.unscaledTime + 1f;
+                    DoorTrace(kv.Key, "探针(未到位) 目标=" + target.ToString("0.0") + "° 速度=" +
+                              speed.ToString("0.0") + "°/s 步长=" + step.ToString("0.000"), v);
+                }
 
                 float next = Mathf.MoveTowards(v.Angle, target, speed * step);
                 if (Mathf.Abs(next - v.Angle) < 0.001f) continue;
