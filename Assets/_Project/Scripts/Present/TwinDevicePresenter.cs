@@ -81,6 +81,12 @@ namespace SchoolTwin.Present
         [Range(10f, 170f)]
         [SerializeField] private float _doorOpenSweepDegrees = 90f;
 
+        [Tooltip("这些门点位的「开」= 从关门位置往**反方向**摆同等角度（朝房间外/走廊开）。\n" +
+                 "留空 = 「开」就用模型原姿态。\n" +
+                 "为什么必须逐个指定：同样是双开门，体育馆入口那扇是往馆里开的，\n" +
+                 "礼堂大门是往走廊开的 —— 一条通用规则没法同时满足，只能按点位配。")]
+        [SerializeField] private string[] _doorOpenMirrorIds = { "ActZal/Door/Entrance_01" };
+
         [Tooltip("开一次门 / 关一次门要多久（秒）。真实门大约 1 秒")]
         [Range(0.2f, 4f)]
         [SerializeField] private float _doorSwingSeconds = 1.2f;
@@ -916,7 +922,7 @@ namespace SchoolTwin.Present
             v.Angle = 0f;
             // 【双开门】根节点**不转**，只有没贴平墙面的那片门叶转（见 CollectDoorLeaves）。
             // 所以根节点自己的两个角度都置 0，避免 TickDoors 里两套逻辑打架。
-            v.Leaves = CollectDoorLeaves(t, wallDir);
+            v.Leaves = CollectDoorLeaves(t, wallDir, anchor.TwinId);
             if (v.Leaves != null)
             {
                 v.ClosedAngle = 0f;
@@ -953,7 +959,18 @@ namespace SchoolTwin.Present
         /// 因为这扇门的出厂姿态是「左片关着、右片半开」，不是「两片都关」。
         /// 现在每片自己算：谁已经贴平墙面谁冻结，谁没贴平谁动。
         /// </summary>
-        private static DoorLeaf[] CollectDoorLeaves(Transform root, Vector3 wallDir)
+        /// <summary>这个门点位的「开」要不要镜像到另一侧（朝房间外开）。见 `_doorOpenMirrorIds`。</summary>
+        private bool IsOpenMirrorDoor(string twinId)
+        {
+            if (_doorOpenMirrorIds == null || string.IsNullOrEmpty(twinId)) return false;
+            for (int i = 0; i < _doorOpenMirrorIds.Length; i++)
+            {
+                if (string.Equals(_doorOpenMirrorIds[i], twinId, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        private DoorLeaf[] CollectDoorLeaves(Transform root, Vector3 wallDir, string twinId)
         {
             if (root == null) return null;
 
@@ -1015,8 +1032,17 @@ namespace SchoolTwin.Present
                 // 已经贴平墙面（< 8°）→ 这片本来就是关的，冻结它，进出都不动。
                 leaf.Frozen = Mathf.Abs(closedAngle) < 8f;
                 leaf.ClosedAngle = leaf.Frozen ? 0f : closedAngle;
-                leaf.OpenAngle = 0f;      // 出厂姿态 = 开
                 leaf.Angle = 0f;
+
+                // 「开」摆在哪一侧：默认用模型原姿态（OpenAngle = 0，那就是出厂位置）。
+                // 但对「朝走廊/房间外开」的门，出厂姿态刚好在屋里那一侧 ——
+                // 「开」要镜像到另一侧、角度一样大，所以是 2 × 关门角。
+                //   · 礼堂双开门：出厂朝屋里 56.5° → 开 = -113°（朝走廊 56.5°）
+                //   · 体育馆入口：出厂本来就朝馆里开，用户认可 → 不镜像，开 = 0
+                if (!leaf.Frozen && IsOpenMirrorDoor(twinId))
+                    leaf.OpenAngle = Mathf.Clamp(2f * closedAngle, -170f, 170f);
+                else
+                    leaf.OpenAngle = 0f;
 
                 Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」门扇=" + Fmt(panel) +
                           " 长=" + length.ToString("0.000") + "m（" + groups[i].Count + " 个网格）" +

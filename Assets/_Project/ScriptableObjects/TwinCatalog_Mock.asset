@@ -1454,3 +1454,26 @@ MonoBehaviour:
       AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: Kitchen/Door/Entrance_01
+    DisplayName: "\u98DF\u5802 \u5927\u95E8"
+    Zone: Kitchen
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
