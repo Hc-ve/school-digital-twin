@@ -193,13 +193,41 @@ namespace SchoolTwin.EditorTools
             sb.AppendLine("[P19Fix]   右扇该够到=" + V3(refNear) + "（参考叶最近端点）距离=" +
                           (refNear - offPos0).magnitude.ToString("0.000") + "m");
 
-            // ---- ① 门轴平移：让两片落在同一条线上 ----
+            // ---- ① 门轴平移：法线方向对齐 + **沿墙挪到门框的远端** ----
+            //
+            // ⚠️ 只对齐法线是不够的。第一版保留叶子原来的**沿墙位置**（z=31.977），
+            //    而门框只到 31.611 —— 门轴比门框还偏出去 0.37m，门等于挂在门洞外面：
+            //    从走廊看就像"门装反了、门轴朝外"（2026-10-23 用户实测）。
+            //    门轴必须落在**门框的端头**上。
             float offAlongNormal = Vector3.Dot(offPos0 - refPos0, normal);
-            Vector3 shiftWorld = -normal * offAlongNormal;   // 让 offender 的法线分量与 reference 相同
+            Vector3 shiftWorld = -normal * offAlongNormal;
             Vector3 shiftLocal = root.InverseTransformDirection(shiftWorld);
 
             Undo.RecordObject(offender, "P19 修正双开门门轴");
             offender.localPosition = offender.localPosition + shiftLocal;
+
+            // 沿墙方向：把门轴挪到「门框离参考叶更远的那一端」
+            Vector3 wallAxis = refPanel; wallAxis.y = 0f; wallAxis.Normalize();
+            Vector3 frameC; float frameHalf;
+            if (FindFrame(offender, wallAxis, out frameC, out frameHalf))
+            {
+                float refMid = Vector3.Dot((refPos0 + refFree0) * 0.5f, wallAxis);
+                float a = Vector3.Dot(frameC, wallAxis) - frameHalf;
+                float b = Vector3.Dot(frameC, wallAxis) + frameHalf;
+                float targetHinge = Mathf.Abs(b - refMid) >= Mathf.Abs(a - refMid) ? b : a;
+
+                float curHinge = Vector3.Dot(offender.position, wallAxis);
+                Vector3 shift2 = wallAxis * (targetHinge - curHinge);
+                offender.localPosition = offender.localPosition + root.InverseTransformDirection(shift2);
+
+                sb.AppendLine("[P19Fix]   门框 中心=" + V3(frameC) + " 半长=" + frameHalf.ToString("0.000") +
+                              "m → 门轴应落在 " + targetHinge.ToString("0.000") +
+                              "（原来 " + curHinge.ToString("0.000") + "）");
+            }
+            else
+            {
+                sb.AppendLine("[P19Fix]   ⚠ 没找到门框，门轴沿墙位置没动 —— 可能挂在门洞外面，看下面的数。");
+            }
 
             // ② 拉长：让自由边正好落在「参考叶最近端点」上
             //    用 world 距离算，避免本地轴/缩放换算的误差
@@ -320,6 +348,44 @@ namespace SchoolTwin.EditorTools
             Vector3 r = a + ab * t;
             r.y = a.y;
             return r;
+        }
+
+        /// <summary>
+        /// 找门框：名字带 frame / Post 的渲染器里，沿墙方向最近的那个（距离 0.05~4m）。
+        /// 返回它在**水平面**的包围盒中心，以及沿墙方向的半长。
+        /// </summary>
+        private static bool FindFrame(Transform pivot, Vector3 wallAxis, out Vector3 center, out float half)
+        {
+            center = pivot.position;
+            half = 0f;
+            if (pivot == null) return false;
+
+            Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
+            float best = 4.0f;
+            bool found = false;
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.gameObject == null) continue;
+
+                string n = r.gameObject.name;
+                if (n.IndexOf("frame", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    n.IndexOf("Post", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                Bounds bb = r.bounds;
+                Vector3 c = bb.center; c.y = pivot.position.y;
+                Vector3 d = c - pivot.position; d.y = 0f;
+                float dist = d.magnitude;
+                if (dist < 0.05f || dist >= best) continue;
+                if (Mathf.Abs(Vector3.Dot(d / dist, wallAxis)) < 0.5f) continue;
+
+                best = dist;
+                center = c;
+                half = Mathf.Abs(Vector3.Dot(bb.extents, wallAxis));
+                found = true;
+            }
+            return found;
         }
 
         private static void Write(string text)        {
