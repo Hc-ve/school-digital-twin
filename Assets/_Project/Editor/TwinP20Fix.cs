@@ -47,6 +47,80 @@ namespace SchoolTwin.EditorTools
                 { "SportGate/Door/Entrance_01", "Door02Wood1" },
             };
 
+        [MenuItem("P20 修正/③ 清除门的静态合批标记（否则转了看不见，会存盘）", false, 12)]
+        public static void ClearDoorBatchingMenu()
+        {
+            if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorUtility.DisplayDialog("已拒绝",
+                    "现在是 Play 模式。请先按停止再执行。", "好");
+                return;
+            }
+            string text = ClearDoorBatching();
+            Debug.Log(text);
+            EditorUtility.DisplayDialog("P20 清除静态合批", text, "好");
+        }
+
+        /// <summary>
+        /// 把**会转动的门**从静态合批里摘出来。
+        ///
+        /// 【为什么必须做】`m_StaticEditorFlags = 2147483647`（全部勾选）包含 `BatchingStatic`：
+        /// Unity 在启动时把网格烘进一张合并网格，**之后再改 Transform，渲染出来的网格不会动**，
+        /// 但碰撞体是跟着 Transform 走的。表现就是：
+        ///   · 面板写着「关闭」、角色确实进不去（碰撞体挡住了）
+        ///   · 画面里门扇一动不动（网格被合批锁死）
+        /// 2026-10-23 为此排查了很久，一直在怀疑"方向算错"，其实是合批。
+        ///
+        /// 只清 `BatchingStatic` 这一位，其它静态标记（光照贴图、反射探针）保留 ——
+        /// 门还是参与光照烘焙的，只是不再被合批。
+        /// </summary>
+        public static string ClearDoorBatching()
+        {
+            Scene scene = EnsureScene();
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("[P20Fix] ===== 清除门的静态合批 =====");
+
+            TwinAnchor[] all = UnityEngine.Object.FindObjectsOfType<TwinAnchor>(true);
+            int doors = 0, changed = 0;
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                TwinAnchor a = all[i];
+                if (a == null) continue;
+                if (a.TwinId == null || a.TwinId.IndexOf("/Door/", StringComparison.Ordinal) < 0) continue;
+                doors++;
+
+                Transform[] kids = a.GetComponentsInChildren<Transform>(true);
+                for (int k = 0; k < kids.Length; k++)
+                {
+                    GameObject go = kids[k].gameObject;
+                    StaticEditorFlags f = GameObjectUtility.GetStaticEditorFlags(go);
+                    if ((f & StaticEditorFlags.BatchingStatic) == 0) continue;
+
+                    GameObjectUtility.SetStaticEditorFlags(go, f & ~StaticEditorFlags.BatchingStatic);
+                    changed++;
+                    sb.AppendLine("[P20Fix] 清掉 " + go.name + " 的 BatchingStatic（原标记 " + (int)f + "）");
+                }
+            }
+
+            sb.AppendLine("[P20Fix] 门点位 " + doors + " 个，清掉合批标记的物体 " + changed + " 个");
+
+            if (changed > 0)
+            {
+                EditorSceneManager.MarkSceneDirty(scene);
+                bool saved = EditorSceneManager.SaveScene(scene);
+                sb.AppendLine("[P20Fix] 场景保存：" + (saved ? "成功" : "失败"));
+            }
+            else
+            {
+                sb.AppendLine("[P20Fix] 没有需要清理的（可能已经清过了）。");
+            }
+
+            sb.AppendLine("[P20Fix] ===== 结束 =====");
+            Write("p20_batching.txt", sb.ToString());
+            return sb.ToString();
+        }
+
         [MenuItem("P20 修正/① 预演：检查重复锚点与挂错的锚点（只读）", false, 10)]
         public static void PlanMenu()
         {
