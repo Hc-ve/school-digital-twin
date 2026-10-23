@@ -90,8 +90,18 @@ namespace SchoolTwin.EditorTools
                               (av != null && av.isHuman ? "  Humanoid✔" : ""));
             }
 
+            // 动画片段必须勾 Loop Time —— Unity 导入 Mixamo 动画默认**不循环**，
+            // 播一遍就停在最后一帧：Idle 停住碰巧看着像站着，Walk 停住就是"腿不动"。
+            int looped = 0;
+            string[] anims = new string[] { IdleFbx, WalkFbx, RunFbx };
+            for (int i = 0; i < anims.Length; i++)
+            {
+                if (EnsureLoop(anims[i])) looped++;
+            }
+
             sb.AppendLine();
-            sb.AppendLine("[P22] 改了 " + changed + " 个文件，Avatar 有效 " + ok + " / " + files.Length);
+            sb.AppendLine("[P22] 改了 " + changed + " 个文件，Avatar 有效 " + ok + " / " + files.Length +
+                          "，Loop Time 打开 " + looped + " / " + anims.Length);
 
             if (ok < files.Length)
             {
@@ -138,6 +148,11 @@ namespace SchoolTwin.EditorTools
                     return sb.ToString();
                 }
             }
+
+            // 兜底：万一只重跑了 ②，这里也把 Loop Time 补上
+            EnsureLoop(IdleFbx);
+            EnsureLoop(WalkFbx);
+            EnsureLoop(RunFbx);
 
             AnimationClip idle = FindClip(IdleFbx);
             AnimationClip walk = FindClip(WalkFbx);
@@ -298,6 +313,28 @@ namespace SchoolTwin.EditorTools
                 if (a != null) return a;
             }
             return null;
+        }
+
+        /// <summary>
+        /// 把某个 FBX 里的动画片段设成循环。返回 true = 本来就要改并且改成功了。
+        ///
+        /// 【为什么必须做】Unity 导入 Mixamo 动画时 `Loop Time` 默认是**关**的，
+        /// 片段播一遍就停在最后一帧。Idle 停住碰巧看着像"站着"，
+        /// Walk 停住就是"人滑着走、腿不动" —— 2026-10-23 实测踩过。
+        /// </summary>
+        private static bool EnsureLoop(string path)
+        {
+            AnimationClip clip = FindClip(path);
+            if (clip == null) return false;
+
+            AnimationClipSettings st = AnimationUtility.GetAnimationClipSettings(clip);
+            if (st.loopTime) return false;
+
+            st.loopTime = true;
+            AnimationUtility.SetAnimationClipSettings(clip, st);
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssets();
+            return true;
         }
 
         private static AnimationClip FindClip(string path)

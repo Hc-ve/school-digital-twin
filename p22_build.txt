@@ -1,9 +1,10 @@
 ﻿[P22] ===== 生成角色 =====
 [P22] 动画：Idle=mixamo.com  Walk=mixamo.com  Run=mixamo.com
 [P22] 动画控制器：Assets/_Project/Characters/TwinPlayer.controller（1D 混合树 Speed 0/2/5）
-[P22] 模型脚底对齐：整体下移 -0.071m
+[P22] 场景里已经有 TwinPlayer，先删掉旧的。
+[P22] Animator.Avatar = Y BotAvatar
+[P22] 模型脚底对齐：localPosition.y = 0.071m（整体上移 0.071m）
 [P22] 已把角色放到 TwinPlayer 层（layer 8）
-[P22] 已停用原来的 FreeCameraController（否则两个脚本抢相机）。想回到自由漫游，把它重新勾上即可。
 [P22] 相机已挂 TwinThirdPersonCamera
 [P22] 场景保存：成功
 

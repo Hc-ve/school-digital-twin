@@ -50,11 +50,36 @@ namespace SchoolTwin.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
-            _anim = GetComponentInChildren<Animator>();
+
+            // 优先取**同一物体**上的 Animator（生成工具就挂在这里）；
+            // 退回子物体。取错对象的话 SetFloat 写到一个没有控制器的 Animator 上，
+            // 表现是「Idle 会播、走路不播」，而且没有任何报错。
+            _anim = GetComponent<Animator>();
+            if (_anim == null) _anim = GetComponentInChildren<Animator>();
+
             if (_cameraPivot == null && Camera.main != null) _cameraPivot = Camera.main.transform;
             _ready = _cc != null;
             if (!_ready) Debug.LogError("[TwinPlayer] 缺少 CharacterController，移动不生效。");
+
+            Debug.Log("[TwinPlayer] 接线检查：CharacterController=" + (_cc != null) +
+                      "  Animator=" + (_anim != null ? _anim.name : "(无)") +
+                      "  Controller=" + (_anim != null && _anim.runtimeAnimatorController != null
+                          ? _anim.runtimeAnimatorController.name : "(空)") +
+                      "  Avatar=" + (_anim != null && _anim.avatar != null ? _anim.avatar.name : "(空)") +
+                      "  参数里有 Speed=" + (_anim != null && HasParam(_anim, "Speed")));
         }
+
+        private static bool HasParam(Animator a, string name)
+        {
+            if (a == null) return false;
+            AnimatorControllerParameter[] ps = a.parameters;
+            if (ps == null) return false;
+            for (int i = 0; i < ps.Length; i++)
+                if (ps[i] != null && ps[i].name == name) return true;
+            return false;
+        }
+
+        private float _nextProbe;
 
         private void Update()
         {
@@ -99,11 +124,25 @@ namespace SchoolTwin.Player
             Vector3 motion = _planar + Vector3.up * _vy;
             _cc.Move(motion * Time.deltaTime);
 
-            // 动画：只写速度，混合树自己决定播什么
+            // 动画：只写速度，混合树自己决定播什么。
+            // 用 `_planar`（指令速度）而不是 `_cc.velocity`：后者含重力分量，
+            // 而且刚 Move 完读到的值语义容易让人误会。
+            float speed = _planar.magnitude;
             if (_anim != null)
+                _anim.SetFloat("Speed", speed, 0.08f, Time.deltaTime);
+
+            // 探针：每秒一条，用来判断「Speed 有没有真的写进 Animator」
+            if (Time.unscaledTime >= _nextProbe)
             {
-                Vector3 v = _cc.velocity;
-                _anim.SetFloat("Speed", new Vector2(v.x, v.z).magnitude, 0.08f, Time.deltaTime);
+                _nextProbe = Time.unscaledTime + 1f;
+                if (speed > 0.05f)
+                {
+                    AnimatorStateInfo st = _anim != null ? _anim.GetCurrentAnimatorStateInfo(0) : default(AnimatorStateInfo);
+                    Debug.Log("[TwinPlayer] Speed=" + speed.ToString("0.00") +
+                              "  参数实测=" + (_anim != null ? _anim.GetFloat("Speed").ToString("0.00") : "n/a") +
+                              "  状态=" + (st.shortNameHash != 0 ? "hash " + st.shortNameHash : "?") +
+                              "  归一化时间=" + st.normalizedTime.ToString("0.00"));
+                }
             }
         }
 
