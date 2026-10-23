@@ -196,16 +196,21 @@ namespace SchoolTwin.Present
             public Quaternion BaseRotation;
 
             /// <summary>
+            /// 模型姿态下的**门扇朝向**（世界水平单位向量，指向自由边）与**门扇长度**。
+            ///
+            /// 在收集时一次算好，不在每帧算 —— 因为一片门扇可能由**多个网格**组成
+            /// （`Door02Wood1` 是木框 `door02_1` + 玻璃 `glass`，两者共用同一个门轴），
+            /// 那时候枢轴是个**没有渲染器**的父节点，没法再从它自己身上取包围盒。
+            /// </summary>
+            public Vector3 Panel;
+            public float Length;
+
+            /// <summary>
             /// 这片门叶「关到位」要转多少度（相对它自己的出厂姿态）。
             ///
-            /// 【为什么不能像第一版那样两片共用一个角度】
             /// `DoorDouble02` 的两片门叶**各自有自己的门轴**（相距 1.46m），
             /// 而且出厂姿态**不是两片都关**：左片已经贴平墙面（关着），右片半开着。
-            /// 两片共用「根节点关门角」的后果是：左片被转离墙面、右片转过门洞，
-            /// 状态写着"关闭"、画面里两片都不在原位 —— 2026-10-22 用户实测就是这个。
-            ///
-            /// 现在的规则：**每片算自己的**。已经贴平墙面的那片（|角度| &lt; 8°）
-            /// 直接冻结（`ClosedAngle == OpenAngle == 0`），只有没贴平的那片才动。
+            /// 所以每片算自己的：已经贴平的（|角度| &lt; 8°）冻结，只有没贴平的那片才动。
             /// </summary>
             public float ClosedAngle;
 
@@ -952,44 +957,46 @@ namespace SchoolTwin.Present
         {
             if (root == null) return null;
 
-            List<Transform> kids = new List<Transform>(4);
-            for (int i = 0; i < root.childCount; i++)
-            {
-                Transform c = root.GetChild(i);
-                if (c == null) continue;
-                if (c.GetComponentInChildren<Renderer>(true) == null) continue;
-                kids.Add(c);
-            }
+            // 根自己带渲染器 = 门扇就是它自己（`Door07a` 那 12 扇），走根节点那条路。
+            if (root.GetComponent<Renderer>() != null) return null;
 
-            if (kids.Count < 2) return null;
+            List<List<Renderer>> groups;
+            List<DoorLeaf> parts = CollectLeafParts(root, out groups);
+            if (parts == null || parts.Count == 0) return null;
 
-            // 按「在墙方向上谁更靠前」排序，日志读起来稳定（不影响角度计算）
+            // 按「在墙方向上谁更靠前」排序，只为日志读起来稳定（不影响角度计算）
             Vector3 axis = wallDir;
             axis.y = 0f;
             if (axis.sqrMagnitude < 0.0001f) axis = Vector3.right;
             axis.Normalize();
-
-            kids.Sort(delegate (Transform a, Transform b)
+            parts.Sort(delegate (DoorLeaf a, DoorLeaf b)
             {
-                float pa = Vector3.Dot(a.position, axis);
-                float pb = Vector3.Dot(b.position, axis);
-                return pa.CompareTo(pb);
+                return Vector3.Dot(a.T.position, axis).CompareTo(Vector3.Dot(b.T.position, axis));
             });
 
-            DoorLeaf[] leaves = new DoorLeaf[kids.Count];
-            for (int i = 0; i < kids.Count; i++)
+            DoorLeaf[] leaves = new DoorLeaf[parts.Count];
+            for (int i = 0; i < parts.Count; i++)
             {
-                DoorLeaf leaf = new DoorLeaf();
-                leaf.T = kids[i];
-                leaf.BaseRotation = kids[i].rotation;
+                DoorLeaf leaf = parts[i];
+                leaf.BaseRotation = leaf.T.rotation;
 
-                Vector3 panel = LeafPanelDir(kids[i], out string panelHow);
+                Vector3 panel;
+                float length;
+                if (!LeafPanelFromRenderers(leaf.T, groups[i], out panel, out length))
+                {
+                    // 退化情况：拿不到包围盒就用枢轴自己的 right，至少别让整扇门不动
+                    panel = leaf.T.right; panel.y = 0f;
+                    panel = panel.sqrMagnitude > 0.0001f ? panel.normalized : Vector3.forward;
+                    length = DoorLeafLength;
+                }
+                leaf.Panel = panel;
+                leaf.Length = length;
+
                 // 两个「贴平墙面」的方向，取离当前姿态更近的那个 ——
                 // 半开的门离「关」一定比离「反方向」近，所以这就是"顺手关上"的那个方向。
-                Vector3 a = wallDir;
-                Vector3 b = -wallDir;
-                float angA = Vector3.SignedAngle(panel, a, Vector3.up);
-                float angB = Vector3.SignedAngle(panel, b, Vector3.up);
+                // 注意：这个判据只依赖 |角度|，和门扇朝向的正负无关，所以镜像建模也不会翻。
+                float angA = Vector3.SignedAngle(panel, wallDir, Vector3.up);
+                float angB = Vector3.SignedAngle(panel, -wallDir, Vector3.up);
                 float closedAngle = Mathf.Abs(angA) <= Mathf.Abs(angB) ? angA : angB;
 
                 // 已经贴平墙面（< 8°）→ 这片本来就是关的，冻结它，进出都不动。
@@ -998,24 +1005,20 @@ namespace SchoolTwin.Present
                 leaf.OpenAngle = 0f;      // 出厂姿态 = 开
                 leaf.Angle = 0f;
 
-                Debug.Log("[TwinPresent] 门叶「" + kids[i].name + "」门扇=" + panelHow +
+                Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」门扇=" + Fmt(panel) +
+                          " 长=" + length.ToString("0.000") + "m（" + groups[i].Count + " 个网格）" +
                           " 关门角=" + closedAngle.ToString("0.0") + "°" +
                           (leaf.Frozen ? " → 已贴平墙面，冻结（不参与动画）" : " → 参与动画"));
 
-                // ⚠️ 这一行漏了就等于整个双开门动画不存在。
-                // 2026-10-22 踩过：数组 new 出来是 [null, null]，TickDoors 里
-                // `if (leaf == null) continue;` 把它全跳过了 —— 日志照打、角度照算、
-                // 就是一片门叶都不转。表现是「点关门没生效」，而 Console 里一行错都没有。
                 leaves[i] = leaf;
             }
 
             // 防呆：数组里不许有 null。
             // 「漏赋值」这种 bug 的表现是**完全静默**的 —— 日志正常、角度正常、一帧都不转。
-            // 与其让人再查三轮，不如在这里直接把话说破。
             for (int i = 0; i < leaves.Length; i++)
             {
                 if (leaves[i] != null) continue;
-                Debug.LogError("[TwinPresent] 双开门「" + root.name + "」第 " + i +
+                Debug.LogError("[TwinPresent] 门「" + root.name + "」第 " + i +
                                " 片门叶是 null —— CollectDoorLeaves 漏了赋值，动画不会生效。");
                 return null;
             }
@@ -1024,47 +1027,126 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 门叶的**门扇朝向**：沿着门叶的长轴，并且指向**自由边**那一侧。
+        /// 把「容器根节点」下面的东西整理成**一片片门扇**。
         ///
-        /// 【为什么不能直接用 `transform.right`】`DoorDouble02` 的两片门叶是镜像建模的：
-        /// `DoorDouble0` 的 BoxCollider center.x = +0.42（往本地 +X 长），
-        /// `DoorDouble` 的 center.x = -0.42（往本地 -X 长）。
-        /// 直接用 `right` 的话，其中一片永远算成反方向 —— 转起来就是"一片进、一片出"。
-        /// 拿 BoxCollider 的 center 判方向是**模型自己的事实**，不依赖任何假设。
+        /// 三种结构都要能处理：
+        ///   · `DoorDouble02` → 根下两片**各自带渲染器**的门叶，枢轴各不相同 → 2 片
+        ///   · `Door02Wood1`  → 根 → `DoorAnchor`（空壳）→ `glass` + `door02_1`
+        ///                      **两个网格共用同一个门轴** → 它们是同一片门扇的零件（玻璃 + 木框）→ 1 片
+        ///   · 其它            → 找不到带渲染器的东西就返回空
+        ///
+        /// 【2026-10-23 踩过】第一版把「两个带渲染器的子物体」一律当成两片门叶，
+        /// 于是 `Door02Wood1` 的玻璃和木框各转各的 —— 玻璃直接从门里飞出去，
+        /// 用户看到的就是"玻璃和门不是一体的，而且方向反了"。
+        /// **位置相同 = 同一片门扇**，枢轴要用它们的共同父节点。
         /// </summary>
-        private static Vector3 LeafPanelDir(Transform leaf, out string how)
+        private static List<DoorLeaf> CollectLeafParts(Transform root, out List<List<Renderer>> partRenderers)
         {
-            how = "transform.right（没有 BoxCollider，退回旧假设）";
-            Vector3 axis = Vector3.right;
-            float sign = 1f;
+            partRenderers = null;
 
-            BoxCollider bc = leaf.GetComponent<BoxCollider>();
-            if (bc == null) bc = leaf.GetComponentInChildren<BoxCollider>(true);
+            List<Transform> visual = new List<Transform>(4);
+            CollectVisualLeaves(root, visual, 2);
+            if (visual.Count == 0) return null;
 
-            if (bc != null)
+            List<DoorLeaf> leaves = new List<DoorLeaf>(2);
+            List<List<Renderer>> groups = new List<List<Renderer>>(2);
+
+            for (int i = 0; i < visual.Count; i++)
             {
-                if (bc.size.x >= bc.size.z)
+                Transform part = visual[i];
+                Renderer[] rs = part.GetComponentsInChildren<Renderer>(true);
+                if (rs == null || rs.Length == 0) continue;
+
+                // 找已经建好的、和它**同一个枢轴**的那一片
+                DoorLeaf host = null;
+                int hostIndex = -1;
+                for (int j = 0; j < leaves.Count; j++)
                 {
-                    axis = Vector3.right;
-                    sign = bc.center.x >= 0f ? 1f : -1f;
-                    how = "长轴=本地X→" + (sign > 0f ? "+X" : "-X") + "（collider.center.x=" +
-                          bc.center.x.ToString("0.00") + "）";
+                    if (Vector3.Distance(leaves[j].T.position, part.position) < 0.05f)
+                    {
+                        host = leaves[j];
+                        hostIndex = j;
+                        break;
+                    }
+                }
+
+                if (host == null)
+                {
+                    host = new DoorLeaf();
+                    host.T = part;
+                    leaves.Add(host);
+                    groups.Add(new List<Renderer>(4));
+                    hostIndex = leaves.Count - 1;
                 }
                 else
                 {
-                    axis = Vector3.forward;
-                    sign = bc.center.z >= 0f ? 1f : -1f;
-                    how = "长轴=本地Z→" + (sign > 0f ? "+Z" : "-Z") + "（collider.center.z=" +
-                          bc.center.z.ToString("0.00") + "）";
+                    // 同一枢轴上的第二个零件 → 改用它们的**共同父节点**当枢轴，
+                    // 这样才能两个网格一起转（用零件自己当枢轴的话只能转一个）
+                    Transform parent = host.T.parent;
+                    if (parent != null && parent != root) host.T = parent;
                 }
+
+                List<Renderer> bucket = groups[hostIndex];
+                for (int r = 0; r < rs.Length; r++)
+                    if (rs[r] != null && !bucket.Contains(rs[r])) bucket.Add(rs[r]);
             }
 
-            Vector3 dir = leaf.TransformDirection(axis * sign);
-            dir.y = 0f;
-            if (dir.sqrMagnitude < 0.0001f) return leaf.right;
-            return dir.normalized;
+            if (leaves.Count == 0) return null;
+            partRenderers = groups;
+            return leaves;
         }
 
+        /// <summary>
+        /// 往下找「**自己有渲染器**」的子物体。最多下探 <paramref name="depth"/> 层。
+        ///
+        /// 不能只看直接子物体：`Door02Wood1` 的门扇在**孙子**节点上
+        /// （根 → `DoorAnchor` → `door02_1`），只收直接子物体只会拿到那个空壳。
+        /// </summary>
+        private static void CollectVisualLeaves(Transform parent, List<Transform> into, int depth)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform c = parent.GetChild(i);
+                if (c == null) continue;
+                if (c.GetComponent<Renderer>() != null) { into.Add(c); continue; }
+                if (depth > 0) CollectVisualLeaves(c, into, depth - 1);
+            }
+        }
+
+        /// <summary>
+        /// 由一组渲染器的**合并包围盒**算出门扇朝向与长度。
+        ///
+        /// 门叶的枢轴在门轴上、网格从枢轴往自由边长，所以「包围盒中心 − 枢轴」
+        /// 就是半个门扇方向，乘 2 就是门扇长度。
+        /// 这是模型自己的几何事实：不依赖 BoxCollider（`Door02Wood1` 只有 MeshCollider），
+        /// 也不依赖 `transform.right`（镜像建模的叶子会算反）。
+        /// </summary>
+        private static bool LeafPanelFromRenderers(Transform pivot, List<Renderer> renderers,
+                                                  out Vector3 panel, out float length)
+        {
+            panel = Vector3.zero;
+            length = 0f;
+            if (pivot == null || renderers == null || renderers.Count == 0) return false;
+
+            bool has = false;
+            Bounds b = new Bounds(pivot.position, Vector3.zero);
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                if (!has) { b = r.bounds; has = true; }
+                else b.Encapsulate(r.bounds);
+            }
+            if (!has) return false;
+
+            Vector3 d = b.center - pivot.position;
+            d.y = 0f;
+            if (d.sqrMagnitude < 0.0001f) return false;
+
+            panel = d.normalized;
+            length = d.magnitude * 2f;
+            return true;
+        }
         /// <summary>
         /// Door07a 的门扇长度：它自带的 BoxCollider 是 `x∈[-0.006, 0.835]`。
         /// 「门关到位时门边落在哪」要用到它。

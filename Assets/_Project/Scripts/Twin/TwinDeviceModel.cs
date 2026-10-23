@@ -503,6 +503,12 @@ namespace SchoolTwin.Twin
             "SportRoom2/Door/Entrance_01",
             "SportRoom3/Door/Entrance_01",
 
+            // ---- 【P20】体育馆走廊入口（带玻璃的木门 `Door02Wood1`）----
+            // 这扇门以前**完全没接数据**（用户点了卡片写"未选中点位"）。
+            // 它和 Door07a 的结构不一样：根节点是容器，真正的门扇在孙子节点 `door02_1` 上，
+            // 表现层因此改成"根自己没渲染器时，往下找真正的门扇"（见 CollectDoorLeaves）。
+            "SportGate/Door/Entrance_01",
+
             // ---- 【P19】投影仪 2 台 ----
             // 计算机教室（1F）与教师办公室（2F）各一台，都带电动幕布。
             // 开机 = 幕布亮 + 镜头亮，关机 = 全灭。

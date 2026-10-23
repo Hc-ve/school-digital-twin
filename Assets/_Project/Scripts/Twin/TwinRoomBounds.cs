@@ -108,6 +108,12 @@ namespace SchoolTwin.Twin
             new Box { Zone = "SportRoom1", MinX =  13.0f, MaxX =  19.35f, MinZ = 16.0f, MaxZ = 20.6f },
             new Box { Zone = "SportRoom2", MinX =  13.0f, MaxX =  19.35f, MinZ = 20.6f, MaxZ = 24.6f },
             new Box { Zone = "SportRoom3", MinX =  13.0f, MaxX =  19.35f, MinZ = 24.6f, MaxZ = 28.5f },
+
+            // 【P20】体育馆走廊入口（那扇带玻璃的木门 `Door02Wood1`）。
+            // 门在 (21.14, 15.96)，墙沿 X 走（门框 1.8m 宽、0.12m 厚）。
+            // 矩形故意放在门的**内侧**（z 从 16.2 起）：门在 Z 上跑出范围、X 在范围内
+            // → 唯一解 = 墙沿 X。这样 `ResolveWallIsAlongX` 的主判据就成立，不用靠兜底。
+            new Box { Zone = "SportGate",  MinX =  13.0f, MaxX =  25.0f, MinZ = 16.2f, MaxZ = 22.0f },
         };
 
         /// <summary>这个分区有没有登记范围。没登记 = 只能驱动代表灯，表现层会说明一次。</summary>

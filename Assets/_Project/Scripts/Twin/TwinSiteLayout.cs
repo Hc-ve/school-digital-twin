@@ -79,6 +79,8 @@ namespace SchoolTwin.Twin
             R("SportRoom1",    1, "体育器材室"),
             R("SportRoom2",    1, "体育馆（中区）"),
             R("SportRoom3",    1, "体育馆（东区）"),
+            // 【P20】体育馆走廊入口那扇带玻璃的木门（`Door02Wood1`），之前完全没接数据
+            R("SportGate",     1, "体育馆 入口"),
         };
 
         private static Dictionary<string, TwinRoomInfo> _index;

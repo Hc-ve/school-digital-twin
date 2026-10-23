@@ -42,6 +42,102 @@ namespace SchoolTwin.EditorTools
                 "结果已打印到 Console，并写入工程根目录 p19_door.txt。", "好");
         }
 
+        /// <summary>
+        /// 扫描**所有名字里带 Door 的物件**，标出哪些还没有 TwinAnchor（= 面板里点不到）。
+        ///
+        /// 【为什么需要】场景里的门不止一种预制体：`Door07a` ×12 是已经绑过的，
+        /// 但还有 `Door02Wood1` / `Door02_OpenedWood1` / `Door01_*` 这些 ——
+        /// 用户点上去卡片写「未选中点位」，就是因为那个物件上根本没有锚点。
+        /// 靠名字猜不准，得把全部候选和它们的坐标列出来。
+        /// </summary>
+        [MenuItem("P19 勘察/门物件扫描（含未绑定的，只读）", false, 23)]
+        public static void ScanMenu()
+        {
+            string text = Scan();
+            Debug.Log(text);
+            EditorUtility.DisplayDialog("P19 门物件扫描完成",
+                "结果已打印到 Console，并写入工程根目录 p19_doorscan.txt。", "好");
+        }
+
+        public static string Scan()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (string.IsNullOrEmpty(scene.path) || scene.path != ScenePath)
+                scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("[P19Scan] ===== 门物件扫描（只读）=====");
+            sb.AppendLine("[P19Scan] 场景：" + scene.path +
+                          (Application.isPlaying ? "（Play 模式）" : "（编辑模式）"));
+
+            Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
+            sb.AppendLine("[P19Scan] 渲染器总数：" + all.Length);
+
+            // 把「同一个门物件」按顶层名字归类：从渲染器往上走，找到第一个名字带 Door 的祖先
+            Dictionary<string, List<string>> byName = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            Dictionary<string, int> bound = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            List<string> lines = new List<string>(256);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.gameObject == null) continue;
+
+                Transform t = r.transform;
+                Transform hit = null;
+                for (int depth = 0; depth < 8 && t != null; depth++)
+                {
+                    if (t.name.IndexOf("Door", StringComparison.OrdinalIgnoreCase) >= 0) { hit = t; break; }
+                    t = t.parent;
+                }
+                if (hit == null) continue;
+                if (!seen.Add(hit.GetInstanceID())) continue;
+
+                TwinAnchor anchor = hit.GetComponent<TwinAnchor>();
+                if (anchor == null) anchor = hit.GetComponentInParent<TwinAnchor>();
+                bool hasAnchor = anchor != null && !string.IsNullOrEmpty(anchor.TwinId);
+
+                Collider col = hit.GetComponent<Collider>();
+                if (col == null) col = hit.GetComponentInChildren<Collider>(true);
+
+                Bounds b = r.bounds;
+                lines.Add("[P19Scan] " + (hasAnchor ? "✔已绑 " : "✘未绑 ") + hit.name +
+                          "  世界pos=" + V3(hit.position) +
+                          "  TwinId=" + (hasAnchor ? anchor.TwinId : "(无)") +
+                          "  碰撞体=" + (col != null ? col.GetType().Name : "无") +
+                          "  父=" + (hit.parent != null ? hit.parent.name : "(null)") +
+                          "  渲染器包围盒=" + V3(b.center) + " size=" + V3(b.size));
+
+                string key = hit.name;
+                if (!byName.ContainsKey(key)) { byName[key] = new List<string>(2); bound[key] = 0; }
+                byName[key].Add(hit.position.ToString("0.0"));
+                if (hasAnchor) bound[key] = bound[key] + 1;
+            }
+
+            lines.Sort(StringComparer.Ordinal);
+            for (int i = 0; i < lines.Count; i++) sb.AppendLine(lines[i]);
+
+            sb.AppendLine();
+            sb.AppendLine("[P19Scan] ---- 按名字汇总（未绑的就是面板里点不到的）----");
+            List<string> keys = new List<string>(byName.Keys);
+            keys.Sort(StringComparer.Ordinal);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string k = keys[i];
+                sb.AppendLine("[P19Scan] " + k + "  共 " + byName[k].Count + " 个，已绑 " + bound[k] + " 个");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("[P19Scan] ===== 结束 =====");
+
+            string text = sb.ToString();
+            try { System.IO.File.WriteAllText("p19_doorscan.txt", text, Encoding.UTF8); }
+            catch (Exception e) { Debug.LogWarning("[P19Scan] 写文件失败：" + e.Message); }
+            return text;
+        }
+
         public static void Run()
         {
             Debug.Log(Dump());

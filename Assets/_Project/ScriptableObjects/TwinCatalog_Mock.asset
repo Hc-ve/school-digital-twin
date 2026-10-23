@@ -1431,3 +1431,26 @@ MonoBehaviour:
       AlarmHigh: 100
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: SportGate/Door/Entrance_01
+    DisplayName: "\u4F53\u80B2\u9986 \u5165\u53E3\u95E8"
+    Zone: SportGate
+    Category: Door
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Open
+      Unit: 0/1
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0

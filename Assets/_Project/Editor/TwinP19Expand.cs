@@ -131,6 +131,19 @@ namespace SchoolTwin.EditorTools
                 Note = "东翼 1F 最东那扇",
             },
 
+            // ---- 【P20】体育馆走廊入口 ----
+            // 这扇门以前完全没接数据。预制体是 `Door02Wood1`（门扇，模型是开着的）
+            // + `Door02_OpenedWood1`（门框 + 玻璃），两个物件都没有锚点。
+            // 锚点挂在**门扇那个**上：`Door02Wood1/DoorAnchor/door02_1`，
+            // 表现层会自动往下找到真正的门扇（根节点只是容器）。
+            new PointSpec
+            {
+                TwinId = "SportGate/Door/Entrance_01", Zone = "SportGate", Category = "Door",
+                DisplayName = "体育馆 入口门", Kind = HostKind.ByPosition,
+                Prefab = "Door02Wood1", X = 21.14f, Y = 0.00f, Z = 15.96f,
+                Note = "体育馆走廊入口，带玻璃的木门（模型门扇是开着的）",
+            },
+
             // ---- 投影仪 2 台 ----
             new PointSpec
             {
@@ -159,7 +172,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ 菜单入口
 
-        [MenuItem(MenuRoot + "① 预演：检查 9 个点位（只读，不改任何东西）", false, 10)]
+        [MenuItem(MenuRoot + "① 预演：检查点位表（只读，不改任何东西）", false, 10)]
         public static void PlanMenu()
         {
             string report = Plan();
