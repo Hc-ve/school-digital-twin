@@ -30,7 +30,7 @@ namespace SchoolTwin.EditorTools
     {
         private const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
         private const string OutDir = "Assets/_Project/Map";
-        private const string AtlasPath = "Assets/_Project/ScriptableObjects/TwinMapAtlas.asset";
+        private const string AtlasPath = "Assets/_Project/Resources/TwinMapAtlas.asset";
 
         /// <summary>底图宽度（像素）。高度按世界矩形的长宽比算，不会变形。</summary>
         private const int TexWidth = 2048;
@@ -57,7 +57,7 @@ namespace SchoolTwin.EditorTools
             Debug.Log(report);
             EditorUtility.DisplayDialog("P21 烘焙完成",
                 "结果已打印到 Console，并写入 p21_bake.txt。\n\n" +
-                "底图在 Assets/_Project/Map/，图集在 Assets/_Project/ScriptableObjects/TwinMapAtlas.asset。", "好");
+                "底图在 Assets/_Project/Map/，图集在 Assets/_Project/Resources/TwinMapAtlas.asset（运行时 Resources.Load 取）。", "好");
         }
 
         public static string Bake()

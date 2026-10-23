@@ -1,0 +1,428 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+using SchoolTwin.Twin;
+
+namespace SchoolTwin.UI
+{
+    /// <summary>
+    /// 左上角圆形小地图（原神式：跟随玩家 + 北向上 + 箭头转）。
+    ///
+    /// ── 为什么是圆形，不是方形 ────────────────────────────────────
+    /// 这张底图是 96.5 × 45.5m（长宽比 2.12:1）。塞进方形框里必然上下各留一大条空白；
+    /// 圆形直接裁掉四角，而且"我周围有什么"这个语义本来就该是圆的。
+    /// 方形适合 MOBA 那种要读全局态势、还要在小地图上点选的地图 —— 我们不是。
+    ///
+    /// ── 底图从哪来 ──────────────────────────────────────────────
+    /// `Editor/TwinMapBaker` 烘焙三张（室外/1F/2F），写进 `Resources/TwinMapAtlas.asset`。
+    /// 本组件只做：定位 → 判楼层/室内外 → 选底图 → 摆位置 → 画箭头。
+    ///
+    /// ── 位置源可插拔 ────────────────────────────────────────────
+    /// `_player` 留空 = 用主相机（现在的自由漫游）；导入第三人称角色后把它拖进来即可，
+    /// **本脚本一行都不用改**。
+    /// </summary>
+    [AddComponentMenu("SchoolTwin/小地图 (TwinMinimap)")]
+    public sealed class TwinMinimap : MonoBehaviour, IScrollHandler
+    {
+        // ---------------------------------------------------------------- 配置
+
+        [Tooltip("玩家/角色的根节点。留空 = 用主相机（自由漫游阶段）。")]
+        [SerializeField] private Transform _player;
+
+        [Tooltip("圆形直径（UI 单位，Canvas 参考分辨率 1920×1080）。")]
+        [SerializeField] private float _diameter = 200f;
+
+        [Tooltip("离屏幕左上角的边距")]
+        [SerializeField] private Vector2 _margin = new Vector2(24f, 24f);
+
+        [Tooltip("室外缩放（1 = 整张图刚好塞进圆里）")]
+        [Range(0.6f, 3f)]
+        [SerializeField] private float _zoomOutdoor = 1f;
+
+        [Tooltip("室内缩放（1.8 = 放大到能看清走廊）")]
+        [Range(0.6f, 3f)]
+        [SerializeField] private float _zoomIndoor = 1.8f;
+
+        [Tooltip("缩放下限/上限（滚轮可调）")]
+        [SerializeField] private Vector2 _zoomRange = new Vector2(0.8f, 2.6f);
+
+        [Tooltip("楼层判定：y 高于这个值算 2F（本场景 2F 地面 ≈ 3.44，1F 吊顶 ≈ 3.4）")]
+        [SerializeField] private float _floor2Height = 3.2f;
+
+        [Tooltip("切房间的滞回（秒）——站在门框上时防止两帧内一进一出")]
+        [SerializeField] private float _switchCooldown = 0.5f;
+
+        // ---------------------------------------------------------------- 运行时
+
+        private TwinMapAtlas _atlas;
+        private RectTransform _root;        // 整个小地图（左上角锚定）
+        private RectTransform _clip;        // 圆形裁剪区
+        private RectTransform _map;         // 底图（尺寸 = 直径 × zoom）
+        private Image _mapImage;
+        private Text _label;                // "计算机教室 · 1F"
+        private RectTransform _arrow;       // 玩家箭头（固定在圆心）
+
+        private TwinMapAtlas.Entry _current;
+        private string _currentZone = "";
+        private int _currentFloor = -1;
+        private float _zoom;
+        private float _zoomTarget;
+        private float _nextSwitchTime;
+        private bool _warnedNoAtlas;
+        private Sprite _circleSprite;
+
+        /// <summary>每张底图只建一次 Sprite —— 每次切楼层都 new 一个会一直泄漏。</summary>
+        private readonly Dictionary<TwinMapAtlas.Entry, Sprite> _sprites =
+            new Dictionary<TwinMapAtlas.Entry, Sprite>(4);
+
+        private int _shownFloor = -2;
+        private string _shownZone = "";
+
+        // ================================================================ 生命周期
+
+        /// <summary>
+        /// 场景里没有就自己补一个 —— 小地图是「看不见的功能」：没挂上不会有任何报错，
+        /// 只是左上角空着（99 号清单第 15 条）。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Bootstrap()
+        {
+            if (FindObjectOfType<TwinMinimap>(true) != null) return;
+
+            Canvas canvas = FindOverlayCanvas();
+            GameObject go = new GameObject("TwinMinimap", typeof(RectTransform));
+            go.transform.SetParent(canvas != null ? canvas.transform : null, false);
+            go.AddComponent<TwinMinimap>();
+            Debug.Log("[TwinMap] 场景里没有 TwinMinimap，已自动补一个（左上角圆形小地图）");
+        }
+
+        private static Canvas FindOverlayCanvas()
+        {
+            Canvas[] all = FindObjectsOfType<Canvas>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Canvas c = all[i];
+                if (c != null && c.renderMode == RenderMode.ScreenSpaceOverlay) return c;
+            }
+
+            GameObject go = new GameObject("TwinMinimapCanvas", typeof(RectTransform));
+            Canvas canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 90;
+
+            CanvasScaler scaler = go.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
+            if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
+            return canvas;
+        }
+
+        private void Awake()
+        {
+            _atlas = Resources.Load<TwinMapAtlas>("TwinMapAtlas");
+            _zoom = _zoomTarget = _zoomOutdoor;
+            Build();
+        }
+
+        private void OnDestroy()
+        {
+            foreach (KeyValuePair<TwinMapAtlas.Entry, Sprite> kv in _sprites)
+                if (kv.Value != null) Destroy(kv.Value);
+            _sprites.Clear();
+
+            if (_circleSprite != null && _circleSprite.texture != null) Destroy(_circleSprite.texture);
+            if (_circleSprite != null) Destroy(_circleSprite);
+        }
+
+        // ================================================================ 构建界面
+
+        private void Build()
+        {
+            _root = transform as RectTransform;
+            if (_root == null)
+            {
+                Debug.LogError("[TwinMap] TwinMinimap 必须挂在有 RectTransform 的物体上。");
+                return;
+            }
+
+            // 根节点：左上角锚定
+            _root.anchorMin = new Vector2(0f, 1f);
+            _root.anchorMax = new Vector2(0f, 1f);
+            _root.pivot = new Vector2(0f, 1f);
+            _root.sizeDelta = new Vector2(_diameter, _diameter + 30f);
+            _root.anchoredPosition = new Vector2(_margin.x, -_margin.y);
+
+            // 圆形裁剪区
+            Image clip = TwinUIFactory.Block(_root, "Clip", Color.white, true);
+            _clip = clip.rectTransform;
+            TwinUIFactory.Place(_clip, 0f, 0f, _diameter, _diameter);
+            clip.sprite = MakeCircleSprite(256, 2f);
+            clip.type = Image.Type.Simple;
+            Mask mask = clip.gameObject.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+
+            // 底图
+            _mapImage = TwinUIFactory.Block(_clip, "Map", Color.white, false);
+            _map = _mapImage.rectTransform;
+            _map.anchorMin = _map.anchorMax = new Vector2(0.5f, 0.5f);
+            _map.pivot = new Vector2(0.5f, 0.5f);
+            _map.sizeDelta = new Vector2(_diameter, _diameter);
+
+            // 玩家箭头（圆心的三角）
+            Image arrow = TwinUIFactory.Block(_clip, "Arrow", new Color(0.16f, 0.72f, 0.52f, 1f), false);
+            _arrow = arrow.rectTransform;
+            _arrow.anchorMin = _arrow.anchorMax = new Vector2(0.5f, 0.5f);
+            _arrow.pivot = new Vector2(0.5f, 0.5f);
+            _arrow.sizeDelta = new Vector2(16f, 16f);
+            _arrow.anchoredPosition = Vector2.zero;
+            arrow.sprite = MakeArrowSprite(32);
+
+            // 边框（画在最上层，盖住裁剪边缘）
+            TwinRoundedRect border = TwinUIFactory.Rounded(_root, "Border", _diameter * 0.5f,
+                new Color(1f, 1f, 1f, 0f), new Color(1f, 1f, 1f, 0f),
+                new Color(0.10f, 0.11f, 0.12f, 0.55f), 2f, false);
+            TwinUIFactory.Place(border.rectTransform, 0f, 0f, _diameter, _diameter);
+
+            // 房间名
+            _label = TwinUIFactory.Label(_root, "RoomLabel", 14, TextAnchor.MiddleLeft,
+                new Color(0.12f, 0.13f, 0.14f, 1f));
+            TwinUIFactory.Place(_label.rectTransform, 4f, _diameter + 6f, _diameter - 8f, 22f);
+            _label.text = "";
+
+            // 北向标记
+            Text north = TwinUIFactory.Label(_root, "North", 12, TextAnchor.MiddleCenter,
+                new Color(0.10f, 0.11f, 0.12f, 0.75f));
+            TwinUIFactory.Place(north.rectTransform, _diameter * 0.5f - 8f, 2f, 16f, 16f);
+            north.text = "N";
+            north.fontStyle = FontStyle.Bold;
+        }
+
+        // ================================================================ 每帧
+
+        private void Update()
+        {
+            if (_root == null || _mapImage == null) return;
+
+            if (_atlas == null)
+            {
+                if (!_warnedNoAtlas)
+                {
+                    _warnedNoAtlas = true;
+                    Debug.LogWarning("[TwinMap] 找不到 Resources/TwinMapAtlas.asset —— " +
+                                     "小地图底图没烘焙。菜单：P21 地图 / ① 烘焙三张底图。");
+                }
+                return;
+            }
+
+            Vector3 pos;
+            float yaw;
+            if (!TryGetPose(out pos, out yaw)) return;
+
+            // 楼层 / 房间（带滞回，门框上不来回闪）
+            int floor;
+            string zone;
+            ResolveZone(pos, out floor, out zone);
+
+            TwinMapAtlas.Entry entry = _atlas.GetByFloor(floor) ?? _atlas.GetByFloor(1);
+            if (entry == null) return;
+
+            if (entry != _current)
+            {
+                _current = entry;
+                _mapImage.sprite = GetEntrySprite(entry);
+                _mapImage.type = Image.Type.Simple;
+                // 室外看全貌、室内放大 —— 整张图里一栋楼只占一小块，不放大看不清走廊
+                _zoom = _zoomTarget = (floor <= 0 ? _zoomOutdoor : _zoomIndoor);
+            }
+
+            if (floor != _shownFloor || !string.Equals(zone, _shownZone, StringComparison.Ordinal))
+            {
+                _shownFloor = floor;
+                _shownZone = zone;
+                _label.text = floor <= 0
+                    ? "校园"
+                    : TwinSiteLayout.DisplayName(zone) + " · " + floor + "F";
+            }
+
+            // 缩放缓动
+            if (Mathf.Abs(_zoom - _zoomTarget) > 0.001f)
+            {
+                _zoom = Mathf.Lerp(_zoom, _zoomTarget, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
+            }
+
+            // 底图：按「玩家在整图里的归一化位置」反向平移，让玩家永远落在圆心。
+            // 推导：想让图上的点 (px,py)（图内左上原点的像素坐标）落到裁剪区中心 (d/2,d/2)，
+            //       底图中心相对裁剪区中心 = (mapW/2 - px, mapH/2 - py)，再把 y 翻成 UGUI 的向上为正。
+            Vector2 uv = entry.WorldToUv(pos);
+            float mapW = _diameter * _zoom;
+            float mapH = mapW * (entry.Texture.height / (float)entry.Texture.width);
+            _map.sizeDelta = new Vector2(mapW, mapH);
+
+            float px = uv.x * mapW;
+            float py = (1f - uv.y) * mapH;          // uv 原点在左下、UI 原点在左上 → 翻一次
+            _map.anchoredPosition = new Vector2(mapW * 0.5f - px, py - mapH * 0.5f);
+
+            // 箭头随朝向转（北向上：地图不转，只转箭头）
+            _arrow.localRotation = Quaternion.Euler(0f, 0f, -yaw);
+        }
+
+        /// <summary>位置与朝向。有角色读角色，没有就退回主相机。</summary>
+        private bool TryGetPose(out Vector3 pos, out float yaw)
+        {
+            pos = Vector3.zero;
+            yaw = 0f;
+
+            if (_player != null)
+            {
+                pos = _player.position;
+                Vector3 f = _player.forward; f.y = 0f;
+                if (f.sqrMagnitude > 0.0001f) yaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                return true;
+            }
+
+            Camera cam = Camera.main;
+            if (cam == null) return false;
+            pos = cam.transform.position;
+            Vector3 cf = cam.transform.forward; cf.y = 0f;
+            if (cf.sqrMagnitude > 0.0001f) yaw = Mathf.Atan2(cf.x, cf.z) * Mathf.Rad2Deg;
+            return true;
+        }
+
+        /// <summary>
+        /// 判定楼层与房间。规则：
+        ///   ① 先按 y 定楼层（高于 _floor2Height 算 2F）
+        ///   ② 用 XZ 命中该楼层的分区矩形；命中 = 室内
+        ///   ③ 一个都不命中 = 室外（显示校园总览）
+        /// 切换加滞回：_switchCooldown 内不重复切，避免门框上抖动。
+        /// </summary>
+        private void ResolveZone(Vector3 pos, out int floor, out string zone)
+        {
+            int rawFloor = pos.y >= _floor2Height ? 2 : 1;
+            string rawZone = FindZone(rawFloor, pos);
+
+            // 没命中任何分区 = 室外（0）；命中 = 室内，楼层就是 rawFloor
+            int raw = string.IsNullOrEmpty(rawZone) ? 0 : rawFloor;
+
+            if (_currentFloor >= 0)
+            {
+                bool same = raw == _currentFloor && (raw == 0 || string.Equals(rawZone, _currentZone, StringComparison.Ordinal));
+                if (same) { floor = _currentFloor; zone = _currentZone; return; }
+
+                // 滞回：刚切过就不许再切，防止站在门框上两帧内一进一出
+                if (Time.unscaledTime < _nextSwitchTime) { floor = _currentFloor; zone = _currentZone; return; }
+            }
+
+            _currentFloor = raw;
+            _currentZone = rawZone;
+            _nextSwitchTime = Time.unscaledTime + _switchCooldown;
+            floor = raw;
+            zone = rawZone;
+        }
+
+        /// <summary>用 XZ 命中该楼层的分区矩形；重叠时取最近的（和 TwinExpandPoints 同口径）。</summary>
+        private static string FindZone(int floor, Vector3 pos)
+        {
+            IReadOnlyList<TwinRoomInfo> rooms = TwinSiteLayout.Rooms;
+            string bestZone = "";
+            float best = float.MaxValue;
+
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                TwinRoomInfo info = rooms[i];
+                if (info == null || info.Floor != floor) continue;
+                if (!TwinRoomBounds.Contains(info.Zone, pos.x, pos.z)) continue;
+
+                float x0, x1, z0, z1;
+                if (!TwinRoomBounds.TryGetBounds(info.Zone, out x0, out x1, out z0, out z1)) continue;
+                float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f;
+                float d = (pos.x - cx) * (pos.x - cx) + (pos.z - cz) * (pos.z - cz);
+                if (d < best) { best = d; bestZone = info.Zone; }
+            }
+            return bestZone;
+        }
+
+        // ================================================================ 滚轮缩放
+
+        public void OnScroll(PointerEventData eventData)
+        {
+            float delta = eventData.scrollDelta.y;
+            if (Mathf.Abs(delta) < 0.01f) return;
+
+            _zoomTarget = Mathf.Clamp(_zoomTarget + delta * 0.15f, _zoomRange.x, _zoomRange.y);
+            eventData.Use();
+        }
+
+        // ================================================================ 贴图
+
+        private Sprite GetEntrySprite(TwinMapAtlas.Entry entry)
+        {
+            Sprite sp;
+            if (_sprites.TryGetValue(entry, out sp) && sp != null) return sp;
+            if (entry == null || entry.Texture == null) return null;
+
+            sp = Sprite.Create(entry.Texture,
+                new Rect(0f, 0f, entry.Texture.width, entry.Texture.height),
+                new Vector2(0.5f, 0.5f), 100f);
+            _sprites[entry] = sp;
+            return sp;
+        }
+
+        /// <summary>运行时生成圆形遮罩贴图（白，圆内 alpha=1、圆外 0，边缘抗锯齿）。</summary>
+        private Sprite MakeCircleSprite(int size, float soft)
+        {
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.name = "TwinMinimapCircle";
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] px = new Color[size * size];
+            float r = size * 0.5f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x + 0.5f - r;
+                    float dy = y + 0.5f - r;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    float a = Mathf.Clamp01((r - d) / Mathf.Max(0.5f, soft));
+                    px[y * size + x] = new Color(1f, 1f, 1f, a);
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+            return Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        /// <summary>三角形箭头（朝上 = 北）。</summary>
+        private Sprite MakeArrowSprite(int size)
+        {
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.name = "TwinMinimapArrow";
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    // 归一化到 [-1,1]，y 向上
+                    float u = (x + 0.5f) / size * 2f - 1f;
+                    float v = (y + 0.5f) / size * 2f - 1f;
+                    // 三角形：顶点在 (0,1)，底边在 y=-0.55，半宽 0.62
+                    float t = (v + 0.55f) / 1.55f;
+                    bool inside = v >= -0.55f && v <= 1f && Mathf.Abs(u) <= 0.62f * (1f - t);
+                    px[y * size + x] = inside ? Color.white : new Color(1f, 1f, 1f, 0f);
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+            return Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+    }
+}
