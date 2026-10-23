@@ -187,6 +187,9 @@ namespace SchoolTwin.Present
             /// 因为还没收到数据，它就先按"关"开始动了。
             /// </summary>
             public bool HasState;
+
+            /// <summary>上次"到位"时记录过的目标角，避免每帧重复打日志。</summary>
+            public float LoggedTarget = float.NaN;
         }
 
         /// <summary>双开门的一片门叶。</summary>
@@ -222,6 +225,7 @@ namespace SchoolTwin.Present
 
             /// <summary>冻结标记：已经贴平墙面的那片，进出都不动它。</summary>
             public bool Frozen;
+
         }
 
         private readonly Dictionary<string, LampVisual> _lamps =
@@ -829,6 +833,17 @@ namespace SchoolTwin.Present
 
                 v.Angle = next;
                 v.T.rotation = Quaternion.AngleAxis(v.Angle, Vector3.up) * v.BaseRotation;
+
+                // 到位了就把「门边落在哪」打出来 —— 这是唯一客观的判据：
+                // 和门洞的实际范围对一下就知道方向对不对，不用再看截图猜。
+                if (Mathf.Abs(next - target) < 0.01f && !Mathf.Approximately(v.LoggedTarget, target))
+                {
+                    v.LoggedTarget = target;
+                    Vector3 edge = v.T.position + v.T.right * DoorLeafLength;
+                    Debug.Log("[TwinDoor] " + kv.Key + " 到位 角=" + target.ToString("0.0") + "°" +
+                              "  门轴=" + Fmt(v.T.position) + "  门边=" + Fmt(edge) +
+                              "  门扇方向=" + Fmt(v.T.right));
+                }
             }
         }
 
@@ -1255,24 +1270,12 @@ namespace SchoolTwin.Present
                 hasBox = TwinRoomBounds.TryGetBounds(anchor.Zone, out bx0, out bx1, out bz0, out bz1);
             }
 
-            // 【先按「最短路径」判】门模都是半开姿态（64.4° / 34° / 32°），
-            // 这种姿态下"往回转"是唯一合理的关法，而且这个判据和房间表无关、不会错。
-            //
-            // 2026-10-23 实测踩过：Class2-1 的门轴在 x=-12.57，房间表东边界 -12.4（照灯反推的，
-            // 差 0.17m），门边落点 -11.73 就"落在房间外面"了 → 跨度判据把方向判成反向，
-            // 门扇转到门洞**旁边的墙上**，看着像根本没关。
-            // 只有两个方向一样近（模型接近 90° 垂直打开）时才真的没法判，那时才用跨度/门框。
-            float angA = Vector3.SignedAngle(panel, a, Vector3.up);
-            float angB = Vector3.SignedAngle(panel, b, Vector3.up);
-            bool ambiguous = Mathf.Abs(Mathf.Abs(angA) - Mathf.Abs(angB)) < 25f;
-            if (!ambiguous)
-            {
-                reason = "门扇离 " + (Mathf.Abs(angA) <= Mathf.Abs(angB) ? "+" : "-") +
-                         (alongX ? "X" : "Z") + " 侧更近（" + angA.ToString("0.0") + "° vs " +
-                         angB.ToString("0.0") + "°），按最短路径关";
-                return Mathf.Abs(angA) <= Mathf.Abs(angB) ? a : b;
-            }
-
+            // 【跨度判据是主判据】门洞在哪一侧，只有"墙在哪里断开"知道。
+            // 2026-10-23 用烘焙的 2F 平面图放大 14 倍量过 Class2-1：
+            //   墙在 x -13.39 处断开、到 -12.47 重新接上 → 门洞在门轴（-12.57）的**西侧**
+            //   → 关门必须朝 -X 转 115.6°。一度改成"最短路径"（-64.4°）就把门转进东侧的墙里，
+            //   门直接"消失"了。
+            // 所以：跨度判据优先；它判不出来（两侧都在/都不在跨度内）才退回最短路径。
             if (hasBox)
             {
                 // 只看沿墙那根轴：门扇躺回墙里之后，它必须还在这段墙的跨度内
@@ -1299,8 +1302,13 @@ namespace SchoolTwin.Present
                 }
             }
 
-            reason = "房间范围用不上，退回与门扇同侧（旧规则）";
-            return Vector3.Dot(panel, a) >= 0f ? a : b;
+            // 房间范围用不上时，退回「门扇离哪边更近」（最短路径）。
+            // 门模都是 64.4°/34°/32° 半开，这个兜底在多数门上是对的。
+            float angA = Vector3.SignedAngle(panel, a, Vector3.up);
+            float angB = Vector3.SignedAngle(panel, b, Vector3.up);
+            reason = "房间范围用不上，退回最短路径（" + angA.ToString("0.0") + "° vs " +
+                     angB.ToString("0.0") + "°）";
+            return Mathf.Abs(angA) <= Mathf.Abs(angB) ? a : b;
         }
 
         /// <summary>
