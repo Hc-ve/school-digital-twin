@@ -118,6 +118,11 @@ namespace SchoolTwin.Twin
             // 矩形故意放在门的**内侧**（z 从 16.2 起）：门在 Z 上跑出范围、X 在范围内
             // → 唯一解 = 墙沿 X。这样 `ResolveWallIsAlongX` 的主判据就成立，不用靠兜底。
             new Box { Zone = "SportGate",  MinX =  13.0f, MaxX =  25.0f, MinZ = 16.2f, MaxZ = 22.0f },
+
+            // 【P21】篮球场（大体育馆厅）。`TwinP19Survey` 实测 x[4.48,24.50] z[-17.75,16.77]，地面 y≈-0.05。
+            // 之前**没有登记**，于是站在馆里一个分区都命中不了 → 小地图判成"室外"，显示校园总览。
+            // 这就是"进了篮球场还显示室外地图"的原因。
+            new Box { Zone = "SportHall",  MinX =   4.0f, MaxX =  25.0f, MinZ = -18.0f, MaxZ = 17.0f },
         };
 
         /// <summary>这个分区有没有登记范围。没登记 = 只能驱动代表灯，表现层会说明一次。</summary>

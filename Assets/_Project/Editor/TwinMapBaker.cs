@@ -382,6 +382,12 @@ namespace SchoolTwin.EditorTools
 
             if (n == 0) { rect = new Rect(); return false; }
 
+            // 【必须用「房间并集的快照」当参照，不能边收边扩】
+            // 2026-10-23 踩过：循环里每收进一个物件就更新 minX/maxX，于是下一个物件的
+            // "32m 内"更容易成立 → 雪球滚成 2061 个物件、范围 345×345m，
+            // 学校在里面只占一小块，走到哪都是空白。参照必须固定。
+            float refMinX = minX, refMaxX = maxX, refMinZ = minZ, refMaxZ = maxZ;
+
             const float reach = 32f;
             Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
             int grew = 0;
@@ -393,13 +399,23 @@ namespace SchoolTwin.EditorTools
                 Bounds b = r.bounds;
                 if (b.size.x > 400f || b.size.z > 400f) continue;
 
-                float dx = Mathf.Max(0f, Mathf.Max(minX - b.center.x, b.center.x - maxX));
-                float dz = Mathf.Max(0f, Mathf.Max(minZ - b.center.z, b.center.z - maxZ));
+                float dx = Mathf.Max(0f, Mathf.Max(refMinX - b.center.x, b.center.x - refMaxX));
+                float dz = Mathf.Max(0f, Mathf.Max(refMinZ - b.center.z, b.center.z - refMaxZ));
                 if (dx * dx + dz * dz > reach * reach) continue;
 
                 minX = Mathf.Min(minX, b.min.x); maxX = Mathf.Max(maxX, b.max.x);
                 minZ = Mathf.Min(minZ, b.min.z); maxZ = Mathf.Max(maxZ, b.max.z);
                 grew++;
+            }
+
+            // 兜底：真滚大了就退回"房间并集 + 40m"，宁可少盖一点也不能让地图变成一片空地
+            const float maxSpan = 240f;
+            if (maxX - minX > maxSpan || maxZ - minZ > maxSpan)
+            {
+                minX = refMinX - 40f; maxX = refMaxX + 40f;
+                minZ = refMinZ - 40f; maxZ = refMaxZ + 40f;
+                Debug.LogWarning("[P21Bake] 邻近物件把范围撑到 " + (maxX - minX).ToString("0") +
+                                 "m 了，已退回「房间并集 + 40m」。");
             }
 
             const float margin = 4f;

@@ -179,7 +179,6 @@ namespace SchoolTwin.UI
             _arrow.anchorMin = _arrow.anchorMax = new Vector2(0.5f, 0.5f);
             _arrow.pivot = new Vector2(0.5f, 0.5f);
             _arrow.sizeDelta = new Vector2(16f, 16f);
-            _arrow.anchoredPosition = Vector2.zero;
             arrow.sprite = MakeArrowSprite(32);
 
             // 边框（画在最上层，盖住裁剪边缘）
@@ -269,7 +268,30 @@ namespace SchoolTwin.UI
 
             float px = uv.x * mapW;
             float py = (1f - uv.y) * mapH;          // uv 原点在左下、UI 原点在左上 → 翻一次
-            _map.anchoredPosition = new Vector2(mapW * 0.5f - px, py - mapH * 0.5f);
+
+            float offX = mapW * 0.5f - px;
+            float offY = py - mapH * 0.5f;
+
+            // 【地图边缘：滚到边界就停住，让人物箭头自己往边缘走】
+            // 这就是原神/王者的做法 —— 小地图只在"地图还盖得住圆"的范围内跟随，
+            // 走到图外时不再平移，否则圆里就会露出图外的空白。
+            float limX = Mathf.Max(0f, (mapW - _diameter) * 0.5f);
+            float limY = Mathf.Max(0f, (mapH - _diameter) * 0.5f);
+            offX = Mathf.Clamp(offX, -limX, limX);
+            offY = Mathf.Clamp(offY, -limY, limY);
+            _map.anchoredPosition = new Vector2(offX, offY);
+
+            // 箭头不再恒在圆心：按"夹住之后"的实际位置算，并限制在圆内
+            float ax = offX - mapW * 0.5f + px;
+            float ay = offY + mapH * 0.5f - py;
+            float maxA = _diameter * 0.5f - 10f;
+            float alen = Mathf.Sqrt(ax * ax + ay * ay);
+            if (alen > maxA && alen > 0.0001f)
+            {
+                ax = ax / alen * maxA;
+                ay = ay / alen * maxA;
+            }
+            _arrow.anchoredPosition = new Vector2(ax, ay);
 
             // 箭头随朝向转（北向上：地图不转，只转箭头）
             _arrow.localRotation = Quaternion.Euler(0f, 0f, -yaw);

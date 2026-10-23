@@ -1,9 +1,11 @@
 ﻿[P21Bake] ===== 小地图底图烘焙 =====
-[P21Bake] 世界范围：x[-188.8, 164.6]  z[-165.5, 187.9]  宽 353.5 × 深 353.5 m
-[P21Bake] 底图尺寸：2048 × 2048（按长宽比算，不变形）
-[P21Bake] ✔ Campus  切片 y[-2.00, 12.00]  相机高 40.0  →  Assets/_Project/Map/TwinMap_Campus.png
-[P21Bake] ✔ Floor1  切片 y[-0.60, 3.45]  相机高 12.0  →  Assets/_Project/Map/TwinMap_Floor1.png
-[P21Bake] ✔ Floor2  切片 y[3.20, 7.00]  相机高 12.0  →  Assets/_Project/Map/TwinMap_Floor2.png
+[P21Bake] 拍摄范围：x[-184.8, 160.6]  z[-161.5, 183.9]  宽 345.5 × 深 345.5 m
+[P21Bake] 原始画幅：2048 × 2048（按长宽比算，不变形）
+[P21Bake] 内容边界：像素 x[433, 1591] y[433, 1641]  →  裁剪为 1159 × 1209（原画幅的 57% 宽）
+[P21Bake] 裁剪后世界范围：x[-111.8, 83.7]  z[-88.5, 115.4]
+[P21Bake] ✔ Campus  切片 y[-6.00, 12.00]  →  Assets/_Project/Map/TwinMap_Campus.png
+[P21Bake] ✔ Floor1  切片 y[-0.60, 3.45]  →  Assets/_Project/Map/TwinMap_Floor1.png
+[P21Bake] ✔ Floor2  切片 y[3.20, 7.00]  →  Assets/_Project/Map/TwinMap_Floor2.png
 [P21Bake] 图集已更新：Assets/_Project/Resources/TwinMapAtlas.asset
 
 [P21Bake] ===== 结束 =====
