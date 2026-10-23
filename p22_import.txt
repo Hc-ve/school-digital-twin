@@ -1,0 +1,8 @@
+﻿[P22] ===== 设置导入参数 =====
+[P22] ✔ Y Bot.fbx  animationType=Human  Avatar=有效  Humanoid✔
+[P22] ✔ Idle.fbx  animationType=Human  Avatar=有效  Humanoid✔
+[P22] ✔ Standard Walk.fbx  animationType=Human  Avatar=有效  Humanoid✔
+[P22] ✔ Running.fbx  animationType=Human  Avatar=有效  Humanoid✔
+
+[P22] 改了 4 个文件，Avatar 有效 4 / 4
+[P22] ===== 结束 =====

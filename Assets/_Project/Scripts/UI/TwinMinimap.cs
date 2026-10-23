@@ -307,6 +307,15 @@ namespace SchoolTwin.UI
             pos = Vector3.zero;
             yaw = 0f;
 
+            // 没配 _player 就自动找角色 —— 小地图是运行时自举的，
+            // 场景里没有实例可以让你在 Inspector 里拖引用，所以必须自己找。
+            if (_player == null)
+            {
+                SchoolTwin.Player.TwinPlayerController pc =
+                    FindObjectOfType<SchoolTwin.Player.TwinPlayerController>();
+                if (pc != null) _player = pc.transform;
+            }
+
             if (_player != null)
             {
                 pos = _player.position;

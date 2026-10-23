@@ -191,7 +191,8 @@ namespace SchoolTwin.EditorTools
             // 脚底对齐 y=0：Mixamo 的轴心不在脚底，不挪的话角色会悬空或陷进地板
             float feet = MeasureFeet(model);
             model.transform.localPosition = new Vector3(0f, -feet, 0f);
-            sb.AppendLine("[P22] 模型脚底对齐：整体下移 " + feet.ToString("0.000") + "m");
+            sb.AppendLine("[P22] 模型脚底对齐：localPosition.y = " + (-feet).ToString("0.000") +
+                          "m（" + (feet < 0f ? "整体上移 " : "整体下移 ") + Mathf.Abs(feet).ToString("0.000") + "m）");
 
             // 角色层：点击射线要排除它，否则第三人称下点不到设备
             int layer = EnsureLayer("TwinPlayer");
