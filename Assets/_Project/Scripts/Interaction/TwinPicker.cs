@@ -44,6 +44,12 @@ namespace SchoolTwin.Interaction
         {
             if (_camera == null) _camera = GetComponent<Camera>();
             if (_camera == null) _camera = Camera.main;
+
+            // 【必须排除角色层】第三人称下角色就在屏幕中间，
+            // 射线第一下必然打到自己身上 → 设备永远点不到，而且看起来像"点了没反应"。
+            // 这里在运行时把 `TwinPlayer` 层从掩码里摘掉（不改场景里的序列化值）。
+            int player = LayerMask.NameToLayer("TwinPlayer");
+            if (player >= 0) _layerMask &= ~(1 << player);
         }
 
         private void Update()

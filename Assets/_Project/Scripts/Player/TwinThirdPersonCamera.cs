@@ -1,4 +1,5 @@
 using UnityEngine;
+using SchoolTwin.Interaction;
 
 namespace SchoolTwin.Player
 {
@@ -49,11 +50,16 @@ namespace SchoolTwin.Player
         [Header("按键")]
         [SerializeField] private KeyCode _toggleViewKey = KeyCode.F5;
 
+        [Tooltip("切「观景模式」：交出相机控制权给 FreeCameraController（自由漫游 + 数字键 1-9 预设机位）")]
+        [SerializeField] private KeyCode _freeCamKey = KeyCode.V;
+
         private float _yaw;
         private float _pitch = 14f;
         private float _curDistance;
         private bool _firstPerson;
         private Transform _modelRoot;      // 用来在贴脸时隐藏
+        private FreeCameraController _free; // 观景模式接管用
+        private bool _freeCamMode;
 
         private void Awake()
         {
@@ -70,10 +76,32 @@ namespace SchoolTwin.Player
                 if (r != null) _modelRoot = r.transform;
             }
             _curDistance = _distance;
+
+            // 默认角色模式：把自由漫游关掉，否则两个脚本每帧都写相机
+            _free = FindObjectOfType<FreeCameraController>();
+            ApplyFreeCamMode(false);
+        }
+
+        /// <summary>
+        /// 观景模式 = 把相机交回 FreeCameraController（自由漫游 + 数字键 1-9 预设机位）。
+        ///
+        /// 【为什么需要】这两套逻辑都会每帧写相机 transform，同时开着画面会抖。
+        /// 而且预设机位那套逻辑本来就在 FreeCameraController 里，角色模式下必须能叫回来。
+        /// </summary>
+        private void ApplyFreeCamMode(bool on)
+        {
+            _freeCamMode = on;
+            if (_free != null && _free.enabled != on) _free.enabled = on;
+            if (!on) SetModelVisible(true);
+            Debug.Log("[TwinCam] 模式：" + (on ? "观景（自由漫游，数字键 1-9 可用）" : "角色（第三人称）"));
         }
 
         private void LateUpdate()
         {
+            // 观景/角色 模式切换（放最前面：观景模式下本组件不再碰相机）
+            if (Input.GetKeyDown(_freeCamKey)) ApplyFreeCamMode(!_freeCamMode);
+            if (_freeCamMode) return;
+
             if (_target == null) return;
 
             // 切视角
