@@ -467,6 +467,18 @@ namespace SchoolTwin.EditorTools
 
             List<HostHit> hits = ResolveHosts(log);
 
+            // 【防重复绑】场景里已经有同 TwinId 的锚点就跳过。
+            // 2026-10-23 实测：ResolveHosts 每次都重新挑「离参考点最近的实例」，
+            // 第二次跑挑到了另一台（铃挑到另一台 Alarm01、灯挑到另一盏），
+            // 而「是否已绑」只看被挑中的那个宿主 → 同一个点位绑了两个锚点。
+            HashSet<string> alreadyBound = new HashSet<string>(StringComparer.Ordinal);
+            {
+                TwinAnchor[] exist = UnityEngine.Object.FindObjectsOfType<TwinAnchor>(true);
+                for (int i = 0; i < exist.Length; i++)
+                    if (exist[i] != null && !string.IsNullOrEmpty(exist[i].TwinId))
+                        alreadyBound.Add(exist[i].TwinId);
+            }
+
             // ---- 第二道闸：先算后写 ----
             int need = 0;
             for (int i = 0; i < Points.Length; i++)
@@ -480,7 +492,7 @@ namespace SchoolTwin.EditorTools
                     Debug.LogError(msg);
                     return msg;
                 }
-                if (h.ExistingAnchorTwinId == null) need++;
+                if (h.ExistingAnchorTwinId == null && !alreadyBound.Contains(s.TwinId)) need++;
             }
             log.AppendLine("[P19] 命中校验通过，需要新绑 " + need + " 个点位");
 
@@ -497,6 +509,11 @@ namespace SchoolTwin.EditorTools
                 PointSpec s = Points[i];
                 HostHit h = Find(hits, s.TwinId);
                 if (h.ExistingAnchorTwinId != null) continue;
+                if (alreadyBound.Contains(s.TwinId))
+                {
+                    log.AppendLine("[P19] ⏭ " + s.TwinId + " 场景里已经有锚点，跳过（不重复绑）");
+                    continue;
+                }
 
                 GameObject host = h.Go;
 
