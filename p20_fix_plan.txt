@@ -1,0 +1,18 @@
+﻿[P20Fix] ===== 预演（只读）=====
+[P20Fix] 场景：Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity
+[P20Fix] 锚点总数：55
+
+[P20Fix] ---- 重复的 TwinId ----
+[P20Fix] ⚠ Corridor1/Bell/Speaker_01 × 2：
+[P20Fix]      保留? Alarm01  [Corridor1/Bell/Speaker_01]
+[P20Fix]      删除? Alarm01 (1)  [Corridor1/Bell/Speaker_01]
+[P20Fix]      期望宿主：Alarm01 (1)
+[P20Fix] ⚠ SportRoom1/Light/Main_01 × 2：
+[P20Fix]      保留? LightLum01_01 (28)  [SportRoom1/Light/Main_01]
+[P20Fix]      删除? LightLum01_01 (27)  [SportRoom1/Light/Main_01]
+[P20Fix]      期望宿主：LightLum01_01 (27)
+
+[P20Fix] ---- 必须挂在容器根上的点位 ----
+[P20Fix] ⚠ SportGate/Door/Entrance_01 当前挂载=glass  要求=Door02Wood1  → 要挪到 Door02Wood1
+
+[P20Fix] ===== 结束 =====

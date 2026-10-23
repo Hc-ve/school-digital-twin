@@ -992,12 +992,30 @@ namespace SchoolTwin.Present
                 leaf.Panel = panel;
                 leaf.Length = length;
 
-                // 两个「贴平墙面」的方向，取离当前姿态更近的那个 ——
+                // 两个「贴平墙面」的方向，正常情况下取离当前姿态更近的那个 ——
                 // 半开的门离「关」一定比离「反方向」近，所以这就是"顺手关上"的那个方向。
                 // 注意：这个判据只依赖 |角度|，和门扇朝向的正负无关，所以镜像建模也不会翻。
+                //
+                // ⚠️ 但「最近」不等于「对」：2026-10-23 体育馆入口那扇门开到 113°，
+                //    最近的方向是往门框**左边**的墙贴 —— 结果整扇门转进墙里。
+                //    所以只要能找到**门框**，就改成"往门框中心关"，那才是门洞在哪儿的证据。
                 float angA = Vector3.SignedAngle(panel, wallDir, Vector3.up);
                 float angB = Vector3.SignedAngle(panel, -wallDir, Vector3.up);
-                float closedAngle = Mathf.Abs(angA) <= Mathf.Abs(angB) ? angA : angB;
+
+                Vector3 frameCenter;
+                string rule;
+                Vector3 closedDir;
+                if (TryFindFrameCenter(leaf.T, wallDir, out frameCenter))
+                {
+                    closedDir = Vector3.Dot(frameCenter - leaf.T.position, wallDir) >= 0f ? wallDir : -wallDir;
+                    rule = "往门框中心关（门框 " + Fmt(frameCenter) + "）";
+                }
+                else
+                {
+                    closedDir = Mathf.Abs(angA) <= Mathf.Abs(angB) ? wallDir : -wallDir;
+                    rule = "贴墙较近的那一侧（没找到门框）";
+                }
+                float closedAngle = Vector3.SignedAngle(panel, closedDir, Vector3.up);
 
                 // 已经贴平墙面（< 8°）→ 这片本来就是关的，冻结它，进出都不动。
                 leaf.Frozen = Mathf.Abs(closedAngle) < 8f;
@@ -1007,7 +1025,7 @@ namespace SchoolTwin.Present
 
                 Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」门扇=" + Fmt(panel) +
                           " 长=" + length.ToString("0.000") + "m（" + groups[i].Count + " 个网格）" +
-                          " 关门角=" + closedAngle.ToString("0.0") + "°" +
+                          " 关门角=" + closedAngle.ToString("0.0") + "°（" + rule + "）" +
                           (leaf.Frozen ? " → 已贴平墙面，冻结（不参与动画）" : " → 参与动画"));
 
                 leaves[i] = leaf;
@@ -1111,6 +1129,51 @@ namespace SchoolTwin.Present
                 if (c.GetComponent<Renderer>() != null) { into.Add(c); continue; }
                 if (depth > 0) CollectVisualLeaves(c, into, depth - 1);
             }
+        }
+
+        /// <summary>
+        /// 找这扇门**门框**的中心（水平面），用来决定「关门往哪边转」。
+        ///
+        /// 【为什么必须找门框，不能只看"哪边更近"】门扇开到 113° 的时候，
+        /// 「最近贴墙方向」是门框**左边**的那段墙 —— 往那边转，整扇门就转进墙里了
+        /// （2026-10-23 体育馆入口门实测）。门洞在哪儿，只有门框知道。
+        ///
+        /// 判据：名字里带 `frame` 或 `Post` 的渲染器，距离 0.05~4m，
+        /// 且方向大致**沿着墙**（`|dot(方向, 墙向)| > 0.5`）—— 门框的两个边柱可能在侧面，
+        /// 所以取其中最近的那个。
+        /// </summary>
+        private static bool TryFindFrameCenter(Transform pivot, Vector3 wallDir, out Vector3 center)
+        {
+            center = pivot.position;
+            if (pivot == null) return false;
+
+            Vector3 p0 = pivot.position;
+            Renderer[] all = UnityEngine.Object.FindObjectsOfType<Renderer>(true);
+            float best = 4.0f;
+            bool found = false;
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.gameObject == null) continue;
+
+                string n = r.gameObject.name;
+                if (n.IndexOf("frame", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    n.IndexOf("Post", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                Vector3 c = r.bounds.center;
+                c.y = p0.y;
+                Vector3 d = c - p0;
+                d.y = 0f;
+                float dist = d.magnitude;
+                if (dist < 0.05f || dist >= best) continue;
+                if (Mathf.Abs(Vector3.Dot(d / dist, wallDir)) < 0.5f) continue;
+
+                best = dist;
+                center = c;
+                found = true;
+            }
+            return found;
         }
 
         /// <summary>

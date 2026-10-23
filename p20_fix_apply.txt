@@ -1,0 +1,9 @@
+﻿[P20Fix] ===== 执行 =====
+[P20Fix] 删除重复：Alarm01  [Corridor1/Bell/Speaker_01]（保留 Alarm01 (1)  [Corridor1/Bell/Speaker_01]）
+[P20Fix] 删除重复：LightLum01_01 (28)  [SportRoom1/Light/Main_01]（保留 LightLum01_01 (27)  [SportRoom1/Light/Main_01]）
+[P20Fix] 锚点搬家：glass  [SportGate/Door/Entrance_01]  →  Door02Wood1  [SportGate/Door/Entrance_01]
+
+[P20Fix] 删除重复 2 个，搬家 1 个
+[P20Fix] 验收：锚点 53 个，仍然重复的 TwinId 0 个
+[P20Fix] 场景保存：成功
+[P20Fix] ===== 结束 =====

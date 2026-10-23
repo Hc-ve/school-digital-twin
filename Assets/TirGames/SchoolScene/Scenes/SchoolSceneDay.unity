@@ -2181,9 +2181,9 @@ PrefabInstance:
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 117964, guid: 2ebc8e06f884c75458ee4474267fdde6, type: 3}
+    - targetCorrespondingSourceObject: {fileID: 146300, guid: 2ebc8e06f884c75458ee4474267fdde6, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1652097577}
+      addedObject: {fileID: 837647348}
     - targetCorrespondingSourceObject: {fileID: 117964, guid: 2ebc8e06f884c75458ee4474267fdde6, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1652097576}
@@ -15486,11 +15486,6 @@ PrefabInstance:
 Transform:
   m_CorrespondingSourceObject: {fileID: 430378, guid: abdd857c9d636914c806220401713160, type: 3}
   m_PrefabInstance: {fileID: 319247073}
-  m_PrefabAsset: {fileID: 0}
---- !u!1 &319471667 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
-  m_PrefabInstance: {fileID: 1801175126}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &319879598
 PrefabInstance:
@@ -38890,6 +38885,33 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 483830, guid: 1a09b5c5b66b8194a9ef2e6c24c58d4d, type: 3}
   m_PrefabInstance: {fileID: 669734796}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &837647347 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 146300, guid: 2ebc8e06f884c75458ee4474267fdde6, type: 3}
+  m_PrefabInstance: {fileID: 48953966}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &837647348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 837647347}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: SportGate/Door/Entrance_01
+  _displayName: "\u4F53\u80B2\u9986 \u5165\u53E3\u95E8"
+  _zone: SportGate
+  _category: Door
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &838532704
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -80489,28 +80511,6 @@ MonoBehaviour:
   _blinkFloor: 0.45
   _blinkRefreshInterval: 0.033
   _blinkLerpSpeed: 60
---- !u!114 &1652097577
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1652097571}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: SportGate/Door/Entrance_01
-  _displayName: "\u4F53\u80B2\u9986 \u5165\u53E3\u95E8"
-  _zone: SportGate
-  _category: Door
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!1001 &1656069839
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -80902,9 +80902,6 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1662847072}
-    - targetCorrespondingSourceObject: {fileID: 157732, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 1662847071}
   m_SourcePrefab: {fileID: 100100000, guid: 973fdc9a64204e242846dbb0198a0805, type: 3}
 --- !u!4 &1662847067 stripped
@@ -80946,28 +80943,6 @@ MonoBehaviour:
   _blinkFloor: 0.45
   _blinkRefreshInterval: 0.033
   _blinkLerpSpeed: 60
---- !u!114 &1662847072
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 692957134}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: SportRoom1/Light/Main_01
-  _displayName: "\u4F53\u80B2\u5668\u6750\u5BA4 \u7167\u660E"
-  _zone: SportRoom1
-  _category: Light
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!1001 &1663657140
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -87777,38 +87752,13 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 159512, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1801175131}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
 --- !u!4 &1801175127 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 431540, guid: 620ad4caf9a7838439311ec5520a78d9, type: 3}
   m_PrefabInstance: {fileID: 1801175126}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1801175131
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 319471667}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _twinId: Corridor1/Bell/Speaker_01
-  _displayName: "\u6821\u56ED\u5E7F\u64AD\u6253\u94C3\u5668"
-  _zone: Corridor1
-  _category: Bell
-  _visualTarget: {fileID: 0}
-  _visualTargetPath: 
-  _staleAfterSeconds: 3
-  _offlineAfterSeconds: 5
-  _minNotifyInterval: 0.05
-  _logEverySample: 0
 --- !u!1001 &1801219831
 PrefabInstance:
   m_ObjectHideFlags: 0

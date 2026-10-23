@@ -201,7 +201,7 @@ namespace SchoolTwin.EditorTools
                 // 把整个组件复制到根上（字段原样带过去），再删掉旧的
                 UnityEditorInternal.ComponentUtility.CopyComponent(a);
                 UnityEditorInternal.ComponentUtility.PasteComponentAsNew(host);
-                sb.AppendLine("[P20Fix] 锚点搬家：" + Path(a) + "  →  " + Path(host));
+                sb.AppendLine("[P20Fix] 锚点搬家：" + Path(a) + "  →  " + host.name + "  [" + kv.Key + "]");
                 UnityEngine.Object.DestroyImmediate(a, true);
                 moved++;
             }
