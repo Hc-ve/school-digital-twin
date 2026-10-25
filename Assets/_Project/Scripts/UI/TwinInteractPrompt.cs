@@ -71,6 +71,19 @@ namespace SchoolTwin.UI
         private Candidate _current;
         private float _nextUse;
 
+        // 扫描缓存：FindObjectsOfType 每帧跑两遍太浪费，改成 1 秒刷一次
+        private TwinInteractPoint[] _points;
+        private TwinAnchor[] _anchors;
+        private float _scanAt;
+
+        // 观景模式下角色控制器没被禁用，E 键会和「自由相机上升」抢 —— 干脆藏掉按钮
+        private FreeCameraController _freeCam;
+        private bool _freeCamLooked;
+
+        // 淡入淡出（纯视觉，不影响点击判定）
+        private float _alpha;
+        private float _alphaTarget;
+
         // ================================================================ 生命周期
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -157,16 +170,37 @@ namespace SchoolTwin.UI
             if (_player == null)
             {
                 TwinPlayerRef();
-                if (_player == null) { Hide(); return; }
+                if (_player == null) { Hide(); TickFade(); return; }
             }
             if (_cam == null) _cam = Camera.main;
-            if (_cam == null) { Hide(); return; }
+            if (_cam == null) { Hide(); TickFade(); return; }
+
+            // 观景模式下角色原地不动，按钮没有意义，还会和 E 键抢
+            if (!_freeCamLooked)
+            {
+                _freeCamLooked = true;
+                _freeCam = FindObjectOfType<FreeCameraController>();
+            }
+            if (_freeCam != null && _freeCam.enabled) { Hide(); TickFade(); return; }
 
             Candidate best = FindBest();
             _current = best;
 
-            if (best == null) { Hide(); return; }
-            Show(best);
+            if (best == null) Hide();
+            else Show(best);
+
+            TickFade();
+        }
+
+        private void TickFade()
+        {
+            if (_group == null) return;
+            _alpha = Mathf.MoveTowards(_alpha, _alphaTarget, Time.unscaledDeltaTime * 9f);
+            _group.alpha = _alpha;
+
+            bool live = _alphaTarget > 0.5f;
+            _group.blocksRaycasts = live;
+            _group.interactable = live;
         }
 
         private void TwinPlayerRef()
@@ -180,21 +214,24 @@ namespace SchoolTwin.UI
         private Candidate FindBest()
         {
             _candidates.Clear();
+            RefreshCache();
 
             // ① 交互点（墙上的开关方块）
-            TwinInteractPoint[] points = FindObjectsOfType<TwinInteractPoint>();
-            for (int i = 0; i < points.Length; i++)
+            //    ⚠️ 必须查白名单：场景里 `Class2-1` 有 BAK / BAK2 两个备份灯锚点，
+            //    它们的 TwinId 不在 `TwinControlScope` 里 —— 不筛的话按钮照弹，
+            //    点下去命令被拒，用户只会看到「点了没反应」。
+            for (int i = 0; i < _points.Length; i++)
             {
-                TwinInteractPoint p = points[i];
+                TwinInteractPoint p = _points[i];
                 if (p == null || string.IsNullOrEmpty(p.TargetTwinId)) continue;
+                if (!TwinControlScope.IsEnabled(p.TargetTwinId)) continue;
                 AddCandidate(p.TargetTwinId, p.transform.position, p.Range, p.Label);
             }
 
             // ② 门/灯的实物锚点
-            TwinAnchor[] anchors = FindObjectsOfType<TwinAnchor>();
-            for (int i = 0; i < anchors.Length; i++)
+            for (int i = 0; i < _anchors.Length; i++)
             {
-                TwinAnchor a = anchors[i];
+                TwinAnchor a = _anchors[i];
                 if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
                 if (!TwinControlScope.IsEnabled(a.TwinId)) continue;
 
@@ -231,8 +268,22 @@ namespace SchoolTwin.UI
             return best;
         }
 
+        /// <summary>1 秒刷新一次候选来源。新生成的开关最多晚 1 秒才认得到，可以接受。</summary>
+        private void RefreshCache()
+        {
+            if (_points != null && _anchors != null && Time.unscaledTime < _scanAt) return;
+            _scanAt = Time.unscaledTime + 1f;
+            _points = FindObjectsOfType<TwinInteractPoint>();
+            _anchors = FindObjectsOfType<TwinAnchor>();
+        }
+
         private void AddCandidate(string twinId, Vector3 pos, float range, string label)
         {
+            // 同一点位只留一个：墙上的开关方块先加，天花板上的灯锚点后加，
+            // 不去重的话两处都在范围内时标签会来回跳。
+            for (int i = 0; i < _candidates.Count; i++)
+                if (string.Equals(_candidates[i].TwinId, twinId, StringComparison.Ordinal)) return;
+
             TwinDeviceModel model = TwinDeviceModels.Resolve(twinId);
             if (model == null) return;
 
@@ -242,7 +293,9 @@ namespace SchoolTwin.UI
             c.Range = range > 0.1f ? range : _range;
 
             // 动作与取值：门是 SetOpen，灯是 SetPower；读当前回读值决定"开/关"
-            TwinAnchor anchor;
+            // 注意 anchor 必须显式初始化：下面那串 && 是短路的，rt 为 null 时
+            // TryGet 根本不会执行，编译器会判「使用了未赋值变量」（CS0165）。
+            TwinAnchor anchor = null;
             TwinRuntime rt = TwinRuntime.Instance;
             bool has = rt != null && rt.Registry != null && rt.Registry.TryGet(twinId, out anchor) && anchor != null;
 
@@ -279,9 +332,7 @@ namespace SchoolTwin.UI
 
             if (!string.Equals(_label.text, c.Label, StringComparison.Ordinal)) _label.text = c.Label;
 
-            _group.alpha = 1f;
-            _group.blocksRaycasts = true;
-            _group.interactable = true;
+            _alphaTarget = 1f;
 
             if (Input.GetKeyDown(_key)) Use();
         }
@@ -289,9 +340,7 @@ namespace SchoolTwin.UI
         private void Hide()
         {
             if (_group == null) return;
-            _group.alpha = 0f;
-            _group.blocksRaycasts = false;
-            _group.interactable = false;
+            _alphaTarget = 0f;
             _current = null;
         }
 

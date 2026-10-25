@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using SchoolTwin.Twin;
 
 namespace SchoolTwin.EditorTools
@@ -14,21 +16,42 @@ namespace SchoolTwin.EditorTools
     /// 玩家走不过去）。用一个小方块占位，先把「走近→弹按钮→点一下→灯亮/灭」
     /// 这条交互链路跑通；以后有真模型了，把小方块替换掉即可（TwinInteractPoint 会留下）。
     ///
-    /// 【几何怎么摆】贴着门轴那一侧、沿墙偏移 0.55m，高度离地 1.15m，
-    /// 并向房间内部偏 3cm 避免嵌进墙体。门轴取自门扇的 TwinAnchor 位置。
+    /// ── 只给「白名单里的灯」建开关 ──────────────────────────────
+    /// 场景里 `Class2-1` 有 **3 个** Light 锚点：正式那个 + `BAK/`、`BAK2/` 两个历史备份。
+    /// 不筛的话按 `FindObjectsOfType` 的返回顺序取第一个 —— 很可能绑到 BAK 上，
+    /// 而 BAK **不在控制白名单**里 → 点一下命令被拒 → 灯不亮且看不出原因。
+    ///
+    /// ── 墙面法线为什么写死 +Z（这是实测结论，不是猜）─────────────
+    /// 导出全部 `Door07a` 的 transform 后发现：
+    ///   euler = (0, 64.40, 0)，forward = (0.90, 0, 0.43)，right = (0.43, 0, -0.90)
+    /// 也就是说**门是半开的**（64.4°），`door.forward` 是打开的门扇法线，
+    /// **不是**墙面法线 —— 拿它当墙法线会把开关贴到半空中。
+    /// 而 8 间教室的门全在 z≈33.44~33.49 这条走廊墙上，房间都在 +Z 侧，
+    /// 所以：墙面法线 = +Z，墙面切线 = X。射线检测会再验一遍，错了就不落。
+    ///
+    /// ── 位置靠射线，不靠房间表 ──────────────────────────────────
+    /// 从房间内 3m 处朝墙反向打射线，第一个交点就是室内墙面 —— 墙多厚都不用管。
+    /// 房间矩形（TwinRoomBounds）只用来做一件事：判断沿 X 偏移后**还在不在本房间**。
+    /// 因为门几乎都贴着隔墙，+0.75m 很容易跨到隔壁去（实测 Class1-2 就跑到了 Class1-3）。
+    /// 注意只能校验 X 这一根轴：矩形是照灯反推的，Z 方向差 1.3m，二维 Contains 会误杀。
     /// </summary>
     public static class TwinP23Switches
     {
         private const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
+        private const string ContainerName = "P23_Switches";
+        private const string MatPath = "Assets/_Project/Materials/TwinSwitchBox.mat";
 
-        /// <summary>开关沿墙方向离门轴的偏移（米）</summary>
-        private const float AlongWall = 0.55f;
+        /// <summary>开关沿墙方向离门轴的候选偏移（米），从小到大试。门扇净宽约 0.84m，太小会被门洞吃掉</summary>
+        private static readonly float[] WallOffsets = { 0.60f, 0.75f, 0.95f, 1.15f };
 
         /// <summary>开关离地高度（米）。国标是 1.3m，稍微低一点更好按</summary>
         private const float Height = 1.15f;
 
-        /// <summary>向房间内部的偏置（米），免得嵌进墙体</summary>
-        private const float IntoRoom = 0.03f;
+        /// <summary>方块尺寸（米）：宽 × 高 × 厚</summary>
+        private static readonly Vector3 BoxSize = new Vector3(0.12f, 0.20f, 0.04f);
+
+        /// <summary>开关中心离墙面留的缝（米）。方块厚 4cm，留 3cm 差不多齐平</summary>
+        private const float WallGap = 0.03f;
 
         [MenuItem("P23 交互/① 生成灯开关方块（会存盘）", false, 10)]
         public static void GenerateMenu()
@@ -44,17 +67,32 @@ namespace SchoolTwin.EditorTools
             EditorUtility.DisplayDialog("P23 生成灯开关", report, "好");
         }
 
+        /// <summary>批处理入口（-executeMethod 调用）。无返回值，避免命令行抱怨签名。</summary>
+        public static void GenerateBatch()
+        {
+            Debug.Log(Generate());
+        }
+
         public static string Generate()
         {
-            Scene scene = SceneManager.GetActiveScene();
-            if (string.IsNullOrEmpty(scene.path) || scene.path != ScenePath)
-                scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            Scene scene = EnsureScene();
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[P23] ===== 生成灯开关方块 =====");
 
-            TwinAnchor[] all = FindObjectsOfType<TwinAnchor>(true);
-            int made = 0, skipped = 0;
+            Transform container = EnsureContainer();
+            Material mat = EnsureMaterial();
+
+            // 每次重跑都清空重建：这些是占位方块，留着旧的只会在射线检测里挡住自己
+            ClearContainer(container);
+
+            // 场景刚打开时碰撞体可能还没同步进物理世界，射线会全部打空
+            Physics.SyncTransforms();
+
+            // 静态类没有继承 MonoBehaviour，FindObjectsOfType 必须走 Object. 前缀
+            TwinAnchor[] all = UnityEngine.Object.FindObjectsOfType<TwinAnchor>(true);
+            HashSet<string> doneZones = new HashSet<string>(StringComparer.Ordinal);
+            int made = 0, skipped = 0, notWhitelisted = 0;
 
             for (int i = 0; i < all.Length; i++)
             {
@@ -63,69 +101,92 @@ namespace SchoolTwin.EditorTools
                 if (!string.Equals(light.Category, "Light", StringComparison.OrdinalIgnoreCase)) continue;
                 if (light.Zone == null || !light.Zone.StartsWith("Class", StringComparison.Ordinal)) continue;
 
-                // 同一房间的门
-                TwinAnchor door = FindDoor(all, light.Zone);
-                if (door == null)
+                // 一个房间只建一个开关：先把 BAK 备份和不可控点位筛掉
+                if (!TwinControlScope.IsEnabled(light.TwinId))
                 {
-                    sb.AppendLine("[P23] ⚠ " + light.Zone + " 找不到门锚点，跳过");
-                    skipped++;
+                    sb.AppendLine("[P23] ○ 跳过非白名单灯 " + light.TwinId + "（Zone=" + light.Zone + "）");
+                    notWhitelisted++;
                     continue;
                 }
-
-                // 已经生成过就跳过（幂等）
-                string goName = "Switch_" + light.Zone;
-                if (FindTransform(door.transform.parent, goName) != null)
+                if (doneZones.Contains(light.Zone))
                 {
                     skipped++;
                     continue;
                 }
+                doneZones.Add(light.Zone);
 
-                // 房间中心 → 决定「往房间里贴」的方向
-                Vector3 normal = Vector3.zero;
+                string zone = light.Zone;
                 float x0, x1, z0, z1;
-                if (TwinRoomBounds.TryGetBounds(light.Zone, out x0, out x1, out z0, out z1))
+                if (!TwinRoomBounds.TryGetBounds(zone, out x0, out x1, out z0, out z1))
                 {
-                    normal = new Vector3((x0 + x1) * 0.5f - door.transform.position.x,
-                                         0f,
-                                         (z0 + z1) * 0.5f - door.transform.position.z);
+                    sb.AppendLine("[P23] ⚠ " + zone + " 没有分区矩形，跳过");
+                    skipped++;
+                    continue;
                 }
-                if (normal.sqrMagnitude < 0.0001f) normal = -door.transform.right;
-                normal.y = 0f;
-                normal.Normalize();
 
-                Vector3 panel = door.transform.right;
-                panel.y = 0f;
-                if (panel.sqrMagnitude < 0.0001f) panel = Vector3.right;
-                panel.Normalize();
+                // 门只用来「定位」，不需要可控 —— 不能按白名单筛门，
+                // 否则 ClassTeachers / ClassDirector（场景里压根没有门锚点）会被误杀。
+                TwinAnchor door = FindDoor(all, zone);
 
-                Vector3 pos = door.transform.position
-                              + panel * AlongWall
-                              + normal * IntoRoom;
-                pos.y = door.transform.position.y - 0.035f + Height;
+                float y;
+                float xAnchor;
+                string where;
 
-                // 父节点 = 门的父（房间节点），层级上跟着房间走
-                Transform parent = door.transform.parent != null ? door.transform.parent : door.transform;
+                if (door != null)
+                {
+                    // 门锚点的 Y 就是地面高度（实测 1F=0.035、2F=3.591）
+                    y = door.transform.position.y + Height;
+                    xAnchor = door.transform.position.x;
+                    where = "门旁「" + door.gameObject.name + "」";
+                }
+                else
+                {
+                    // 没门锚点：退一步放走廊墙中段
+                    y = FloorGuessOf(light.transform.position.y) + Height;
+                    xAnchor = (x0 + x1) * 0.5f;
+                    where = "无门锚点→走廊墙中段";
+                }
 
-                GameObject go = new GameObject(goName, typeof(RectTransform));
+                Vector3 pos;
+                string note;
+                if (!TryPlaceOnRoomWall(x0, x1, z0, z1, xAnchor, y, out pos, out note))
+                {
+                    sb.AppendLine("[P23] ⚠ " + zone + " 定位失败，跳过（" + note + "）");
+                    skipped++;
+                    continue;
+                }
+
+                string goName = "Switch_" + zone;
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = goName;
                 Undo.RegisterCreatedObjectUndo(go, "Create Light Switch");
-                go.transform.SetParent(parent, false);
+                go.transform.SetParent(container, false);
                 go.transform.position = pos;
-                go.transform.rotation = Quaternion.LookRotation(-normal, Vector3.up);
+                // 不设旋转：这排教室的墙都是朝 +Z 的，方块按 宽X / 高Y / 厚Z 摆正好贴墙。
+                // 以后要给朝 X 的墙用，得按法线补一个 LookRotation。
+                go.transform.localScale = BoxSize;
 
-                BoxCollider col = go.AddComponent<BoxCollider>();
-                col.size = new Vector3(0.12f, 0.20f, 0.04f);
+                Renderer r = go.GetComponent<Renderer>();
+                if (r != null) r.sharedMaterial = mat;
 
-                SchoolTwin.Interaction.TwinInteractPoint point = go.AddComponent<SchoolTwin.Interaction.TwinInteractPoint>();
+                BoxCollider col = go.GetComponent<BoxCollider>();
+                if (col == null) col = go.AddComponent<BoxCollider>();
+                col.size = Vector3.one;   // localScale 已经是真实尺寸
+                col.isTrigger = false;
+
+                SchoolTwin.Interaction.TwinInteractPoint point =
+                    go.AddComponent<SchoolTwin.Interaction.TwinInteractPoint>();
                 point.TargetTwinId = light.TwinId;
                 point.Range = 2.2f;
 
-                sb.AppendLine("[P23] ✔ " + light.Zone + "  开关 " + light.TwinId +
-                              "  位置=" + V3(pos) + "  贴在「" + door.name + "」旁边");
+                sb.AppendLine("[P23] ✔ " + zone + "  开关→" + light.TwinId +
+                              "  位置=" + V3(pos) + "  " + where + "  " + note);
                 made++;
             }
 
             sb.AppendLine();
-            sb.AppendLine("[P23] 生成 " + made + " 个，跳过（已有/缺门）" + skipped + " 个");
+            sb.AppendLine("[P23] 生成 " + made + " 个；跳过 " + skipped +
+                          " 个；非白名单灯 " + notWhitelisted + " 个");
 
             if (made > 0)
             {
@@ -139,6 +200,195 @@ namespace SchoolTwin.EditorTools
             return sb.ToString();
         }
 
+        // ================================================================ 定位
+
+        /// <summary>
+        /// 在房间的走廊那面墙上放开关。
+        ///
+        /// 法线：先试 +Z（这排教室全在走廊北侧），不行再试 -Z。射线会验证，
+        /// 打到的东西必须真的是「朝向房间的竖直墙面」才算数。
+        ///
+        /// 偏移：沿 X 左右各试几个距离，且必须仍落在房间的 X 跨度内 ——
+        /// 门几乎都贴着隔墙，不加这个约束就会跨到隔壁房间的墙上去。
+        /// </summary>
+        private static bool TryPlaceOnRoomWall(float x0, float x1, float z0, float z1,
+                                               float xAnchor, float y,
+                                               out Vector3 pos, out string note)
+        {
+            pos = Vector3.zero;
+            note = "";
+
+            const float maxDist = 12f;
+            const float margin = 0.15f;   // 距房间边缘留一点余量，免得贴到隔墙侧面
+            const float edgeInset = 0.35f; // 起点离房间边界的距离
+
+            Vector3[] normals = { Vector3.forward, Vector3.back };
+
+            for (int n = 0; n < normals.Length; n++)
+            {
+                Vector3 normal = normals[n];
+
+                // 起点放在**紧贴目标墙的内侧**，短射线打过去：距离短、被家具挡住的概率低。
+                // 房间矩形 Z 方向有 ±1.3m 误差，所以起点必须留在矩形内，
+                // 万一落到墙外，打到的就是墙的背面（法线朝走廊），下面的点乘会把它否掉。
+                float originZ = normal.z > 0f ? z0 + edgeInset : z1 - edgeInset;
+
+                for (int k = 0; k < WallOffsets.Length; k++)
+                {
+                    for (int s = 0; s < 2; s++)
+                    {
+                        float off = WallOffsets[k] * (s == 0 ? 1f : -1f);
+                        float px = xAnchor + off;
+
+                        // 必须还在本房间的 X 跨度内（只校验 X：Z 方向矩形误差有 1.3m）
+                        if (px < x0 + margin || px > x1 - margin) continue;
+
+                        Vector3 origin = new Vector3(px, y, originZ);
+                        RaycastHit hit;
+                        if (!Physics.Raycast(origin, -normal, out hit, maxDist, ~0,
+                                             QueryTriggerInteraction.Ignore))
+                            continue;                                   // 门洞，射线穿过去了
+                        if (hit.normal.y > 0.7f) continue;               // 地板 / 天花板
+                        if (Vector3.Dot(hit.normal, normal) < 0.7f) continue; // 不是这面墙
+
+                        // 法线指向房间内，所以往 +normal 让 3cm 才贴在室内这一面
+                        pos = new Vector3(hit.point.x, y, hit.point.z + normal.z * WallGap);
+                        note = "偏移" + off.ToString("0.00") + "m 法线=" + V3(normal) +
+                               " 墙面=" + V3(hit.point);
+                        return true;
+                    }
+                }
+            }
+
+            note = "走廊两侧都找不到合适墙面";
+            return false;
+        }
+
+        /// <summary>没门的时候拿不到地面高度：1F 灯约 3.3m、2F 灯约 6.9m，按 3.556 层高反推。</summary>
+        private static float FloorGuessOf(float lightY)
+        {
+            const float storey = 3.556f;
+            if (lightY < storey) return 0f;
+            return Mathf.Round((lightY - 3.3f) / storey) * storey;
+        }
+
+        // ================================================================ 诊断
+
+        [MenuItem("P23 交互/② 导出教室门朝向（诊断）", false, 20)]
+        public static void DumpDoorsMenu()
+        {
+            string s = DumpDoors();
+            Debug.Log(s);
+            EditorUtility.DisplayDialog("P23 诊断", "已写到 p23_doors.txt", "好");
+        }
+
+        public static void DumpDoorsBatch()
+        {
+            Debug.Log(DumpDoors());
+        }
+
+        /// <summary>把教室门/灯锚点的真实 transform 与房间矩形全导出来，别再靠猜。</summary>
+        public static string DumpDoors()
+        {
+            EnsureScene();
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("[P23-DIAG] ===== 门与灯的真实姿态 =====");
+
+            TwinAnchor[] all = UnityEngine.Object.FindObjectsOfType<TwinAnchor>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                TwinAnchor a = all[i];
+                if (a == null) continue;
+                bool isDoor = string.Equals(a.Category, "Door", StringComparison.OrdinalIgnoreCase);
+                bool isLight = string.Equals(a.Category, "Light", StringComparison.OrdinalIgnoreCase);
+                if (!isDoor && !isLight) continue;
+                if (a.Zone == null || !a.Zone.StartsWith("Class", StringComparison.Ordinal)) continue;
+
+                float x0, x1, z0, z1;
+                bool hb = TwinRoomBounds.TryGetBounds(a.Zone, out x0, out x1, out z0, out z1);
+
+                sb.AppendLine("[P23-DIAG] " + (isDoor ? "DOOR " : "LIGHT") +
+                              " id=" + a.TwinId +
+                              " zone=" + a.Zone +
+                              " go=" + a.gameObject.name +
+                              " pos=" + V3(a.transform.position) +
+                              " euler=" + V3(a.transform.eulerAngles) +
+                              " fwd=" + V3(a.transform.forward) +
+                              " right=" + V3(a.transform.right) +
+                              " lossyScale=" + V3(a.transform.lossyScale) +
+                              " parent=" + (a.transform.parent != null ? a.transform.parent.name : "-") +
+                              (hb
+                                  ? " boundsX=(" + x0.ToString("0.00") + "," + x1.ToString("0.00") + ")" +
+                                    " boundsZ=(" + z0.ToString("0.00") + "," + z1.ToString("0.00") + ")"
+                                  : " bounds=none"));
+            }
+
+            sb.AppendLine("[P23-DIAG] ===== 结束 =====");
+            try { System.IO.File.WriteAllText("p23_doors.txt", sb.ToString(), Encoding.UTF8); } catch (Exception) { }
+            return sb.ToString();
+        }
+
+        // ================================================================ 辅助
+
+        /// <summary>批处理（-executeMethod）启动时活动场景是空场景，必须先显式打开。</summary>
+        private static Scene EnsureScene()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (string.IsNullOrEmpty(scene.path) || scene.path != ScenePath)
+                scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            return scene;
+        }
+
+        private static Transform EnsureContainer()
+        {
+            GameObject found = GameObject.Find(ContainerName);
+            if (found != null) return found.transform;
+
+            GameObject go = new GameObject(ContainerName);
+            Undo.RegisterCreatedObjectUndo(go, "Create P23_Switches");
+            return go.transform;
+        }
+
+        /// <summary>清空容器下的旧方块（重跑时避免射线打到上次生成的自己）</summary>
+        private static void ClearContainer(Transform container)
+        {
+            if (container == null) return;
+            for (int i = container.childCount - 1; i >= 0; i--)
+            {
+                GameObject child = container.GetChild(i).gameObject;
+                Undo.DestroyObjectImmediate(child);
+            }
+        }
+
+        private static Material EnsureMaterial()
+        {
+            Material m = AssetDatabase.LoadAssetAtPath<Material>(MatPath);
+            if (m != null) return m;
+
+            Shader sh = Shader.Find("Standard");
+            if (sh == null) sh = Shader.Find("Legacy Shaders/Diffuse");
+            m = new Material(sh);
+            m.name = "TwinSwitchBox";
+            m.color = new Color(0.88f, 0.90f, 0.94f, 1f);
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.32f);
+            if (m.HasProperty("_EmissionColor"))
+            {
+                m.EnableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", new Color(0.12f, 0.34f, 0.27f) * 0.7f);
+            }
+
+            string dir = System.IO.Path.GetDirectoryName(MatPath).Replace('\\', '/');
+            if (!string.IsNullOrEmpty(dir) && !AssetDatabase.IsValidFolder(dir))
+            {
+                string parent = System.IO.Path.GetDirectoryName(dir).Replace('\\', '/');
+                AssetDatabase.CreateFolder(parent, System.IO.Path.GetFileName(dir));
+            }
+            AssetDatabase.CreateAsset(m, MatPath);
+            AssetDatabase.SaveAssets();
+            return m;
+        }
+
         private static TwinAnchor FindDoor(TwinAnchor[] all, string zone)
         {
             for (int i = 0; i < all.Length; i++)
@@ -148,17 +398,6 @@ namespace SchoolTwin.EditorTools
                 if (!string.Equals(a.Zone, zone, StringComparison.Ordinal)) continue;
                 if (!string.Equals(a.Category, "Door", StringComparison.OrdinalIgnoreCase)) continue;
                 return a;
-            }
-            return null;
-        }
-
-        private static Transform FindTransform(Transform parent, string name)
-        {
-            if (parent == null) return null;
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform c = parent.GetChild(i);
-                if (c != null && string.Equals(c.name, name, StringComparison.Ordinal)) return c;
             }
             return null;
         }
