@@ -99,7 +99,13 @@ namespace SchoolTwin.EditorTools
                 TwinAnchor light = all[i];
                 if (light == null || string.IsNullOrEmpty(light.TwinId)) continue;
                 if (!string.Equals(light.Category, "Light", StringComparison.OrdinalIgnoreCase)) continue;
-                if (light.Zone == null || !light.Zone.StartsWith("Class", StringComparison.Ordinal)) continue;
+
+                // 【P24】这里原来写死 `light.Zone.StartsWith("Class")` —— 只给教室建开关。
+                // 结果 ActZal（礼堂）/ SportHall（篮球场）/ SportRoom2 / SportRoom3 这些
+                // 非 Class 开头的房间**永远拿不到开关**，而且因为是在白名单检查之前 continue，
+                // 连一行"跳过"日志都不打 —— 用户只会看到"面板有、开关没有"，极难定位。
+                // 2026-10-26 用户实测踩到。改成：只要在白名单里就建。
+                if (string.IsNullOrEmpty(light.Zone)) continue;
 
                 // 一个房间只建一个开关：先把 BAK 备份和不可控点位筛掉
                 if (!TwinControlScope.IsEnabled(light.TwinId))
@@ -130,6 +136,7 @@ namespace SchoolTwin.EditorTools
 
                 float y;
                 float xAnchor;
+                float zAnchor;
                 string where;
 
                 if (door != null)
@@ -137,19 +144,28 @@ namespace SchoolTwin.EditorTools
                     // 门锚点的 Y 就是地面高度（实测 1F=0.035、2F=3.591）
                     y = door.transform.position.y + Height;
                     xAnchor = door.transform.position.x;
+                    zAnchor = door.transform.position.z;
                     where = "门旁「" + door.gameObject.name + "」";
                 }
                 else
                 {
-                    // 没门锚点：退一步放走廊墙中段
-                    y = FloorGuessOf(light.transform.position.y) + Height;
+                    // 没门锚点：退一步放走廊墙中段。
+                    // 【P24】个别房间的地面不在 0 / 3.556 —— 篮球场（SportHall）是通高大厅，
+                    // 地面 y≈−0.05、灯具挂在 7.4m，按楼层公式会推成 2F(3.556) → 开关飘在半空。
+                    // 这类房间走显式覆盖表。
+                    float floorY;
+                    if (!FloorOverrides.TryGetValue(zone, out floorY)) floorY = FloorGuessOf(light.transform.position.y);
+                    y = floorY + Height;
                     xAnchor = (x0 + x1) * 0.5f;
+                    zAnchor = (z0 + z1) * 0.5f;
                     where = "无门锚点→走廊墙中段";
                 }
 
                 Vector3 pos;
                 string note;
-                if (!TryPlaceOnRoomWall(x0, x1, z0, z1, xAnchor, y, out pos, out note))
+                Vector3 wallNormal;
+                if (!TryPlaceOnRoomWall(x0, x1, z0, z1, xAnchor, zAnchor, y,
+                                        out pos, out wallNormal, out note))
                 {
                     sb.AppendLine("[P23] ⚠ " + zone + " 定位失败，跳过（" + note + "）");
                     skipped++;
@@ -162,8 +178,10 @@ namespace SchoolTwin.EditorTools
                 Undo.RegisterCreatedObjectUndo(go, "Create Light Switch");
                 go.transform.SetParent(container, false);
                 go.transform.position = pos;
-                // 不设旋转：这排教室的墙都是朝 +Z 的，方块按 宽X / 高Y / 厚Z 摆正好贴墙。
-                // 以后要给朝 X 的墙用，得按法线补一个 LookRotation。
+                // 按墙法线转：方块是 宽X / 高Y / 厚Z，让局部 +Z 对齐法线，厚度就贴在墙面上。
+                // 朝 +Z 的墙 LookRotation((0,0,1)) == identity，和原来完全一致；
+                // 朝 ±X 的墙（礼堂东墙）以前不转，方块会立歪 —— 2026-10-26 补上。
+                go.transform.rotation = Quaternion.LookRotation(wallNormal, Vector3.up);
                 go.transform.localScale = BoxSize;
 
                 Renderer r = go.GetComponent<Renderer>();
@@ -211,60 +229,111 @@ namespace SchoolTwin.EditorTools
         /// 偏移：沿 X 左右各试几个距离，且必须仍落在房间的 X 跨度内 ——
         /// 门几乎都贴着隔墙，不加这个约束就会跨到隔壁房间的墙上去。
         /// </summary>
+        /// <summary>
+        /// 在房间墙面上找一个能贴开关的位置。
+        ///
+        /// 【P24】原来只朝 ±Z 打射线 —— 只适用于「门开在南/北墙」的那排教室。
+        /// 礼堂的门在**东墙**（法线沿 X），结果射线一路打到 18m 外的南墙，
+        /// 开关落在礼堂最南端（2026-10-26 用户实测）。
+        /// 现在四个方向都打，并且把命中的法线带出去，让方块按法线转正。
+        /// </summary>
         private static bool TryPlaceOnRoomWall(float x0, float x1, float z0, float z1,
-                                               float xAnchor, float y,
-                                               out Vector3 pos, out string note)
+                                               float xAnchor, float zAnchor, float y,
+                                               out Vector3 pos, out Vector3 normal, out string note)
         {
             pos = Vector3.zero;
+            normal = Vector3.forward;
             note = "";
 
             const float maxDist = 12f;
-            const float margin = 0.15f;   // 距房间边缘留一点余量，免得贴到隔墙侧面
+            const float margin = 0.15f;    // 距房间边缘留一点余量，免得贴到隔墙侧面
             const float edgeInset = 0.35f; // 起点离房间边界的距离
 
-            Vector3[] normals = { Vector3.forward, Vector3.back };
+            // 四面墙按「离门（或锚点）由近到远」排序后再试。
+            //
+            // 【为什么必须排序】门就开在某面墙上，那面墙才是该贴开关的地方。
+            // 2026-10-26 第一版只把 ±X 加在 ±Z 后面，结果礼堂（门在东墙）仍然先打 +Z，
+            // 一路命中 18m 外的南墙，开关落在礼堂最南端。
+            Vector3[] normals = { Vector3.forward, Vector3.back, Vector3.right, Vector3.left };
+            float[] dist =
+            {
+                Mathf.Abs(zAnchor - z0),   // forward(+Z) 法线 → 墙在 z0（射线往 -Z 打）
+                Mathf.Abs(z1 - zAnchor),   // back(-Z)   法线 → 墙在 z1
+                Mathf.Abs(xAnchor - x0),   // right(+X)  法线 → 墙在 x0
+                Mathf.Abs(x1 - xAnchor),   // left(-X)   法线 → 墙在 x1
+            };
+            for (int a = 1; a < normals.Length; a++)          // 4 个元素，插入排序足够
+            {
+                for (int b = a; b > 0 && dist[b] < dist[b - 1]; b--)
+                {
+                    float td = dist[b]; dist[b] = dist[b - 1]; dist[b - 1] = td;
+                    Vector3 tn = normals[b]; normals[b] = normals[b - 1]; normals[b - 1] = tn;
+                }
+            }
 
             for (int n = 0; n < normals.Length; n++)
             {
-                Vector3 normal = normals[n];
+                Vector3 nm = normals[n];
+                bool alongX = Mathf.Abs(nm.x) > 0.5f;   // 这面墙的法线沿 X
 
                 // 起点放在**紧贴目标墙的内侧**，短射线打过去：距离短、被家具挡住的概率低。
-                // 房间矩形 Z 方向有 ±1.3m 误差，所以起点必须留在矩形内，
-                // 万一落到墙外，打到的就是墙的背面（法线朝走廊），下面的点乘会把它否掉。
-                float originZ = normal.z > 0f ? z0 + edgeInset : z1 - edgeInset;
+                float originZ = nm.z > 0f ? z0 + edgeInset : (nm.z < 0f ? z1 - edgeInset : zAnchor);
+                float originX = nm.x > 0f ? x0 + edgeInset : (nm.x < 0f ? x1 - edgeInset : xAnchor);
 
                 for (int k = 0; k < WallOffsets.Length; k++)
                 {
                     for (int s = 0; s < 2; s++)
                     {
                         float off = WallOffsets[k] * (s == 0 ? 1f : -1f);
-                        float px = xAnchor + off;
 
-                        // 必须还在本房间的 X 跨度内（只校验 X：Z 方向矩形误差有 1.3m）
-                        if (px < x0 + margin || px > x1 - margin) continue;
+                        Vector3 origin;
+                        if (alongX)
+                        {
+                            float pz = zAnchor + off;
+                            if (pz < z0 + margin || pz > z1 - margin) continue;
+                            origin = new Vector3(originX, y, pz);
+                        }
+                        else
+                        {
+                            float px = xAnchor + off;
+                            if (px < x0 + margin || px > x1 - margin) continue;
+                            origin = new Vector3(px, y, originZ);
+                        }
 
-                        Vector3 origin = new Vector3(px, y, originZ);
                         RaycastHit hit;
-                        if (!Physics.Raycast(origin, -normal, out hit, maxDist, ~0,
+                        if (!Physics.Raycast(origin, -nm, out hit, maxDist, ~0,
                                              QueryTriggerInteraction.Ignore))
                             continue;                                   // 门洞，射线穿过去了
                         if (hit.normal.y > 0.7f) continue;               // 地板 / 天花板
-                        if (Vector3.Dot(hit.normal, normal) < 0.7f) continue; // 不是这面墙
+                        if (Vector3.Dot(hit.normal, nm) < 0.7f) continue; // 不是这面墙
 
-                        // 法线指向房间内，所以往 +normal 让 3cm 才贴在室内这一面
-                        pos = new Vector3(hit.point.x, y, hit.point.z + normal.z * WallGap);
-                        note = "偏移" + off.ToString("0.00") + "m 法线=" + V3(normal) +
+                        // 法线指向房间内，往 +normal 让一点才贴在室内这一面
+                        pos = hit.point + nm * WallGap;
+                        pos.y = y;
+                        normal = nm;
+                        note = "偏移" + off.ToString("0.00") + "m 法线=" + V3(nm) +
                                " 墙面=" + V3(hit.point);
                         return true;
                     }
                 }
             }
 
-            note = "走廊两侧都找不到合适墙面";
+            note = "四面墙都找不到合适位置";
             return false;
         }
 
         /// <summary>没门的时候拿不到地面高度：1F 灯约 3.3m、2F 灯约 6.9m，按 3.556 层高反推。</summary>
+        /// <summary>
+        /// 地面高度不按「1F=0 / 2F=3.556」走的房间。
+        /// 目前只有篮球场：它是通高大厅，地面 y≈−0.05、灯具挂在 7.4m，
+        /// 按楼层公式会推成 2F，开关会飘在半空（2026-10-26 加）。
+        /// </summary>
+        private static readonly Dictionary<string, float> FloorOverrides =
+            new Dictionary<string, float>(StringComparer.Ordinal)
+            {
+                { "SportHall", -0.05f },
+            };
+
         private static float FloorGuessOf(float lightY)
         {
             const float storey = 3.556f;
