@@ -1,0 +1,16 @@
+﻿[P26] ===== 挂主脑锚点 =====
+[P26] 目标物体：Monitor04 (10)（材质 Monitor04）
+[P26] ✔ 加了 TwinAnchor
+[P26] ✔ 加了 TwinInteractPoint
+
+[P26] TwinId  = ClassComputer/PC/Master_01
+[P26] Zone    = ClassComputer / Category = PC
+[P26] 交互范围 = 2.2m
+[P26] 场景保存：成功
+
+[P26] 下一步（顺序别错）：
+   1. 跑 `P24 灯锚点 / ② 同步点位目录（补缺失）`  ← 不做这步数据链路是断的
+   2. Play，走到主脑前应弹出交互按钮
+   3. Console 搜 `PC/Master_01` 确认接管了 **1 台**显示器，
+      搜 `PC/Room_01` 确认接管了 **18 台**（不是 19 台）
+[P26] ===== 结束 =====

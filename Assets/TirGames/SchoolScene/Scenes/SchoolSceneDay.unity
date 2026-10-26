@@ -33579,13 +33579,61 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 644792246}
+    - targetCorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 644792245}
   m_SourcePrefab: {fileID: 100100000, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
 --- !u!4 &644792243 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 443876, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
   m_PrefabInstance: {fileID: 644792242}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &644792244 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 151608, guid: be8a9b4fd6545dd4e901964c42af5f6c, type: 3}
+  m_PrefabInstance: {fileID: 644792242}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &644792245
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 644792244}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6d9c2595f00da541b00a80d26e2b756, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  TargetTwinId: ClassComputer/PC/Master_01
+  Label: 
+  Range: 2.2
+--- !u!114 &644792246
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 644792244}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f5768e9f9652f469dde42146cd871d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _twinId: ClassComputer/PC/Master_01
+  _displayName: "\u673A\u623F\u4E3B\u8111"
+  _zone: ClassComputer
+  _category: PC
+  _visualTarget: {fileID: 0}
+  _visualTargetPath: 
+  _staleAfterSeconds: 3
+  _offlineAfterSeconds: 5
+  _minNotifyInterval: 0.05
+  _logEverySample: 0
 --- !u!1001 &647267181
 PrefabInstance:
   m_ObjectHideFlags: 0

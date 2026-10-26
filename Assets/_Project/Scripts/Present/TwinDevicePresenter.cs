@@ -2115,12 +2115,16 @@ namespace SchoolTwin.Present
             int[] tris = new int[seg * 3];
 
             verts[0] = Vector3.zero;                       // 顶点（镜头）
-            cols[0] = new Color(1f, 1f, 1f, 1f);           // 镜头端最亮
+            // ⚠️ 渐隐必须写进 **RGB**，不能只写 alpha。
+            // `Legacy Shaders/Particles/Additive` 是加法混合（Blend One One），
+            // alpha 通道根本不参与输出，只认 RGB。
+            // 2026-10-26 第一版只改了 alpha → 光柱是一条实心白锥，`_beamConeAlpha` 形同虚设。
+            cols[0] = Color.white;                         // 镜头端最亮
             for (int i = 0; i < seg; i++)
             {
                 float a = i * Mathf.PI * 2f / seg;
                 verts[i + 1] = new Vector3(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius, dist);
-                cols[i + 1] = new Color(1f, 1f, 1f, 0f);   // 幕布端渐隐
+                cols[i + 1] = new Color(0f, 0f, 0f, 0f);   // 幕布端全黑（加法下 = 不可见）
             }
             verts[seg + 1] = verts[0];                     // 补一个顶点，方便画侧面
             cols[seg + 1] = cols[0];
@@ -2150,7 +2154,12 @@ namespace SchoolTwin.Present
             Material mat = new Material(sh);
             mat.name = "TwinBeamConeMat";
             if (mat.HasProperty("_TintColor"))
-                mat.SetColor("_TintColor", new Color(_beamColor.r, _beamColor.g, _beamColor.b, _beamConeAlpha));
+            {
+                // 加法混合下亮度由 RGB 决定，所以把透明度乘进 RGB 才是真正的"调淡"
+                Color tint = _beamColor * _beamConeAlpha;
+                tint.a = _beamConeAlpha;
+                mat.SetColor("_TintColor", tint);
+            }
 
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
