@@ -44,8 +44,13 @@ namespace SchoolTwin.UI
 
         [Header("外观")]
         [SerializeField] private Vector2 _size = new Vector2(132f, 38f);
-        [Tooltip("按钮相对目标屏幕位置的偏移（像素）")]
-        [SerializeField] private Vector2 _screenOffset = new Vector2(74f, 26f);
+
+        [Tooltip("按钮在屏幕上的**固定**位置（归一化 0~1，左下角是 0,0）。" +
+                 "参考原神/吃鸡：交互提示钉在固定位置，不跟着物体在屏幕上跑")]
+        [SerializeField] private Vector2 _screenAnchor = new Vector2(0.62f, 0.5f);
+
+        [Tooltip("在固定锚点上的像素微调，一般留 0")]
+        [SerializeField] private Vector2 _screenOffset = Vector2.zero;
 
         // ---------------------------------------------------------------- 运行时
 
@@ -129,8 +134,11 @@ namespace SchoolTwin.UI
             _root = transform as RectTransform;
             if (_root == null) { Debug.LogError("[TwinInteract] 必须挂在有 RectTransform 的物体上"); return; }
 
-            _root.anchorMin = _root.anchorMax = new Vector2(0f, 0f);
+            // 按钮钉在屏幕固定位置：锚点 + 像素微调，**不再**每帧跟 WorldToScreenPoint 跑。
+            // 跟着物体跑的话，转视角时按钮会在屏幕上乱飘，看着像 bug。
+            _root.anchorMin = _root.anchorMax = _screenAnchor;
             _root.pivot = new Vector2(0.5f, 0.5f);
+            _root.anchoredPosition = _screenOffset;
             _root.sizeDelta = _size;
 
             _bg = TwinUIFactory.Rounded(_root, "Bg", _size.y * 0.5f,
@@ -324,11 +332,13 @@ namespace SchoolTwin.UI
 
         private void Show(Candidate c)
         {
+            // 按钮位置是**固定**的（见 Build），这里只做「目标是否真在画面里」的可见性判断，
+            // 免得背后的东西也弹按钮。位置每帧重设的话，转视角时按钮会在屏幕上乱飘。
             Vector3 world = c.WorldPos + Vector3.up * 0.9f;
             Vector3 sp = _cam.WorldToScreenPoint(world);
-            if (sp.z <= 0f) { Hide(); return; }   // 在相机背后
-
-            _root.position = new Vector3(sp.x + _screenOffset.x, sp.y + _screenOffset.y, 0f);
+            if (sp.z <= 0f) { Hide(); return; }                                     // 相机背后
+            if (sp.x < 0f || sp.x > _cam.pixelWidth ||
+                sp.y < 0f || sp.y > _cam.pixelHeight) { Hide(); return; }           // 跑出画面
 
             if (!string.Equals(_label.text, c.Label, StringComparison.Ordinal)) _label.text = c.Label;
 

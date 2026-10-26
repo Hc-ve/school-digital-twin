@@ -4,5 +4,5 @@
 [P22] ✔ Standard Walk.fbx  animationType=Human  Avatar=有效  Humanoid✔
 [P22] ✔ Running.fbx  animationType=Human  Avatar=有效  Humanoid✔
 
-[P22] 改了 4 个文件，Avatar 有效 4 / 4
+[P22] 改了 0 个文件，Avatar 有效 4 / 4，Loop Time 打开 3 / 3
 [P22] ===== 结束 =====

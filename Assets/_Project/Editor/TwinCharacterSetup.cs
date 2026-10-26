@@ -331,24 +331,48 @@ namespace SchoolTwin.EditorTools
         }
 
         /// <summary>
-        /// 把某个 FBX 里的动画片段设成循环。返回 true = 本来就要改并且改成功了。
+        /// 把某个 FBX 里的动画片段设成循环，并且**真正写进 .meta**。
+        /// 返回 true = 本来要改并且改成功了。
         ///
         /// 【为什么必须做】Unity 导入 Mixamo 动画时 `Loop Time` 默认是**关**的，
         /// 片段播一遍就停在最后一帧。Idle 停住碰巧看着像"站着"，
         /// Walk 停住就是"人滑着走、腿不动" —— 2026-10-23 实测踩过。
+        ///
+        /// 【2026-10-26 二次踩坑：上一版修法根本没持久化】
+        /// 上一版用的是 `AnimationUtility.SetAnimationClipSettings(clip, st)`，
+        /// 它只改**内存里那个 AnimationClip 对象**，不写 `ModelImporter` 的覆盖项，
+        /// 所以 `.meta` 里 `clipAnimations` 一直是空的。
+        /// 只要 FBX 被重新导入一次（Unity 重启 / Library 重建 / 批处理跑一遍），
+        /// 设置就回退成默认「不循环」，症状原样复现 —— 用户会说"这个 bug 又回来了"。
+        ///
+        /// 正确做法：改 `ModelImporter.clipAnimations` 再 `SaveAndReimport()`，
+        /// 这样 `.meta` 里会落下 `loopTime: 1`，重导入多少次都不会丢。
         /// </summary>
         private static bool EnsureLoop(string path)
         {
-            AnimationClip clip = FindClip(path);
-            if (clip == null) return false;
+            ModelImporter imp = AssetImporter.GetAtPath(path) as ModelImporter;
+            if (imp == null) return false;
+            if (!imp.importAnimation) return false;
 
-            AnimationClipSettings st = AnimationUtility.GetAnimationClipSettings(clip);
-            if (st.loopTime) return false;
+            // 还没建过覆盖项时，先拿「自动生成的那份」当底，再改成循环
+            ModelImporterClipAnimation[] clips = imp.clipAnimations;
+            if (clips == null || clips.Length == 0) clips = imp.defaultClipAnimations;
+            if (clips == null || clips.Length == 0) return false;
 
-            st.loopTime = true;
-            AnimationUtility.SetAnimationClipSettings(clip, st);
-            EditorUtility.SetDirty(clip);
-            AssetDatabase.SaveAssets();
+            bool changed = false;
+            for (int i = 0; i < clips.Length; i++)
+            {
+                if (clips[i] == null) continue;
+                if (!clips[i].loopTime)
+                {
+                    clips[i].loopTime = true;
+                    changed = true;
+                }
+            }
+            if (!changed) return false;   // 已经是循环，不用重导入
+
+            imp.clipAnimations = clips;
+            imp.SaveAndReimport();        // ← 这一句才会落到 .meta
             return true;
         }
 
