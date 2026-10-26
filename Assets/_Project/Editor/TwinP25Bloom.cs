@@ -167,8 +167,20 @@ namespace SchoolTwin.EditorTools
             volume.isGlobal = true;
             volume.priority = 10f;
             volume.weight = 1f;
-            volume.profile = profile;
+            // ⚠️ 必须写 `sharedProfile`，不能写 `profile`。
+            //    PPS v2 的 `PostProcessVolume.profile` 是**运行时克隆**的只读入口
+            //    （getter 会 Instantiate 一份），写它不会序列化进场景 ——
+            //    场景里会留下 `sharedProfile: {fileID: 0}`，Bloom 静默失效、日志却全部成功。
+            volume.sharedProfile = profile;
             EditorUtility.SetDirty(volume);
+
+            // 自检：`sharedProfile` 是唯一会存进场景的字段。
+            // 它为空 = Bloom 完全没生效，但前面每一步日志都会是"✔"，极难发现。
+            if (volume.sharedProfile == null)
+                sb.AppendLine("[P25] ✘ Volume.sharedProfile 没设上 —— Bloom 不会生效");
+            else
+                sb.AppendLine("[P25] ✔ Volume.sharedProfile = " +
+                              AssetDatabase.GetAssetPath(volume.sharedProfile));
 
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             bool saved = EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
