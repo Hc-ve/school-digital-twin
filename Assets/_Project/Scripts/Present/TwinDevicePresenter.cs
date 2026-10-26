@@ -1767,11 +1767,43 @@ namespace SchoolTwin.Present
             string zone = anchor.Zone;
             bool hasBounds = !string.IsNullOrEmpty(zone) && TwinRoomBounds.Has(zone);
 
+            // 【P26】主脑排除：`PC/Room_01` 只接管**除主脑之外**的显示器。
+            //
+            // 为什么要这一步：拆点之前 `Room_01` 代表整间 19 台；拆出
+            // `PC/Master_01` 之后，如果两个点位都按「材质名 + 分区」收集，
+            // 它们会**抢同一批 19 台** —— 点「普通开机」也会 19 台全亮，
+            // 三种开机模式就完全没区别了。
+            //
+            // 用 **Transform 引用**排除，不用「离锚点最近的那台」：
+            // 显示器是等距排列的，按距离判会随锚点坐标微调而漂移，
+            // 出现"这次排除对了、下次排错了"这种没法复现的问题。
+            Transform masterT = null;
+            if (string.Equals(anchor.TwinId, "ClassComputer/PC/Room_01", StringComparison.Ordinal))
+            {
+                TwinRuntime rt = TwinRuntime.Instance;
+                TwinAnchor masterA = null;
+                if (rt != null && rt.Registry != null &&
+                    rt.Registry.TryGet("ClassComputer/PC/Master_01", out masterA) && masterA != null)
+                {
+                    masterT = masterA.transform;
+                }
+                if (masterT == null)
+                {
+                    Debug.LogWarning("[TwinPresent] 找不到主脑锚点「ClassComputer/PC/Master_01」——" +
+                                     "「" + anchor.TwinId + "」这次会接管**包括主脑在内**的全部显示器，" +
+                                     "「普通开机」会变成和「联动开机」一样。请跑菜单 P26 ① 给主脑挂锚点。");
+                }
+            }
+
             for (int i = 0; i < all.Length; i++)
             {
                 Renderer r = all[i];
                 if (r == null || r.sharedMaterial == null) continue;
                 if (!r.sharedMaterial.name.StartsWith("Monitor04", StringComparison.Ordinal)) continue;
+
+                // 主脑那台归 `PC/Master_01` 管，这里跳过
+                if (masterT != null &&
+                    (r.transform == masterT || r.transform.IsChildOf(masterT))) continue;
 
                 if (hasBounds)
                 {
@@ -1877,10 +1909,29 @@ namespace SchoolTwin.Present
         [Tooltip("幕布点亮时的自发光颜色。投影出来的画面偏冷白")]
         [SerializeField] private Color _screenCanvasEmission = new Color(0.55f, 0.60f, 0.66f, 1f);
 
+        // ---- 【P26】投影光束 ----
+        // 只有幕布亮、投影仪不"打光"的话，看起来像一块自己会亮的白板，
+        // 不像"有台机器在往上面投"。补两样：
+        //   ① 一盏聚光灯（灯罩朝幕布）—— 让幕布周围真的被照亮
+        //   ② 一段锥形光束网格（加法混合）—— 机房那种"空气里有光柱"的感觉
+        [Tooltip("投影光束的聚光灯强度。0 = 不打光，只亮幕布")]
+        [SerializeField] private float _beamIntensity = 1.6f;
+
+        [Tooltip("光束颜色（偏冷白，和幕布一致）")]
+        [SerializeField] private Color _beamColor = new Color(0.80f, 0.88f, 1.00f, 1f);
+
+        [Tooltip("光束网格的透明度。0 = 不画光柱，只留聚光灯")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _beamConeAlpha = 0.16f;
+
         private sealed class ProjectorVisual
         {
             public Renderer Canvas;
             public Material CanvasMaterial;
+            /// <summary>【P26】朝幕布的聚光灯；光束关掉时为 null。</summary>
+            public Light Beam;
+            /// <summary>【P26】可见光柱的网格物体；不画光柱时为 null。</summary>
+            public GameObject BeamCone;
             public bool HasApplied;
             public bool IsOn;
         }
@@ -1910,6 +1961,11 @@ namespace SchoolTwin.Present
 
             if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
                 v.CanvasMaterial.SetColor(EmissionId, on ? _screenCanvasEmission : Color.black);
+
+            // 【P26】光束跟着开关走：聚光灯改强度（不改 enabled，避免每帧重建光照），
+            // 光柱网格直接显隐（它只是个面片，开关一次没有开销）。
+            if (v.Beam != null) v.Beam.intensity = on ? _beamIntensity : 0f;
+            if (v.BeamCone != null && v.BeamCone.activeSelf != on) v.BeamCone.SetActive(on);
         }
 
         /// <summary>
@@ -1978,9 +2034,130 @@ namespace SchoolTwin.Present
             v.Canvas = canvas;
             v.CanvasMaterial = variant;
 
+            // 【P26】投影"打光"：一盏朝幕布的聚光灯 + 一段可见光柱
+            v.Beam = BuildProjectorBeam(anchor.transform, canvas.bounds);
+            v.BeamCone = BuildProjectorBeamCone(anchor.transform, canvas.bounds);
+            if (v.BeamCone != null) v.BeamCone.SetActive(false);   // 开机时才显形
+
             Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」接管幕布：" + canvas.name +
-                      "（房间节点 " + room.name + "）");
+                      "（房间节点 " + room.name + "，聚光灯=" + (v.Beam != null ? "有" : "无") +
+                      "，光柱=" + (v.BeamCone != null ? "有" : "无") + "）");
             return v;
+        }
+
+        /// <summary>
+        /// 【P26】投影仪 → 幕布的一盏聚光灯。
+        ///
+        /// 只有幕布自己发光的话，看起来像"一块自己会亮的白板"，
+        /// 不像"有台机器在往上面投"。补一盏聚光灯，幕布周围的地面/墙才会真的被照亮，
+        /// 那才是"打光"的观感。
+        ///
+        /// 张角按幕布尺寸算：`2 × atan(半宽 / 距离)`，再夹到 [10°, 120°]。
+        /// 用 `ForcePixel`：内置前向渲染逐像素灯默认上限 4 盏，教室里本来就有好几盏，
+        /// Auto 模式下这盏会被降级成顶点光（打在墙面这种大网格上几乎看不出亮度）。
+        /// </summary>
+        private Light BuildProjectorBeam(Transform lens, Bounds canvasBounds)
+        {
+            if (_beamIntensity <= 0.001f || lens == null) return null;
+
+            Vector3 dir = canvasBounds.center - lens.position;
+            float dist = dir.magnitude;
+            if (dist < 0.3f) return null;
+
+            GameObject go = new GameObject("TwinProjectorBeam");
+            go.transform.SetParent(lens, false);
+            go.transform.position = lens.position;
+            go.transform.rotation = Quaternion.LookRotation(dir.normalized, Vector3.up);
+
+            float halfSpan = Mathf.Max(canvasBounds.extents.x, canvasBounds.extents.y);
+            float angle = 2f * Mathf.Atan2(halfSpan, dist) * Mathf.Rad2Deg;
+
+            Light l = go.AddComponent<Light>();
+            l.type = LightType.Spot;
+            l.color = _beamColor;
+            l.spotAngle = Mathf.Clamp(angle * 1.15f, 10f, 120f);   // 留一点余量罩住幕布
+            l.range = dist * 1.2f;
+            l.intensity = 0f;                                       // 由 SyncProjector 决定
+            l.shadows = LightShadows.None;                          // 投影仪不投影阴影，也省开销
+            l.renderMode = LightRenderMode.ForcePixel;
+            return l;
+        }
+
+        /// <summary>
+        /// 【P26】可见光柱：一个从镜头张到幕布的锥形网格，加法混合、边缘渐隐。
+        ///
+        /// 内置管线没有体积光，这是最接近"空气里有光柱"的廉价做法：
+        /// 顶点色从镜头端 alpha=1 渐变到幕布端 alpha=0，用粒子加法着色器乘上去。
+        ///
+        /// 拿不到着色器就**安静跳过**（只是没有光柱，聚光灯照常工作），不报错。
+        /// </summary>
+        private GameObject BuildProjectorBeamCone(Transform lens, Bounds canvasBounds)
+        {
+            if (_beamConeAlpha <= 0.001f || lens == null) return null;
+
+            Shader sh = Shader.Find("Legacy Shaders/Particles/Additive");
+            if (sh == null)
+            {
+                Debug.Log("[TwinPresent] 找不到 `Legacy Shaders/Particles/Additive`，" +
+                          "投影光柱不画了（聚光灯照常工作）。");
+                return null;
+            }
+
+            Vector3 dir = canvasBounds.center - lens.position;
+            float dist = dir.magnitude;
+            if (dist < 0.3f) return null;
+
+            float radius = Mathf.Max(canvasBounds.extents.x, canvasBounds.extents.y) * 1.15f;
+
+            const int seg = 16;
+            Vector3[] verts = new Vector3[seg + 2];
+            Color[] cols = new Color[seg + 2];
+            int[] tris = new int[seg * 3];
+
+            verts[0] = Vector3.zero;                       // 顶点（镜头）
+            cols[0] = new Color(1f, 1f, 1f, 1f);           // 镜头端最亮
+            for (int i = 0; i < seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg;
+                verts[i + 1] = new Vector3(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius, dist);
+                cols[i + 1] = new Color(1f, 1f, 1f, 0f);   // 幕布端渐隐
+            }
+            verts[seg + 1] = verts[0];                     // 补一个顶点，方便画侧面
+            cols[seg + 1] = cols[0];
+
+            for (int i = 0; i < seg; i++)
+            {
+                tris[i * 3] = 0;
+                tris[i * 3 + 1] = i + 1;
+                tris[i * 3 + 2] = (i + 1) % seg + 1;
+            }
+
+            Mesh mesh = new Mesh();
+            mesh.name = "TwinBeamCone";
+            mesh.vertices = verts;
+            mesh.colors = cols;
+            mesh.triangles = tris;
+            mesh.RecalculateBounds();
+
+            GameObject go = new GameObject("TwinProjectorBeamCone");
+            go.transform.SetParent(lens, false);
+            go.transform.position = lens.position;
+            go.transform.rotation = Quaternion.LookRotation(dir.normalized, Vector3.up);
+
+            MeshFilter mf = go.AddComponent<MeshFilter>();
+            mf.sharedMesh = mesh;
+
+            Material mat = new Material(sh);
+            mat.name = "TwinBeamConeMat";
+            if (mat.HasProperty("_TintColor"))
+                mat.SetColor("_TintColor", new Color(_beamColor.r, _beamColor.g, _beamColor.b, _beamConeAlpha));
+
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            return go;
         }
 
         // ---------------------------------------------------------------- 上课铃（P19）
