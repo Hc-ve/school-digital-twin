@@ -164,8 +164,13 @@ namespace SchoolTwin.EditorTools
             // 指标范围与 `ClassComputer/PC/Room_01` 保持一致。
             if (string.Equals(cat, "PC", StringComparison.OrdinalIgnoreCase))
             {
-                p.Metrics.Add(Metric("Power", "W", 0f, 3000f, 0f, 2600f, 0f, 2900f));
-                p.Metrics.Add(Metric("OnCount", "台", 0f, 30f, 0f, 30f, 0f, 30f));
+                // ⚠️ 这里按「**单台**电脑」给量程（300W = 1 台 × 180W 留余量）。
+                // `MockDeviceAgent` 会用 `Power.Max / 180` 反推台数，
+                // 所以量程决定了卡片上显示"几台"——给 3000 会显示成 16 台。
+                // 机房那种"整间电脑"的点位（`PC/Room_01`）在目录里已有自己的 3000W 量程，
+                // 不会被这里影响（本工具只补缺失点位，不覆盖已有的）。
+                p.Metrics.Add(Metric("Power", "W", 0f, 300f, 0f, 260f, 0f, 290f));
+                p.Metrics.Add(Metric("OnCount", "台", 0f, 1f, 0f, 1f, 0f, 1f));
                 p.Metrics.Add(Metric("CPULoad", "%", 0f, 100f, 0f, 85f, 0f, 98f));
                 return p;
             }

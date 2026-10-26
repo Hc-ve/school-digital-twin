@@ -261,13 +261,18 @@ namespace SchoolTwin.Command
                     break;
 
                 case "PC":
-                    // 机房默认「10 台都开着」：10 × 180W = 1800W（量程 0~3000，警告线 2600）。
-                    // 这个值必须和 ApplyState 里「开」的取值一致，否则按 Play 后会看到
-                    // 功率从 1800 跳成别的数 —— 那会被误当成"有人在操作"。
-                    SetState(twinId, "Power", 1800f);
-                    SetState(twinId, "OnCount", 10f);
+                {
+                    // 【P26】台数按点位自己的功率量程推（`Power.Max / 180W`）：
+                    // 机房整间 3000W → 16 台，主脑单台 300W → 1 台。
+                    // 原来硬编码「10 台 / 1800W」，主脑卡片上显示"10 台"，一眼就错。
+                    // 这个值必须和 `ApplyState` 里「开」的取值一致，否则按 Play 后会看到
+                    // 功率跳变 —— 那会被误当成"有人在操作"。
+                    float units = PcUnitCount(model);
+                    SetState(twinId, "Power", units * 180f);
+                    SetState(twinId, "OnCount", units);
                     seeded++;
                     break;
+                }
 
                 case "Projector":
                     // 【P19】默认「开着」。两台投影仪都在教室里、和灯一样是上课就开的东西。
@@ -410,6 +415,27 @@ namespace SchoolTwin.Command
 
         // ---------------------------------------------------------------- 执行
 
+        /// <summary>
+        /// 【P26】这个 PC 点位代表几台电脑。
+        ///
+        /// 判据：**量程 ≤ 600W 视为「单台机器」**，按 `Power.Max / 180` 向下取整推台数。
+        ///   · 主脑（量程 300W）→ **1 台**，开 = 180W
+        ///   · 机房整间（量程 3000W）→ 走下面的历史分支，仍是 **10 台 / 1800W**
+        ///
+        /// 【为什么不给整间也按量程推】3000W / 180 = 16 台 = 2880W，
+        /// 而 `PC/Room_01` 的警告线是 **2600W** —— 一进 Play 就会报假警。
+        /// 要改成 16 台，得同时把该点位的 WarnHigh / AlarmHigh 一起抬上去，
+        /// 那是另一个改动，不混在这里。取不到量程同样退回 10 台。
+        /// </summary>
+        private static float PcUnitCount(TwinDeviceModel model)
+        {
+            if (model == null) return 10f;
+            TwinPropertyDefinition prop = model.FindProperty("Power");
+            if (prop == null || prop.Max <= 1f) return 10f;
+            if (prop.Max > 600f) return 10f;                 // 整间点位：沿用历史值
+            return Mathf.Max(1f, Mathf.FloorToInt(prop.Max / 180f));
+        }
+
         private void ApplyState(string twinId, CommandAction action, float value)
         {
             TwinDeviceModel model = ResolveModel(twinId);
@@ -427,7 +453,8 @@ namespace SchoolTwin.Command
                         case "AC": watt = on ? 1.2f : 0f; break;      // 量程 0~3.5kW，警告线 3
                         // 量程 0~3000W（整间 10 台 × 300W）。开 = 10 台 × 180W = 1800W，
                         // 与 SeedInitialState 的初值必须一致，否则「点开」会看起来像跳变。
-                        case "PC": watt = on ? 1800f : 0f; break;
+                        // 【P26】台数按点位自己的功率量程推，见 PcUnitCount
+                        case "PC": watt = on ? PcUnitCount(model) * 180f : 0f; break;
                         // 【P19】投影仪：量程 0~400W，开 = 310W（灯泡 + 风扇 + 信号板）
                         case "Projector": watt = on ? 310f : 0f; break;
                         default: watt = on ? 1f : 0f; break;
@@ -442,7 +469,7 @@ namespace SchoolTwin.Command
 
                     // 电脑同理：只改总功率不改开机台数，卡片上会写「已关」而「开机 10 台」。
                     if (string.Equals(type, "PC", StringComparison.Ordinal))
-                        SetState(twinId, "OnCount", on ? 10f : 0f);
+                        SetState(twinId, "OnCount", on ? PcUnitCount(model) : 0f);
                     break;
                 }
 

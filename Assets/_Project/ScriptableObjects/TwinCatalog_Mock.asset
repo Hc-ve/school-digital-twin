@@ -1609,3 +1609,46 @@ MonoBehaviour:
       AlarmHigh: 120
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: ClassComputer/PC/Master_01
+    DisplayName: "\u673A\u623F\u4E3B\u8111"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 3000
+      WarnLow: 0
+      WarnHigh: 2600
+      AlarmLow: 0
+      AlarmHigh: 2900
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 30
+      WarnLow: 0
+      WarnHigh: 30
+      AlarmLow: 0
+      AlarmHigh: 30
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
