@@ -385,6 +385,9 @@ namespace SchoolTwin.Present
             // 10Hz 推进一次的话，1.2 秒的开门只有 12 个采样点，看着像卡了一下卡了一下。
             TickDoors(Time.deltaTime);
 
+            // 【P26】屏幕视频：必须逐帧合成，不能挂在 0.1 秒的轮询里（会像幻灯片）
+            TickScreenVideos();
+
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + Mathf.Max(0.02f, _pollInterval);
 
@@ -1718,12 +1721,36 @@ namespace SchoolTwin.Present
         [Tooltip("屏幕遮罩的内缩像素。往内收一点，避免屏幕边框被一起点亮")]
         [SerializeField] private float _screenMaskInset = 6f;
 
+        // ---- 【P26】屏幕视频 ----
+        // 有视频素材时，屏幕改成「播视频」而不是「亮一块纯色」。
+        // 素材放 `Assets/StreamingAssets/PC/`，路径相对该目录。
+        // 找不到文件就安静退回纯色模式 —— 素材是后补的，不该因为缺文件报错。
+        [Tooltip("主脑屏幕的开机视频（相对 StreamingAssets/PC/）。留空 = 不启用视频")]
+        [SerializeField] private string _masterBootVideo = "master/boot.mp4";
+
+        [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
+        [SerializeField] private int _screenVideoAtlasSize = 2048;
+
+        /// <summary>屏幕矩形在**图集 UV** 里的范围（左下 / 右上）。和 `BuildScreenMask` 用同一套常量。</summary>
+        private void ScreenUvRect(out Vector2 min, out Vector2 max)
+        {
+            float inset = Mathf.Max(0f, _screenMaskInset);
+            float u0 = (ScreenPxLeft + inset) / MaskTexWidth;
+            float u1 = (ScreenPxRight - inset) / MaskTexWidth;
+            float v0 = 1f - (ScreenPxBottom - inset) / MaskTexHeight;
+            float v1 = 1f - (ScreenPxTop + inset) / MaskTexHeight;
+            min = new Vector2(u0, v0);
+            max = new Vector2(u1, v1);
+        }
+
         private sealed class ScreenVisual
         {
             /// <summary>这台点位管的所有显示器（机房是 19 台）。</summary>
             public Renderer[] Renderers;
             /// <summary>运行时材质副本，带 `_EmissionMap` 遮罩。19 台共用这一个。</summary>
             public Material Material;
+            /// <summary>【P26】视频载体。为 null 或 `!HasVideo` 时退回纯色自发光。</summary>
+            public PcScreenPlayer Player;
             /// <summary>见 `LampVisual.HasApplied`：不能只判 IsOn，否则「第一次就是关」会早退（99 号清单第 20 条）。</summary>
             public bool HasApplied;
             public bool IsOn;
@@ -1841,8 +1868,27 @@ namespace SchoolTwin.Present
             v.Renderers = hits.ToArray();
             v.Material = variant;
 
+            // 【P26】主脑屏幕接视频：把 `_EmissionMap` 从静态遮罩换成"视频合成 RT"。
+            // RT 里屏幕矩形内是画面、其余纯黑，所以边框不会被点亮。
+            // 找不到素材时 `HasVideo = false`，这块屏退回纯色自发光，不影响其它逻辑。
+            if (!string.IsNullOrEmpty(_masterBootVideo) &&
+                string.Equals(anchor.TwinId, "ClassComputer/PC/Master_01", StringComparison.Ordinal))
+            {
+                Vector2 uvMin, uvMax;
+                ScreenUvRect(out uvMin, out uvMax);
+                v.Player = PcScreenPlayer.Create("Master", _masterBootVideo, uvMin, uvMax,
+                                                 variant, _screenEmission, anchor.transform,
+                                                 _screenVideoAtlasSize);
+                if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                {
+                    variant.SetTexture("_EmissionMap", v.Player.ScreenRT);
+                    variant.SetColor(EmissionId, Color.black);   // 先黑着，等 ApplyScreen 开机
+                }
+            }
+
             Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」接管了 " + hits.Count +
-                      " 台显示器（分区 " + (string.IsNullOrEmpty(zone) ? "未指定" : zone) + "）");
+                      " 台显示器（分区 " + (string.IsNullOrEmpty(zone) ? "未指定" : zone) +
+                      (v.Player != null && v.Player.HasVideo ? "，屏幕视频=开" : "") + "）");
             return v;
         }
 
@@ -1897,10 +1943,29 @@ namespace SchoolTwin.Present
             v.HasApplied = true;
             v.IsOn = on;
 
+            // 【P26】有视频的屏：开关与自发光都交给播放器统一管
+            // （它要负责"播/停 + 清黑 + 自发光颜色"三件事，拆开容易漏）
+            if (v.Player != null && v.Player.HasVideo)
+            {
+                v.Player.SetOn(on);
+                return;
+            }
+
             if (v.Material == null) return;
             if (!v.Material.HasProperty(EmissionId)) return;
 
             v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
+        }
+
+        /// <summary>【P26】每帧把视频合成进各屏的 RT。挂在这里是因为表现层已经有一个 Update。</summary>
+        private void TickScreenVideos()
+        {
+            if (_screens.Count == 0) return;
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                ScreenVisual v = kv.Value;
+                if (v != null && v.Player != null) v.Player.Tick();
+            }
         }
 
         // ---------------------------------------------------------------- 投影仪（P19）
