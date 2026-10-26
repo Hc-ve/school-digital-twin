@@ -1477,3 +1477,135 @@ MonoBehaviour:
       AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: SportRoom3/Light/Main_01
+    DisplayName: "\u4F53\u80B2\u5668\u6750\u5BA43 \u4E3B\u7167\u660E"
+    Zone: SportRoom3
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportRoom2/Light/Main_01
+    DisplayName: "\u4F53\u80B2\u5668\u6750\u5BA42 \u4E3B\u7167\u660E"
+    Zone: SportRoom2
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: SportHall/Light/Main_01
+    DisplayName: "\u4F53\u80B2\u9986 \u4E3B\u7167\u660E"
+    Zone: SportHall
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ActZal/Light/Main_01
+    DisplayName: "\u793C\u5802 \u4E3B\u7167\u660E"
+    Zone: ActZal
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0

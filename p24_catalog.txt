@@ -1,0 +1,10 @@
+﻿[P24] ===== 同步点位目录 =====
+[P24] 目录现有 48 个点位
+[P24] ✔ 补入 SportRoom3/Light/Main_01（Light，2 个指标）
+[P24] ✔ 补入 SportRoom2/Light/Main_01（Light，2 个指标）
+[P24] ✔ 补入 SportHall/Light/Main_01（Light，2 个指标）
+[P24] ✔ 补入 ActZal/Light/Main_01（Light，2 个指标）
+
+[P24] 已在目录 33，缺 4，非白名单 21，分类不支持 0
+[P24] 目录已保存，现有 52 个点位
+[P24] ===== 结束 =====
