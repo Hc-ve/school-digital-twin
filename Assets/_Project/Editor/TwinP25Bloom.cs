@@ -106,9 +106,9 @@ namespace SchoolTwin.EditorTools
                 sb.AppendLine("[P25] · 相机已有 PostProcessLayer");
             }
 
-            layer.resources = res;
-            // volumeLayer 取「全部」：全局 Volume 放在哪个层都能被找到，
-            // 免得用户还得单独配一个 PostProcessing 层、再改相机 Culling Mask。
+            // ⚠️ PPS v2 的 `m_Resources` 是**私有且 [SerializeField]** 的，没有公开的 `resources` 字段，
+            //    只能通过 `Init(resources)` 赋值 —— 赋值后因为带 [SerializeField]，会被存进场景。
+            //    （PPS v1 才有公开的 `layer.resources`，写错会报 CS1061。）
             layer.volumeLayer = ~0;
             layer.volumeTrigger = cam.transform;
             layer.antialiasingMode = PostProcessLayer.Antialiasing.None;   // 不改原有抗锯齿策略
@@ -138,9 +138,11 @@ namespace SchoolTwin.EditorTools
             bloom.intensity.Override(0.85f);   // 光晕强度
             bloom.threshold.Override(0.90f);   // 只抓亮度 >0.9 的像素（灯管 1.3、天花板 0.7 不受影响）
             bloom.softKnee.Override(0.60f);    // 软膝：避免光晕边缘出现硬边
-            bloom.scatter.Override(0.70f);     // 扩散范围
+            // PPS v2 里「扩散范围」叫 `diffusion`（Range 1~10，默认 7），不是 v1 的 `scatter`
+            bloom.diffusion.Override(7f);
+            // 「高质量过滤」在 v2 里是 `fastMode` 的反面
+            bloom.fastMode.Override(false);
             bloom.clamp.Override(32f);
-            bloom.highQualityFiltering.Override(true);
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
 
@@ -173,7 +175,7 @@ namespace SchoolTwin.EditorTools
 
             sb.AppendLine();
             sb.AppendLine("[P25] 场景保存：" + (saved ? "成功" : "失败"));
-            sb.AppendLine("[P25] 参数：强度 0.85 / 阈值 0.90 / 软膝 0.60 / 扩散 0.70");
+            sb.AppendLine("[P25] 参数：强度 0.85 / 阈值 0.90 / 软膝 0.60 / 扩散 7（高质量过滤开）");
             sb.AppendLine("[P25] 灯管当前 emission=0.60 + 烘焙光 0.7 → 总亮度 1.3，会被 Bloom 抓到。");
             sb.AppendLine("       觉得光晕太强 → 调低 PPS_Bloom 的 Intensity；太弱 → 调高。");
             sb.AppendLine("[P25] ===== 结束 =====");
