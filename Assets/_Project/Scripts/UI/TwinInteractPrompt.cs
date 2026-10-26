@@ -321,7 +321,19 @@ namespace SchoolTwin.UI
                 TwinValue v;
                 bool on = has && anchor.TryGetValue("Power", out v) && v.Value >= 0.5f;
                 c.Value = on ? 0f : 1f;
-                if (string.IsNullOrEmpty(label)) c.Label = on ? "关灯" : "开灯";
+
+                if (string.IsNullOrEmpty(label))
+                {
+                    // 【P26】文案按设备类型走。原来一律"开灯/关灯"，
+                    // 电脑点位弹出来写"开灯"，一眼就错。
+                    string type = model.Type;
+                    if (string.Equals(type, "PC", StringComparison.Ordinal))
+                        c.Label = on ? "关机" : "开机";
+                    else if (string.Equals(type, "Projector", StringComparison.Ordinal))
+                        c.Label = on ? "关闭投影" : "打开投影";
+                    else
+                        c.Label = on ? "关灯" : "开灯";
+                }
             }
 
             if (!string.IsNullOrEmpty(label)) c.Label = label;

@@ -158,6 +158,23 @@ namespace SchoolTwin.EditorTools
                 p.Metrics.Add(Metric("Power", "kW", 0f, 3.5f, 0f, 3f, 0f, 3.5f));
                 return p;
             }
+            // 【P26】补 PC —— 之前漏了这一类，导致新加的 `ClassComputer/PC/Master_01`
+            // 被"分类不支持"跳过，进不了目录 → 数据源从不给它发样本 →
+            // 点「开机」命令发得出去、回读永远不变 → `Failed(执行了但状态没变)`。
+            // 指标范围与 `ClassComputer/PC/Room_01` 保持一致。
+            if (string.Equals(cat, "PC", StringComparison.OrdinalIgnoreCase))
+            {
+                p.Metrics.Add(Metric("Power", "W", 0f, 3000f, 0f, 2600f, 0f, 2900f));
+                p.Metrics.Add(Metric("OnCount", "台", 0f, 30f, 0f, 30f, 0f, 30f));
+                p.Metrics.Add(Metric("CPULoad", "%", 0f, 100f, 0f, 85f, 0f, 98f));
+                return p;
+            }
+            if (string.Equals(cat, "Projector", StringComparison.OrdinalIgnoreCase))
+            {
+                p.Metrics.Add(Metric("Power", "W", 0f, 400f, 0f, 380f, 0f, 400f));
+                p.Metrics.Add(Metric("LampHours", "h", 0f, 10000f, 0f, 9000f, 0f, 9800f));
+                return p;
+            }
             return null;
         }
 
