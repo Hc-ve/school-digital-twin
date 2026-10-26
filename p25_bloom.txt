@@ -1,10 +1,11 @@
 ﻿[P25] ===== 配置 Bloom =====
 [P25] PostProcessResources：Packages/com.unity.postprocessing/PostProcessing/PostProcessResources.asset
 [P25] · 相机 HDR 已开
-[P25] ✔ 相机已加 PostProcessLayer
-[P25] ✔ 新建配置 Assets/_Project/ScriptableObjects/PPS_Bloom.asset
+[P25] · 相机已有 PostProcessLayer
+[P25] · 复用配置 Assets/_Project/ScriptableObjects/PPS_Bloom.asset
 [P25] ✔ 配置里加了 Bloom
-[P25] ✔ 场景里新建全局 Volume「[PPS] Bloom」
+[P25] · 场景里已有 Volume「[PPS] Bloom」
+[P25] ✔ Volume.sharedProfile = Assets/_Project/ScriptableObjects/PPS_Bloom.asset
 
 [P25] 场景保存：成功
 [P25] 参数：强度 0.85 / 阈值 0.90 / 软膝 0.60 / 扩散 7（高质量过滤开）
