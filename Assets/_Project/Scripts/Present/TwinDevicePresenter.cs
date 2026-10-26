@@ -85,6 +85,9 @@ namespace SchoolTwin.Present
         [Range(0.2f, 4f)]
         [SerializeField] private float _doorSwingSeconds = 1.2f;
 
+        [Tooltip("双开门里「可动扇」的铰链在哪一侧。勾上 = 靠门洞中间（靠近另一片），取消 = 靠外侧。")]
+        [SerializeField] private bool _hingeTowardCenter = true;
+
         // ---------------------------------------------------------------- 内部
 
         /// <summary>
@@ -226,8 +229,27 @@ namespace SchoolTwin.Present
             /// <summary>当前角度（逐帧朝目标推进）。</summary>
             public float Angle;
 
+            /// <summary>
+            /// `Panel` 在门叶**本地坐标系**里的方向。
+            ///
+            /// 【为什么需要】`Panel` 是采集那一刻的**世界**方向。门叶一旦被补了铰链枢轴、
+            /// 或 `BaseRotation` 被调整过，`AngleAxis(Angle) * Panel` 就不再等于真实指向 ——
+            /// 必须用 `T.rotation * PanelLocal` 才是当前真实朝向。
+            /// 2026-10-26 就是拿这个错值判断了两轮，记着。
+            /// </summary>
+            public Vector3 PanelLocal;
+
+            /// <summary>关门时门扇应该指向的方向（世界），探针用来直接比对。</summary>
+            public Vector3 ClosedDir;
+
             /// <summary>冻结标记：已经贴平墙面的那片，进出都不动它。</summary>
             public bool Frozen;
+
+            /// <summary>探针：上一次记录过的目标角，用来"只在第一次到位时打一条"。</summary>
+            public float LoggedTarget = float.NaN;
+
+            /// <summary>探针：还没到位时每秒记一条，用来判断「角度有没有在推进、卡在哪」。</summary>
+            public float NextProbe;
 
         }
 
@@ -817,10 +839,39 @@ namespace SchoolTwin.Present
                         float leafSpeed = leafSpan / Mathf.Max(0.2f, _doorSwingSeconds);
 
                         float leafNext = Mathf.MoveTowards(leaf.Angle, leafTarget, leafSpeed * step);
-                        if (Mathf.Abs(leafNext - leaf.Angle) < 0.001f) continue;
+                        if (Mathf.Abs(leafNext - leaf.Angle) >= 0.001f)
+                        {
+                            leaf.Angle = leafNext;
+                            leaf.T.rotation = Quaternion.AngleAxis(leaf.Angle, Vector3.up) * leaf.BaseRotation;
+                        }
 
-                        leaf.Angle = leafNext;
-                        leaf.T.rotation = Quaternion.AngleAxis(leaf.Angle, Vector3.up) * leaf.BaseRotation;
+                        // 探针：卡住时每秒一条，到位那一刻一条。
+                        // 「关门没关上」这类问题只有靠"实际角度 + 停住时门扇指向"才能定位 ——
+                        // 只看截图分不清是"没转够"还是"转够了但方向不对"。
+                        if (Mathf.Abs(leaf.Angle - leafTarget) > 0.5f)
+                        {
+                            if (Time.unscaledTime >= leaf.NextProbe)
+                            {
+                                leaf.NextProbe = Time.unscaledTime + 1f;
+                                Debug.Log("[TwinDoor] " + kv.Key + " 片" + i + " 未到位 目标=" +
+                                          leafTarget.ToString("0.0") + "° 当前=" +
+                                          leaf.Angle.ToString("0.0") + "° 速度=" +
+                                          leafSpeed.ToString("0.0") + "°/s");
+                            }
+                        }
+                        else if (!Mathf.Approximately(leaf.LoggedTarget, leafTarget))
+                        {
+                            leaf.LoggedTarget = leafTarget;
+                            // 真实朝向 = 当前旋转 × 本地方向。
+                            // **不能**用 `AngleAxis(Angle) * Panel` —— Panel 是镜像前的世界方向，
+                            // 镜像过 BaseRotation 之后那个算法是错的（2026-10-26 踩过）。
+                            Vector3 nowPanel = leaf.T.rotation * leaf.PanelLocal;
+                            float err = Vector3.Angle(nowPanel, leaf.ClosedDir);
+                            Debug.Log("[TwinDoor] " + kv.Key + " 片" + i + " 到位 角=" +
+                                      leafTarget.ToString("0.0") + "° 门扇方向=" + Fmt(nowPanel) +
+                                      " 关门目标方向=" + Fmt(leaf.ClosedDir) +
+                                      " 与目标夹角=" + err.ToString("0.0") + "°");
+                        }
                     }
                     continue;   // 根节点不参与
                 }
@@ -942,7 +993,7 @@ namespace SchoolTwin.Present
             v.Angle = 0f;
             // 【双开门】根节点**不转**，只有没贴平墙面的那片门叶转（见 CollectDoorLeaves）。
             // 所以根节点自己的两个角度都置 0，避免 TickDoors 里两套逻辑打架。
-            v.Leaves = CollectDoorLeaves(t, wallDir);
+            v.Leaves = CollectDoorLeaves(t, wallDir, _hingeTowardCenter);
             if (v.Leaves != null)
             {
                 v.ClosedAngle = 0f;
@@ -978,7 +1029,8 @@ namespace SchoolTwin.Present
         /// 因为这扇门的出厂姿态是「左片关着、右片半开」，不是「两片都关」。
         /// 现在每片自己算：谁已经贴平墙面谁冻结，谁没贴平谁动。
         /// </summary>
-        private static DoorLeaf[] CollectDoorLeaves(Transform root, Vector3 wallDir)
+        private static DoorLeaf[] CollectDoorLeaves(Transform root, Vector3 wallDir,
+                                                    bool hingeTowardCenter)
         {
             if (root == null) return null;
 
@@ -1011,6 +1063,9 @@ namespace SchoolTwin.Present
                 }
                 leaf.Panel = panel;
                 leaf.Length = length;
+                // 世界方向 → 门叶本地方向。后面镜像 BaseRotation 之后，
+                // 只有 T.rotation * PanelLocal 才是真实朝向（见 PanelLocal 的注释）
+                leaf.PanelLocal = Quaternion.Inverse(leaf.BaseRotation) * panel;
 
                 // 两个「贴平墙面」的方向，正常情况下取离当前姿态更近的那个 ——
                 // 半开的门离「关」一定比离「反方向」近，所以这就是"顺手关上"的那个方向。
@@ -1036,6 +1091,7 @@ namespace SchoolTwin.Present
                     rule = "贴墙较近的那一侧（没找到门框）";
                 }
                 float closedAngle = Vector3.SignedAngle(panel, closedDir, Vector3.up);
+                leaf.ClosedDir = closedDir;   // 探针用：关门时门扇应该指向这里
 
                 // 已经贴平墙面（< 8°）→ 这片本来就是关的，冻结它，进出都不动。
                 leaf.Frozen = Mathf.Abs(closedAngle) < 8f;
@@ -1068,7 +1124,168 @@ namespace SchoolTwin.Present
                 return null;
             }
 
+            // ── 第二遍：双开门补「铰链枢轴」──────────────────────────────────
+            //
+            // 【为什么必须补】`DoorDouble.FBX` 的门叶网格是**以自身原点为中心**建模的
+            // （实测：X 跨度 -423.7 ~ +416.1mm，中心 -3.8mm ≈ 0，即原点在门叶正中间）。
+            // 所以直接绕 transform 原点转 = **绕门叶中心转**，视觉上就是
+            // 「轴心跑到门叶中间/另一侧去了」——2026-10-26 用户实测反馈。
+            //
+            // 对比：`Door07a`（教室/餐厅门）根节点本身就在铰链上，所以它一直是对的。
+            //
+            // 门叶没有子物体可以借位（`m_Children: []`，网格直接挂在门叶上），
+            // 所以只能在门轴上插一个空枢轴：枢轴放在**铰链边**，门叶挂到枢轴下。
+            // `SetParent(pivot, true)` 保持世界姿态 → 网格原地不动，静止姿态一点不变。
+            //
+            // 铰链在哪一侧：**离门洞中点最近的那条竖边**。
+            //
+            // 2026-10-26 用户指图确认：把手在外侧 → 外侧是自由边 → 铰链在内侧。
+            // 这扇"双开门"实际是「一片固定 + 一片可动」：
+            //   `DoorDouble0` 贴平墙面（closedAngle≈0）→ 被判定 Frozen，等于固定扇；
+            //   `DoorDouble` 才是真正开关的那片，铰链在靠固定扇的一侧。
+            //
+            // ⚠️ 不能按「原点偏移 off」判断要不要补枢轴：实测 `DoorDouble` 的原点
+            //    也落在某条边上（off > 0.05），但落在**自由边**上 —— 绕它转就是绕自由边转。
+            //    所以必须显式比较两条边离门洞中点的远近，再决定枢轴放哪。
+            if (leaves.Length >= 2)
+            {
+                Vector3 mid = Vector3.zero;
+                for (int i = 0; i < leaves.Length; i++) mid += leaves[i].T.position;
+                mid /= leaves.Length;
+                mid.y = 0f;
+
+                // 无条件打一条：这段代码到底有没有跑到，只能靠日志证明
+                Debug.Log("[TwinPresent] 双开门「" + root.name + "」铰链检查开始：片数=" +
+                          leaves.Length + " 门洞中点=" + Fmt(mid) +
+                          " 铰链朝=" + (hingeTowardCenter ? "门洞中间" : "外侧"));
+
+                for (int i = 0; i < leaves.Length; i++)
+                {
+                    DoorLeaf leaf = leaves[i];
+                    if (leaf.T == null) continue;
+
+                    if (leaf.Frozen)
+                    {
+                        Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」已贴平墙面（固定扇），不补枢轴");
+                        continue;
+                    }
+
+                    // 已经补过就别再来一次（翻倍会把枢轴越推越远）
+                    if (leaf.T.parent != null &&
+                        leaf.T.parent.name.EndsWith("_HingePivot", StringComparison.Ordinal))
+                    {
+                        Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」已有铰链枢轴，跳过");
+                        continue;
+                    }
+
+                    // ── 先算出这片门叶的**两条竖边**（世界坐标）─────────────
+                    // 门叶原点是落在网格中心还是落在某条边上，两种都要能处理：
+                    //   · off ≈ 0（原点在网格中心）→ 两条边各在 ±panel × 半宽
+                    //   · off > 0（原点已经在某条边上）→ 一条边就是原点，另一条在 panel × length
+                    // 注意 `length` 的定义（见 LeafPanelFromRenderers）：
+                    //   length = 2 × |网格中心 − 原点|，所以原点在边上时 length 正好是整片宽度。
+                    float off = LeafCenterOffset(leaf.T, groups[i]);
+                    Vector3 e0, e1;
+                    if (off < 0.05f)
+                    {
+                        float halfW = Mathf.Max(0.05f, leaf.Length * 0.5f);
+                        e0 = leaf.T.position - leaf.Panel * halfW;
+                        e1 = leaf.T.position + leaf.Panel * halfW;
+                    }
+                    else
+                    {
+                        e0 = leaf.T.position;
+                        e1 = leaf.T.position + leaf.Panel * Mathf.Max(0.05f, leaf.Length);
+                    }
+
+                    // ── 铰链边 = 离门洞中点**最近**的那条 ──────────────────
+                    // 依据：这扇"双开门"是「一片固定 + 一片可动」——
+                    //   `DoorDouble0` 贴平墙面被冻结 = 固定扇；
+                    //   可动扇的铰链就在靠固定扇的一侧（门洞中间），把手在外侧。
+                    // 常规双开门（铰链在相对外侧）把 `_hingeTowardCenter` 取消勾选即可。
+                    bool e0Near = (e0 - mid).sqrMagnitude <= (e1 - mid).sqrMagnitude;
+                    bool pickE0 = hingeTowardCenter ? e0Near : !e0Near;
+                    Vector3 hingePos = pickE0 ? e0 : e1;
+
+                    Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」原点偏移=" + off.ToString("0.000") +
+                              "m 边e0=" + Fmt(e0) + " 边e1=" + Fmt(e1) +
+                              " → 铰链取 " + (pickE0 ? "e0" : "e1") + " = " + Fmt(hingePos));
+
+                    // 原点本来就在铰链边上 → 不用补枢轴（但下面"镜像开门方向"照样要做）
+                    Vector3 shift = hingePos - leaf.T.position;
+                    shift.y = 0f;
+                    bool needPivot = shift.magnitude >= 0.05f;
+
+                    if (needPivot)
+                    {
+                        GameObject pivotGo = new GameObject(leaf.T.name + "_HingePivot");
+                        Transform pivot = pivotGo.transform;
+                        pivot.SetPositionAndRotation(hingePos, leaf.T.rotation);
+                        pivot.SetParent(leaf.T.parent, true);
+
+                        leaf.T.SetParent(pivot, true);   // worldPositionStays=true → 网格原地不动
+
+                        // BaseRotation 不用改：枢轴的世界旋转 == 门叶原来的世界旋转。
+                        // ClosedAngle 是**相对角度**，绕哪个点转不影响它，也不用改。
+                        leaf.T = pivot;
+                    }
+
+                    // ── 「开」= **模型原始姿态**，一点不动 ──────────────────────
+                    // 2026-10-26 用户明确要求：门默认就是模型建好的样子（两片朝走廊开着），
+                    // 这就是"开"；关门才是从原样转回贴平。所以这里不做任何额外旋转，
+                    // 也不去"重算一个更好看的开角"——那会把模型原样改掉。
+                    leaf.OpenAngle = 0f;
+                    leaf.Angle = 0f;
+                    // 枢轴插进来时世界姿态已经保持住了，这里不用再写 rotation；
+                    // TickDoors 对"已在目标值"的片也不写 Transform → 画面就是模型原样。
+
+                    // 【2026-10-26 用户实测，第三次修正】
+                    //   · 按 `SignedAngle` 算出的 −57.6° 关门 → 门叶和墙面重合（转进墙里）
+                    //   · 翻成正方向后用户确认「方向对了，但还差 60° 左右」
+                    // 说明 `PickClosedDir` 判到的**贴平侧是反的** —— 真正的贴平是另一个平行方向，
+                    // 两者相差 180°，所以正确的关门角 = 180° − |关门角| = 122.4°。
+                    // 交叉验证：122.4 − 57.6 = 64.8°，与用户目测的"60° 以内"吻合。
+                    float closeMag = Mathf.Abs(leaf.ClosedAngle);
+                    if (closeMag > 0.01f)
+                    {
+                        leaf.ClosedAngle = 180f - closeMag;      // 正方向（用户已确认）
+                        leaf.ClosedDir = -leaf.ClosedDir;        // 探针改比对真正的贴平方向
+                    }
+
+                    Debug.Log("[TwinPresent] 门叶「" + leaf.T.name + "」" +
+                              (needPivot
+                                  ? "已补铰链枢轴 " + Fmt(hingePos) +
+                                    "（原点偏移 " + off.ToString("0.000") + "m，移动 " +
+                                    shift.magnitude.ToString("0.000") + "m）"
+                                  : "原点已在铰链边，不补枢轴") +
+                              "；开=模型原样(0°) 关门角=" + leaf.ClosedAngle.ToString("0.0") + "°" +
+                              " 铰链=" + (pickE0 ? "e0" : "e1") +
+                              "（" + (hingeTowardCenter ? "朝门洞中间" : "朝外侧") + "）");
+                }
+            }
+
             return leaves;
+        }
+
+        /// <summary>门叶原点到网格包围盒中心的水平距离。≈0 表示原点在门叶正中间（不是铰链边）。</summary>
+        private static float LeafCenterOffset(Transform pivot, List<Renderer> renderers)
+        {
+            if (pivot == null || renderers == null || renderers.Count == 0) return float.MaxValue;
+
+            bool has = false;
+            Bounds b = new Bounds(pivot.position, Vector3.zero);
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                if (!has) { b = r.bounds; has = true; }
+                else b.Encapsulate(r.bounds);
+            }
+            if (!has) return float.MaxValue;
+
+            Vector3 d = b.center - pivot.position;
+            d.y = 0f;
+            return d.magnitude;
         }
 
         /// <summary>
