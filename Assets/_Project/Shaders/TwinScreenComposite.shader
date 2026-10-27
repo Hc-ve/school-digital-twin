@@ -54,13 +54,18 @@ Shader "SchoolTwin/ScreenComposite"
                 float2 size = max(float2(1e-5, 1e-5), _ScreenMax.xy - _ScreenMin.xy);
                 float2 local = (uv - _ScreenMin.xy) / size;
 
-                // 等比适配：把 0..1 的画面缩进矩形，多余部分留黑边
-                float2 scale = (_Fit >= 1.0)
-                    ? float2(1.0, 1.0 / max(1e-5, _Fit))
-                    : float2(_Fit, 1.0);
-                float2 vuv = (local - 0.5) / scale + 0.5;
+                // 【铺满 cover】取视频中间一块、比例等于屏幕矩形的区域，多余部分裁掉。
+                //
+                // 原来是 contain（整段视频缩进矩形、上下留黑边），用户明确说"视频没有铺满屏幕"，
+                // 所以改成 cover：画面填满整个屏幕矩形，代价是两侧各裁掉约 12%。
+                //   · 视频更宽（_Fit > 1）→ 裁左右
+                //   · 视频更高（_Fit < 1）→ 裁上下
+                float2 span = (_Fit >= 1.0)
+                    ? float2(1.0 / max(1e-5, _Fit), 1.0)
+                    : float2(1.0, _Fit);
+                float2 vuv = (local - 0.5) * span + 0.5;
 
-                // 黑边区域（采样越界）输出 0
+                // 越界保护（理论上 span ≤ 1 时不会越界，留一道保险）
                 float inV = step(0.0, vuv.x) * step(vuv.x, 1.0)
                           * step(0.0, vuv.y) * step(vuv.y, 1.0);
 

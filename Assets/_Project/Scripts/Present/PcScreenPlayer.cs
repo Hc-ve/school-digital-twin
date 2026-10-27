@@ -152,6 +152,11 @@ namespace SchoolTwin.Present
             _fit = videoAspect / rectAspect;
             _composite.SetFloat("_Fit", _fit);
             _dimensionKnown = true;
+
+            Debug.Log("[P26] 视频 " + w + "×" + h + "（比例 " + videoAspect.ToString("0.00") +
+                      "），屏幕矩形比例 " + rectAspect.ToString("0.00") +
+                      " → _Fit=" + _fit.ToString("0.000") +
+                      (_fit >= 1f ? "（裁左右）" : "（裁上下）"));
         }
 
         /// <summary>开关。开 = 播放；关 = 停止并清黑。</summary>
