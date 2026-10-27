@@ -1732,14 +1732,14 @@ namespace SchoolTwin.Present
         // 素材放 `Assets/StreamingAssets/PC/`，路径相对该目录。
         // 找不到文件就安静退回纯色模式 —— 素材是后补的，不该因为缺文件报错。
         [Tooltip("主脑屏幕的开机视频（相对 StreamingAssets/PC/）。留空 = 不启用视频")]
-        [SerializeField] private string _masterBootVideo = "master/boot.mp4";
+        [SerializeField] private string _masterBootVideo = PcMediaLibrary.Boot;
 
         [Tooltip("机房其余 18 台的视频（相对 StreamingAssets/PC/）。" +
                  "按设计「19 台同步同画面」，默认和主脑用同一个文件")]
-        [SerializeField] private string _roomVideo = "master/boot.mp4";
+        [SerializeField] private string _roomVideo = PcMediaLibrary.Boot;
 
         [Tooltip("投影幕布的视频（相对 StreamingAssets/PC/）。留空 = 幕布只用纯色自发光")]
-        [SerializeField] private string _projectorVideo = "master/boot.mp4";
+        [SerializeField] private string _projectorVideo = PcMediaLibrary.Boot;
 
         // `_EmissionColor` 是**乘**在 `_EmissionMap` 上的。
         // `_screenCanvasEmission`(0.55) 适合"一块发白的幕布"，但乘在视频上会把画面压暗一档，

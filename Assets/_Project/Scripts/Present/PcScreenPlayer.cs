@@ -111,12 +111,13 @@ namespace SchoolTwin.Present
             }
             p._rectAspect = Mathf.Max(1e-4f, aspect);
 
-            string full = Path.Combine(Application.streamingAssetsPath,
-                                       Path.Combine("PC", fileName ?? "").Replace('\\', '/'));
+            string full = PcMediaLibrary.Resolve(fileName);
             if (string.IsNullOrEmpty(fileName) || !File.Exists(full))
             {
                 // 没有素材就安静退回纯色模式，不报错 —— 素材是后补的
-                Debug.Log("[P26] 找不到视频「" + full + "」，这块屏继续用纯色自发光。");
+                Debug.Log("[P26] 找不到视频「" + full + "」，这块屏继续用纯色自发光。\n" +
+                          "   放素材的位置：" + PcMediaLibrary.FolderPath + "\n" +
+                          "   " + PcMediaLibrary.Describe());
                 p.HasVideo = false;
                 return p;
             }
@@ -347,11 +348,12 @@ namespace SchoolTwin.Present
             if (!HasVideo || _player == null) return false;
             if (string.IsNullOrEmpty(fileName)) return false;
 
-            string full = Path.Combine(Application.streamingAssetsPath,
-                                       Path.Combine("PC", fileName).Replace('\\', '/'));
+            string full = PcMediaLibrary.Resolve(fileName);
             if (!File.Exists(full))
             {
-                Debug.Log("[P26] 找不到视频「" + full + "」，画面保持不变。");
+                Debug.Log("[P26] 找不到视频「" + full + "」，画面保持不变。\n" +
+                          "   放素材的位置：" + PcMediaLibrary.FolderPath + "\n" +
+                          "   " + PcMediaLibrary.Describe());
                 return false;
             }
 

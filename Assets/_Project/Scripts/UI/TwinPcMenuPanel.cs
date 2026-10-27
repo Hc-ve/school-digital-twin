@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;              // Path.GetFileName
 using SchoolTwin.Command;
 using SchoolTwin.Core;      // TwinValue 在这里（不在 SchoolTwin.Twin）
 using SchoolTwin.Player;
@@ -242,8 +243,8 @@ namespace SchoolTwin.UI
             }
             else
             {
-                AddButton("打开PPT", () => PlayOnMasterAndProjector("master/ppt.mp4"));
-                AddButton("视频播放", () => PlayOnMasterAndProjector("master/lesson.mp4"));
+                AddButton("打开PPT", () => PlayOnMasterAndProjector(PcMediaLibrary.Ppt, "PPT"));
+                AddButton("视频播放", () => PlayOnMasterAndProjector(PcMediaLibrary.Lesson, "视频"));
                 AddButton("关闭主脑", () => Send(MasterId, 0f, "关闭主脑"));
                 AddButton("全部关机", OnShutdownAll);
             }
@@ -307,16 +308,35 @@ namespace SchoolTwin.UI
             Send(ProjectorId, 0f, "全部关机（投影）");
         }
 
-        private void PlayOnMasterAndProjector(string fileName)
+        /// <summary>
+        /// 主脑 + 幕布同时换片。
+        ///
+        /// 【素材缺失怎么办】「打开PPT」「视频播放」的素材是后补的。
+        /// 直接失败会让用户"点了没反应"—— 最差的体验。
+        /// 所以退回开机视频：画面至少还在动，同时打一条日志说明该放什么文件。
+        /// </summary>
+        private void PlayOnMasterAndProjector(string fileName, string label)
         {
             TwinDevicePresenter p = TwinDevicePresenter.Instance;
             if (p == null) { Debug.LogWarning("[P26] 找不到表现层，无法换片"); return; }
 
-            bool a = p.PlayPcVideo(MasterId, fileName);
-            bool b = p.PlayPcVideo(ProjectorId, fileName);
-            if (!a && !b)
-                Debug.Log("[P26] 「" + fileName + "」没播起来 —— 素材还没放进来？" +
-                          "放到 Assets/StreamingAssets/PC/master/ 下即可，不用改代码。");
+            // 首选素材不存在 → 退回开机视频（而不是什么都不做）
+            string use = PcMediaLibrary.FirstAvailable(fileName, PcMediaLibrary.Boot);
+            if (string.IsNullOrEmpty(use))
+            {
+                Debug.LogWarning("[P26] 「" + label + "」和开机视频都找不到，" + PcMediaLibrary.Describe());
+                return;
+            }
+
+            if (!string.Equals(use, fileName, StringComparison.Ordinal))
+            {
+                Debug.Log("[P26] 「" + label + "」素材还没放进来，暂时播开机视频兜底。\n" +
+                          "   想要真内容：把 mp4 放到 " + PcMediaLibrary.FolderPath +
+                          "/" + Path.GetFileName(fileName) + "（文件名对上即可，不用改代码）");
+            }
+
+            p.PlayPcVideo(MasterId, use);
+            p.PlayPcVideo(ProjectorId, use);
         }
 
         private void Send(string twinId, float value, string what)
