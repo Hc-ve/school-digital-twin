@@ -154,7 +154,12 @@ namespace SchoolTwin.UI
                 Hide(); TickFade(); return;
             }
 
-            int state = IsMasterOn() ? 1 : 0;
+            // 状态：0 = 主脑关（且机房/投影也关），1 = 主脑开，2 = 主脑关但机房或投影还开着
+            //
+            // 【为什么需要 2】用户可能只点「关闭主脑」，18 台和投影仪还开着。
+            // 这时面板切回关机态，如果只有「开机/联动/投影」，用户就没有入口把剩下的关掉了
+            // —— 2026-10-27 用户实测踩到这个："怎么全部关机"。
+            int state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
             if (state != _shownState) Rebuild(state);
 
             _alphaTarget = 1f;
@@ -180,11 +185,17 @@ namespace SchoolTwin.UI
             if (rt.Registry.TryGet(MasterId, out a) && a != null) _master = a;
         }
 
-        private bool IsMasterOn()
+        /// <summary>某个点位当前是不是开着（读 `Power` 回读，1 秒缓存一次）。</summary>
+        private bool IsOn(string twinId)
         {
-            if (_master == null) return false;
+            TwinRuntime rt = TwinRuntime.Instance;
+            if (rt == null || rt.Registry == null) return false;
+
+            TwinAnchor a;
+            if (!rt.Registry.TryGet(twinId, out a) || a == null) return false;
+
             TwinValue v;
-            return _master.TryGetValue("Power", out v) && v.Value > 0.5f;
+            return a.TryGetValue("Power", out v) && v.Value > 0.5f;
         }
 
         private void TickFade()
@@ -223,11 +234,18 @@ namespace SchoolTwin.UI
                 AddButton("联动开机", OnLinkBoot);
                 AddButton("投影", OnProject);
             }
+            else if (state == 2)
+            {
+                // 主脑已关，但机房或投影还开着 —— 补一个出口，否则没法全部关掉
+                AddButton("全部关机", OnShutdownAll);
+                AddButton("联动开机", OnLinkBoot);
+            }
             else
             {
                 AddButton("打开PPT", () => PlayOnMasterAndProjector("master/ppt.mp4"));
                 AddButton("视频播放", () => PlayOnMasterAndProjector("master/lesson.mp4"));
-                AddButton("关机", () => Send(MasterId, 0f, "关机"));
+                AddButton("关闭主脑", () => Send(MasterId, 0f, "关闭主脑"));
+                AddButton("全部关机", OnShutdownAll);
             }
         }
 
@@ -270,6 +288,18 @@ namespace SchoolTwin.UI
         {
             Send(MasterId, 1f, "开机（主脑）");
             Send(ProjectorId, 1f, "开投影");
+        }
+
+        /// <summary>
+        /// 全部关机：主脑 + 机房 18 台 + 投影仪。
+        /// 三个点位**同时**下发 —— 它们 twinId 不同，`_inFlight` 是按点位隔离的，不会互相拒。
+        /// 投影仪关掉时幕布、聚光灯、光柱都由 `SyncProjector` 一起收掉。
+        /// </summary>
+        private void OnShutdownAll()
+        {
+            Send(MasterId, 0f, "全部关机（主脑）");
+            Send(RoomId, 0f, "全部关机（机房）");
+            Send(ProjectorId, 0f, "全部关机（投影）");
         }
 
         private void PlayOnMasterAndProjector(string fileName)

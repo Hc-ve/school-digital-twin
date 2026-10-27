@@ -2092,6 +2092,14 @@ namespace SchoolTwin.Present
             v.HasApplied = true;
             v.IsOn = on;
 
+            // 【诊断】2026-10-27 用户报"点投影幕布没反应"。没有日志就无法区分
+            // 是"命令没到"、"状态没变"还是"变了但没画出来"，所以这里每次状态翻转都打一行。
+            Debug.Log("[P26] 投影仪 " + twinId + " Power=" + (power.Value.ToString("0")) +
+                      " → on=" + on +
+                      "（视频=" + (v.Player != null && v.Player.HasVideo ? "有" : "无") +
+                      "，聚光灯=" + (v.Beam != null ? "有" : "无") +
+                      "，光柱=" + (v.BeamCone != null ? "有" : "无") + "）");
+
             // 【P26】有视频的幕布：开关与自发光都交给播放器统一管
             if (v.Player != null && v.Player.HasVideo)
             {
