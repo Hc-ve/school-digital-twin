@@ -1741,16 +1741,12 @@ namespace SchoolTwin.Present
         [Tooltip("幕布播视频时的自发光颜色。纯色模式仍用 _screenCanvasEmission")]
         [SerializeField] private Color _projectorVideoTint = new Color(0.95f, 0.98f, 1.05f, 1f);
 
-        // ---- 【P26】幕布面片的调试开关 ----
-        // 面片是**运行时 `new GameObject` 建的**，编辑模式的 Hierarchy 里没有，
-        // 只有 Play 时才出现，名字固定为 `TwinProjectorScreenQuad`（挂在场景根节点）。
-        // 排查"看不见"时打开下面这个开关：面片会变成**不透明亮红**，
-        // 一眼就能看出它在哪、多大、朝向对不对。确认完记得关掉。
-        [Tooltip("【调试】把幕布视频面片染成不透明亮红，用来确认位置/大小/朝向")]
+        // ---- 【P26】幕布调试开关 ----
+        // 现在视频直接画在**幕布模型本体**上（材质数组整体替换），没有独立面片了。
+        // 排查"看不见"时打开这个开关：幕布会变成**不透明亮红**，
+        // 一眼就能确认"换的到底是哪块模型"。确认完记得关掉。
+        [Tooltip("【调试】把幕布模型染成不透明亮红，用来确认改的是哪块模型")]
         [SerializeField] private bool _debugScreenQuad;
-
-        [Tooltip("【调试】把面片的世界包围盒、缩放打到 Console")]
-        [SerializeField] private bool _debugScreenQuadLog = true;
 
         // ⚠️ 素材要求：**视频本身不能带黑边**。
         // 着色器只能做「等比铺满 + 裁掉多余」，救不了编码进去的黑边。
@@ -2072,8 +2068,8 @@ namespace SchoolTwin.Present
             public Material CanvasMaterial;
             /// <summary>【P26】幕布视频。为 null 或 `!HasVideo` 时退回纯色自发光。</summary>
             public PcScreenPlayer Player;
-            /// <summary>【P26】贴在幕布前面的自建面片（UV 固定 0..1，不依赖幕布网格）。</summary>
-            public GameObject ScreenQuad;
+            /// <summary>【P26】幕布模型本体上那个"播视频"的材质（换掉整个材质数组后只留这一个）。</summary>
+            public Material ScreenMaterial;
             /// <summary>【P26】朝幕布的聚光灯；光束关掉时为 null。</summary>
             public Light Beam;
             /// <summary>【P26】可见光柱的网格物体；不画光柱时为 null。</summary>
@@ -2114,11 +2110,10 @@ namespace SchoolTwin.Present
                       "，光柱=" + (v.BeamCone != null ? "有" : "无") + "）");
 
             // 【P26】有视频的幕布：开关与自发光都交给播放器统一管
+            // （现在材质在**幕布模型本体**上，不再有独立面片要显隐）
             if (v.Player != null && v.Player.HasVideo)
             {
                 v.Player.SetOn(on);
-                if (v.ScreenQuad != null && v.ScreenQuad.activeSelf != on)
-                    v.ScreenQuad.SetActive(on);
             }
             else if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
             {
@@ -2181,57 +2176,66 @@ namespace SchoolTwin.Present
                 return null;
             }
 
-            Material variant = new Material(canvas.sharedMaterial);
-            variant.name = "TwinScreenCanvas_" + room.name;
-            variant.EnableKeyword("_EMISSION");
-            if (!variant.HasProperty(EmissionId))
-            {
-                Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」的幕布材质没有 _EmissionColor，跳过。");
-                Destroy(variant);
-                return null;
-            }
-            variant.SetColor(EmissionId, Color.black);
-            canvas.sharedMaterial = variant;
-
             ProjectorVisual v = new ProjectorVisual();
             v.Canvas = canvas;
-            v.CanvasMaterial = variant;
 
-            // 【P26】幕布接视频。
+            // ── ① 视频路径（优先）─────────────────────────────────────────
             //
-            // ⚠️ 这里**不用幕布自己的 `_EmissionMap`** —— 2026-10-27 实测点了「投影」
-            // 幕布毫无变化，排查到命令、接管、播放器全部正常，问题只可能出在幕布本身：
-            //   · 幕布网格的 UV0 不一定铺满 0..1（3ds Max 导出的模型常见，多个物体共用图集）
-            //   · 幕布可能是单面片，从教室这侧看到的是背面（Standard 默认 Cull Back）
-            // 这两种都跟"材质支不支持自发光"无关，靠调材质参数救不回来。
+            // **直接在幕布模型本体上换材质**。为什么之前十几次都失败：
+            //   · 幕布是**预制体实例**（场景里搜不到 ProjectorScreen），
+            //     运行时 `sharedMesh` 被静态合批换成 `Combined Mesh (root: scene) N`
+            //     （几十 submesh、几万顶点）→ 不能做几何推断、也不能复制。
+            //   · 模型 UV 是**图集 UV**、不铺满 0..1 → 塞 `_EmissionMap` 只显示一块碎片。
+            //   · `sharedMaterial = x` 只改**第 0 个** submesh；合批后材质数组有多个槽位，
+            //     真正画屏幕的那个通常不是第 0 个 → 改了永远没反应。
             //
-            // 做法：在幕布**正前方**贴一张自建面片，UV 由我们自己写死 0..1，
-            // 朝向对着投影仪（也就是对着观众那侧）。幕布原材质保持不动（纯色兜底仍在）。
+            // 现在的做法：`Renderer.bounds` 是准确的（实测 3.11×2.12×0.10 = 幕布本身），
+            // 由它算出屏幕平面，交给 `SchoolTwin/ScreenOnModel` —— 该着色器用**世界坐标**
+            // 反算 UV，完全不依赖模型 UV；再把这个 Renderer 的**整个材质数组**换成它。
+            bool videoReady = false;
             if (!string.IsNullOrEmpty(_projectorVideo))
             {
-                Material screenMat;
-                float quadAspect;
-                GameObject quad = BuildScreenQuad(canvas, anchor.transform.position,
-                                                  _projectorVideoTint, anchor.transform,
-                                                  out screenMat, out quadAspect);
-                if (quad != null)
+                ScreenFrame frame;
+                if (TryGetScreenFrame(canvas, anchor.transform.position, out frame))
                 {
-                    v.ScreenQuad = quad;
-                    // ⚠️ 必须显式传面片的真实宽高比（如 3.11×2.13 → 1.46）。
-                    // UV 是 0..1（正方形空间），着色器若从 UV 推导会得到 1.00，
-                    // cover 就会按 1.96/1.00 去裁 —— 只采样视频中间 51% 宽度，
-                    // 表现就是"画面显示不全、比例不对"（2026-10-27 用户实测）。
-                    v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), _projectorVideo,
-                                                     Vector2.zero, Vector2.one,
-                                                     screenMat, _projectorVideoTint, anchor.transform,
-                                                     1024, 0f, quadAspect);
-                    if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                    Material modelMat = BuildModelScreenMaterial(canvas, frame, _projectorVideoTint);
+                    if (modelMat != null)
                     {
-                        screenMat.SetTexture("_EmissionMap", v.Player.ScreenRT);
-                        screenMat.SetColor(EmissionId, Color.black);
+                        v.ScreenMaterial = modelMat;
+                        v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), _projectorVideo,
+                                                         Vector2.zero, Vector2.one,
+                                                         modelMat, _projectorVideoTint, anchor.transform,
+                                                         1024, 0f, frame.Aspect);
+                        if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                        {
+                            modelMat.SetTexture("_MainTex", v.Player.ScreenRT);
+                            modelMat.SetColor(EmissionId, Color.black);
+                            videoReady = true;
+                        }
+                        else
+                        {
+                            Debug.Log("[TwinPresent] 「" + anchor.TwinId +
+                                      "」视频未就绪，幕布退回纯色自发光。");
+                        }
                     }
-                    quad.SetActive(false);      // 开机时才显形
                 }
+            }
+
+            // ── ② 纯色兜底（没有视频 / 视频起不来时）─────────────────────
+            if (!videoReady)
+            {
+                Material variant = new Material(canvas.sharedMaterial);
+                variant.name = "TwinScreenCanvas_" + room.name;
+                variant.EnableKeyword("_EMISSION");
+                if (!variant.HasProperty(EmissionId))
+                {
+                    Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」的幕布材质没有 _EmissionColor，跳过。");
+                    Destroy(variant);
+                    return null;
+                }
+                variant.SetColor(EmissionId, Color.black);
+                canvas.sharedMaterial = variant;
+                v.CanvasMaterial = variant;
             }
 
             // 【P26】投影"打光"：一盏朝幕布的聚光灯 + 一段可见光柱
@@ -2245,166 +2249,132 @@ namespace SchoolTwin.Present
             return v;
         }
 
-        /// <summary>
-        /// 【P26】在幕布位置贴一张等比面片，作为投影画面的载体。
-        ///
-        /// ── 这个场景有三个坑，前两版都踩过 ────────────────────────────────
-        /// ① **合并网格**：`ProjectorScreen01` 的 `sharedMesh` 是
-        ///    `Combined Mesh (root: scene) N`（几万顶点、几十个 submesh），
-        ///    那是**整间房**合批后的几何，不是一块幕布。
-        ///    → 不能拿它做任何几何推断（复制它 = 把房间贴到幕布上，报 217 个错）。
-        /// ② **sharedMaterial 只作用第 0 个 submesh** —— 所以最初改幕布材质毫无反应。
-        /// ③ **模型的 transform 轴是错乱的**：3ds Max 导入带旋转，
-        ///    `forward` 实测是 `(0,1,0)`（朝上）。
-        ///    上一版按 `transform.forward` 当法线、`transform.up` 当上方向，
-        ///    两者平行导致正交化退化成零向量，算出 **0.10×3.11m 的细条**。
-        ///    （2026-10-27 日志：`0.10×3.11m（比例 0.031），法线 (0.00, 1.00, 0.00)`）
-        ///
-        /// ── 最终算法：只信包围盒，按"最薄的那个轴"当法线 ────────────────
-        /// 幕布是一块薄板，所以包围盒（`Renderer.bounds`，世界 AABB）
-        /// **最小的那个维度就是厚度**，其方向就是幕布法线。
-        /// 另外两个维度构成幕布面：大的当宽、小的当高。
-        /// 这样完全不依赖 `transform` 轴、不依赖网格、不依赖模型的导出姿态。
-        ///
-        /// 尺寸取包围盒的原始 size（不做斜切投影）——
-        /// 幕布实测 3.11×2.13m 且基本轴对齐，这样最接近真实。
-        ///
-        /// 面片朝投影仪方向偏移 2cm，避免和幕布 z-fighting；材质双面渲染。
-        /// </summary>
-        private GameObject BuildScreenQuad(Renderer canvas, Vector3 projectorPos, Color tint,
-                                           Transform parent, out Material mat, out float aspect)
+        // ---------------------------------------------------------------- 幕布屏幕载体（P26）
+
+        /// <summary>幕布的"屏幕平面"：中心 + 两个单位轴 + 宽高（世界空间）。</summary>
+        private struct ScreenFrame
         {
-            mat = null;
-            aspect = 0f;
+            public Vector3 Center;
+            public Vector3 Right;
+            public Vector3 Up;
+            public Vector3 Normal;
+            public float Width;
+            public float Height;
+            public float Aspect { get { return Width / Mathf.Max(1e-5f, Height); } }
+        }
+
+        /// <summary>
+        /// 从 `Renderer.bounds` 算出幕布的屏幕平面。
+        ///
+        /// 【为什么只信 bounds】这个场景里：
+        ///   · `sharedMesh` 是静态合批后的 `Combined Mesh (root: scene) N`（整间房，几十 submesh）
+        ///   · 模型的 `transform.forward` 实测是 (0,1,0)（3ds Max 导出带旋转，不可信）
+        /// 而 `Renderer.bounds` 是**该 Renderer 自己的世界 AABB**，实测 3.11×2.12×0.10 ——
+        /// 正好是一块薄幕布，唯一可靠的输入。
+        ///
+        /// 幕布是薄板 → **最薄的轴就是厚度**，其方向即法线；另两轴构成屏幕面（大的当宽）。
+        ///
+        /// 返回 false 表示包围盒不像一块屏幕（某轴过厚 / 尺寸离谱），调用方应放弃。
+        /// </summary>
+        private bool TryGetScreenFrame(Renderer canvas, Vector3 projectorPos, out ScreenFrame frame)
+        {
+            frame = default(ScreenFrame);
+            if (canvas == null) return false;
 
             Bounds b = canvas.bounds;
             Vector3 size = b.size;
 
-            // ── ① 最薄的轴 = 厚度 = 法线方向 ────────────────────────────
-            int axis = 0;                       // 0=X 1=Y 2=Z
+            // 最薄轴
+            int axis = 0;
             if (size.y < size.x) axis = 1;
             if (size.z < size[axis]) axis = 2;
 
-            Vector3 normal = Vector3.zero;
-            normal[axis] = 1f;
-
-            // 法线朝投影仪那侧（观众侧）；投影仪在幕布另一侧时翻过来
-            if (Vector3.Dot(normal, projectorPos - b.center) < 0f)
-                normal = -normal;
-
-            // ── ② 另外两个轴 = 幕布面，大的当宽、小的当高 ────────────────
+            // 合理性检查：厚度要明显小于另两轴，且宽高在 0.5~15m
+            float thickness = size[axis];
             int a1 = (axis + 1) % 3;
             int a2 = (axis + 2) % 3;
-            int wideAxis = size[a1] >= size[a2] ? a1 : a2;
+            float d1 = size[a1], d2 = size[a2];
+            float maxDim = Mathf.Max(d1, d2);
+            float minDim = Mathf.Min(d1, d2);
+
+            if (thickness > minDim * 0.5f || minDim < 0.5f || maxDim > 15f)
+            {
+                Debug.Log("[TwinPresent] 幕布包围盒不像一块屏幕（" +
+                          size.x.ToString("0.00") + "×" + size.y.ToString("0.00") + "×" +
+                          size.z.ToString("0.00") + "m），不接管。");
+                return false;
+            }
+
+            int wideAxis = d1 >= d2 ? a1 : a2;
             int highAxis = wideAxis == a1 ? a2 : a1;
 
+            Vector3 normal = Vector3.zero; normal[axis] = 1f;
+            if (Vector3.Dot(normal, projectorPos - b.center) < 0f) normal = -normal;
+
+            Vector3 right = Vector3.zero; right[wideAxis] = 1f;
             Vector3 up = Vector3.zero; up[highAxis] = 1f;
-            // 这三者（axis / wideAxis / highAxis）是 0/1/2 的一个排列，
-            // 所以 normal 与 up 必然垂直，`LookRotation` 不会退化。
 
-            float w = Mathf.Max(0.05f, size[wideAxis]);
-            float h = Mathf.Max(0.05f, size[highAxis]);
-            aspect = w / h;
+            frame.Center = b.center;
+            frame.Right = right;
+            frame.Up = up;
+            frame.Normal = normal;
+            frame.Width = Mathf.Max(0.05f, maxDim);
+            frame.Height = Mathf.Max(0.05f, minDim);
+            return true;
+        }
 
-            Quaternion rot = Quaternion.LookRotation(normal, up);
-
-            // ── ③ 网格：两个三角形，UV 写死 0..1 ─────────────────────────
-            float hw = w * 0.5f, hh = h * 0.5f;
-            Mesh mesh = new Mesh();
-            mesh.name = "TwinProjectorScreenQuad";
-            mesh.vertices = new[]
-            {
-                new Vector3(-hw, -hh, 0f),
-                new Vector3( hw, -hh, 0f),
-                new Vector3( hw,  hh, 0f),
-                new Vector3(-hw,  hh, 0f),
-            };
-            mesh.uv = new[]
-            {
-                new Vector2(0f, 0f), new Vector2(1f, 0f),
-                new Vector2(1f, 1f), new Vector2(0f, 1f),
-            };
-            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
-            // ── ④ 物体 ──────────────────────────────────────────────────
-            // ⚠️ **不 parent 到任何物体**，直接放场景根节点。
-            //
-            // 【为什么不 parent】幕布/显示器这些模型的 transform 常带**整体缩放**
-            // （3ds Max 导出常见 lossyScale = 0.01 之类）。parent 过去 + localScale=1
-            // 会让 3.11m 的面片实际只有 3cm 大小 —— 完全看不见，而且日志里尺寸还是对的，
-            // 极难查（2026-10-27 排查到这里）。
-            // 放根节点则 localScale == worldScale，`Renderer.bounds` 量出来的尺寸直接可用。
-            //
-            // 副作用只是 Hierarchy 根节点多一个 `TwinProjectorScreenQuad`，
-            // 反而方便用户在 Play 时点选、按 F 聚焦定位 —— 这正是排查需要的。
-            GameObject go = new GameObject("TwinProjectorScreenQuad");
-            go.transform.position = b.center + normal * 0.02f;
-            go.transform.rotation = rot;
-            go.transform.localScale = Vector3.one;
-
-            MeshFilter mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = mesh;
-
-            Shader sh = Shader.Find("Standard");
+        /// <summary>
+        /// 给幕布模型本体造一个"播视频"的材质，并把该 Renderer 的**整个材质数组**换掉。
+        ///
+        /// ── 为什么必须换整个数组 ──────────────────────────────────────
+        /// `renderer.sharedMaterial = x` 只改**第 0 个** submesh。这个场景里幕布被合批过，
+        /// 材质数组有多个槽位，真正画屏幕的那个通常不是第 0 个 —— 所以只改单个永远没反应。
+        ///
+        /// ── 为什么用世界坐标算 UV ────────────────────────────────────
+        /// `SchoolTwin/ScreenOnModel` 不用模型 UV（那是图集 UV，不铺满 0..1），
+        /// 而是把顶点世界位置投到屏幕平面上反算 0..1 —— 与模型 UV 完全无关。
+        ///
+        /// ── 为什么不用 Standard + _EmissionMap ───────────────────────
+        /// Standard 的最终色 = `albedo × 光照 + emission`，屏幕会被房间灯光影响，
+        /// 而且关了灯屏幕会跟着暗。投影幕布应该只显示画面本身，所以底色压黑、只输出视频。
+        /// </summary>
+        private Material BuildModelScreenMaterial(Renderer canvas, ScreenFrame frame, Color tint)
+        {
+            Shader sh = Shader.Find("SchoolTwin/ScreenOnModel");
             if (sh == null)
             {
-                Debug.Log("[TwinPresent] 找不到 Standard 着色器，幕布视频面片不创建。");
-                Destroy(go);
+                Debug.Log("[TwinPresent] 找不到着色器 `SchoolTwin/ScreenOnModel`，幕布视频不启用。" +
+                          "（注意：打包时需加入 Always Included Shaders）");
                 return null;
             }
 
-            mat = new Material(sh);
-            mat.name = "TwinProjectorScreenMat";
-            mat.EnableKeyword("_EMISSION");
-            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
-            mat.SetColor(EmissionId, Color.black);          // 关机全黑
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.black);
-            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0f);
-            if (mat.HasProperty("_Cull"))
-                mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);   // 双面
+            Material mat = new Material(sh);
+            mat.name = "TwinModelScreen_" + canvas.name;
+            mat.SetVector("_Center", new Vector4(frame.Center.x, frame.Center.y, frame.Center.z, 0f));
+            mat.SetVector("_Right", new Vector4(frame.Right.x, frame.Right.y, frame.Right.z, 0f));
+            mat.SetVector("_Up", new Vector4(frame.Up.x, frame.Up.y, frame.Up.z, 0f));
+            mat.SetVector("_Size", new Vector4(frame.Width, frame.Height, 0f, 0f));
+            mat.SetColor(EmissionId, Color.black);      // 关机全黑
+            mat.SetFloat("_DebugRed", _debugScreenQuad ? 1f : 0f);
 
-            // 【调试】把面片染成不透明亮红：因为它平时是"靠自发光出画面"的，
-            // 关机时纯黑、和幕布同色，肉眼完全分不清它到底存不存在。
-            if (_debugScreenQuad)
-            {
-                if (mat.HasProperty("_Color")) mat.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
-                mat.SetColor(EmissionId, new Color(0.6f, 0f, 0f, 1f));
-                Debug.Log("[P26][调试] 幕布面片已染成亮红");
-            }
+            // **整个数组**都换成这一个材质 —— 只改第 0 个会导致"改了没反应"
+            Material[] src = canvas.sharedMaterials;
+            int oldCount = src != null ? src.Length : 0;
+            Material[] repl = new Material[Mathf.Max(1, oldCount)];
+            for (int i = 0; i < repl.Length; i++) repl[i] = mat;
+            canvas.sharedMaterials = repl;
 
-            MeshRenderer mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = mat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            mr.receiveShadows = false;
+            Debug.Log("[TwinPresent] 幕布改用**模型本体**作载体：" + canvas.name +
+                      "（原材质槽 " + oldCount + " 个 → 全部替换）\n" +
+                      "   屏幕平面 " + frame.Width.ToString("0.00") + "×" +
+                      frame.Height.ToString("0.00") + "m（比例 " + frame.Aspect.ToString("0.000") + "）\n" +
+                      "   中心 (" + frame.Center.x.ToString("0.00") + ", " +
+                      frame.Center.y.ToString("0.00") + ", " + frame.Center.z.ToString("0.00") + ")\n" +
+                      "   法线 (" + frame.Normal.x.ToString("0.00") + ", " +
+                      frame.Normal.y.ToString("0.00") + ", " + frame.Normal.z.ToString("0.00") + ")" +
+                      (_debugScreenQuad ? "\n   ⚠ 调试模式：整块涂亮红" : ""));
 
-            if (_debugScreenQuadLog)
-            {
-                Bounds wb = mr.bounds;      // 世界包围盒（此时 scale=1，所以就是真实尺寸）
-                Transform ap = parent;
-                Vector3 parentScale = ap != null ? ap.lossyScale : Vector3.one;
-                Debug.Log("[P26][调试] 面片物体「" + go.name + "」已创建（场景根节点）\n" +
-                          "   位置 " + go.transform.position.x.ToString("0.00") + ", " +
-                          go.transform.position.y.ToString("0.00") + ", " +
-                          go.transform.position.z.ToString("0.00") + "\n" +
-                          "   世界包围盒 size " + wb.size.x.ToString("0.00") + " × " +
-                          wb.size.y.ToString("0.00") + " × " + wb.size.z.ToString("0.00") + "\n" +
-                          "   父物体 " + (ap != null ? ap.name : "无") + " 的 lossyScale " +
-                          parentScale.x.ToString("0.0000") + ", " + parentScale.y.ToString("0.0000") +
-                          ", " + parentScale.z.ToString("0.0000") + "（已不再乘到面片上）\n" +
-                          "   法线 " + normal.x.ToString("0.00") + ", " + normal.y.ToString("0.00") +
-                          ", " + normal.z.ToString("0.00") +
-                          "   摄像机能看到的概率：面片朝投影仪一侧");
-            }
-
-            Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
-                      "m（比例 " + aspect.ToString("0.000") + "），包围盒 " +
-                      size.x.ToString("0.00") + "×" + size.y.ToString("0.00") + "×" +
-                      size.z.ToString("0.00") + "m，法线轴 " + "XYZ"[axis] +
-                      "，中心 (" + b.center.x.ToString("0.00") + ", " +
-                      b.center.y.ToString("0.00") + ", " + b.center.z.ToString("0.00") + ")");
-            return go;
+            return mat;
         }
 
         /// <summary>
