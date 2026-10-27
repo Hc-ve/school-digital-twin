@@ -391,6 +391,9 @@ namespace SchoolTwin.Present
             // 【P26】逐个亮：同样要逐帧推进，0.15 秒一台在 10Hz 轮询下会漏拍
             TickScreenStagger();
 
+            // 【P26】投影跟随主脑（内部自带 0.15s 节流）
+            TickProjectorFollowMaster();
+
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + Mathf.Max(0.02f, _pollInterval);
 
@@ -1759,6 +1762,10 @@ namespace SchoolTwin.Present
         [Range(-1f, 1f)]
         [SerializeField] private float _projectorWarmth = 0.12f;
 
+        [Tooltip("幕布画面是否跟随主脑开关。开 = 主脑关机后幕布变「无信号」黑屏；" +
+                 "关 = 幕布一直显示最后一段视频")]
+        [SerializeField] private bool _projectorFollowMaster = true;
+
         // ---- 【P26】幕布调试开关 ----
         // 现在视频直接画在**幕布模型本体**上（材质数组整体替换），没有独立面片了。
         // 排查"看不见"时打开这个开关：幕布会变成**不透明亮红**，
@@ -1838,6 +1845,11 @@ namespace SchoolTwin.Present
             new Dictionary<string, ScreenVisual>(2, StringComparer.Ordinal);
 
         private Texture2D _screenMask;
+
+        /// <summary>【P26】上一次看到的主脑开关状态（投影跟随用）。</summary>
+        private bool _lastMasterOn;
+        /// <summary>【P26】下次检查主脑状态的时间。</summary>
+        private float _nextMasterSync;
 
         private void SyncScreen(string twinId, TwinAnchor anchor)
         {
@@ -2139,6 +2151,44 @@ namespace SchoolTwin.Present
 
             Debug.Log("[P26] 点位「" + twinId + "」没有视频载体，换片请求忽略。");
             return false;
+        }
+
+        /// <summary>
+        /// 【P26】投影画面跟随主脑：主脑关机后幕布不该继续显示旧画面。
+        ///
+        /// 真实投影仪没信号会显示"无信号"（黑屏），不会把最后一帧冻在那儿。
+        /// 这条同时补一个逻辑漏洞：`SyncProjector` 的早退是按"投影仪自己的开关"判断的，
+        /// 主脑开关变化时投影仪状态没变、不会重跑 —— 所以必须单独盯主脑。
+        ///
+        /// 每 0.15 秒查一次（不是每帧）：主脑开关是低频事件，没必要每帧读 registry。
+        /// </summary>
+        private void TickProjectorFollowMaster()
+        {
+            if (!_projectorFollowMaster) return;
+            if (_projectors.Count == 0) return;
+            if (Time.unscaledTime < _nextMasterSync) return;
+            _nextMasterSync = Time.unscaledTime + 0.15f;
+
+            TwinAnchor ma;
+            if (_runtime == null || _runtime.Registry == null) return;
+            if (!_runtime.Registry.TryGet("ClassComputer/PC/Master_01", out ma) || ma == null) return;
+
+            TwinValue pv;
+            bool masterOn = ma.TryGetValue("Power", out pv) && pv.Value > 0.5f;
+            if (masterOn == _lastMasterOn) return;
+            _lastMasterOn = masterOn;
+
+            foreach (KeyValuePair<string, ProjectorVisual> kv in _projectors)
+            {
+                ProjectorVisual v = kv.Value;
+                if (v == null || v.Player == null || !v.Player.HasVideo) continue;
+
+                // 投影仪本身开着，才跟着主脑的画面走
+                v.Player.SetOn(v.IsOn && masterOn);
+            }
+
+            Debug.Log("[P26] 投影同步：主脑" +
+                      (masterOn ? "开机 → 幕布恢复画面" : "关机 → 幕布无信号"));
         }
 
         /// <summary>【P26】每帧把视频合成进各屏的 RT。挂在这里是因为表现层已经有一个 Update。</summary>
