@@ -1728,6 +1728,14 @@ namespace SchoolTwin.Present
         [Tooltip("主脑屏幕的开机视频（相对 StreamingAssets/PC/）。留空 = 不启用视频")]
         [SerializeField] private string _masterBootVideo = "master/boot.mp4";
 
+        // ⚠️ 素材要求：**视频本身不能带黑边**。
+        // 着色器只能做「等比铺满 + 裁掉多余」，救不了编码进去的黑边。
+        // 2026-10-27 用户给的 `开机视频.mp4` 是 1920×880，左右各 98px 是编码进去的黑边，
+        // 已用 `ffmpeg -vf crop=1724:880:98:0` 裁掉重新编码。
+        // 换新素材前先跑一遍：
+        //   ffmpeg -i in.mp4 -vf "cropdetect=limit=24:round=2:reset=0" -f null -
+        // 看输出是不是 crop=W:H:0:0，不是就先裁。
+
         [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
         [SerializeField] private int _screenVideoAtlasSize = 2048;
 
