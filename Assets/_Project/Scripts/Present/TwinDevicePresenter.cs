@@ -2061,6 +2061,8 @@ namespace SchoolTwin.Present
             public Material CanvasMaterial;
             /// <summary>【P26】幕布视频。为 null 或 `!HasVideo` 时退回纯色自发光。</summary>
             public PcScreenPlayer Player;
+            /// <summary>【P26】贴在幕布前面的自建面片（UV 固定 0..1，不依赖幕布网格）。</summary>
+            public GameObject ScreenQuad;
             /// <summary>【P26】朝幕布的聚光灯；光束关掉时为 null。</summary>
             public Light Beam;
             /// <summary>【P26】可见光柱的网格物体；不画光柱时为 null。</summary>
@@ -2104,6 +2106,8 @@ namespace SchoolTwin.Present
             if (v.Player != null && v.Player.HasVideo)
             {
                 v.Player.SetOn(on);
+                if (v.ScreenQuad != null && v.ScreenQuad.activeSelf != on)
+                    v.ScreenQuad.SetActive(on);
             }
             else if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
             {
@@ -2183,18 +2187,33 @@ namespace SchoolTwin.Present
             v.CanvasMaterial = variant;
 
             // 【P26】幕布接视频。
-            // 幕布是**独立的一块面片**，UV 直接铺满 0..1（不像显示器要按图集 UV 抠矩形），
-            // 所以这里 uvMin=(0,0) / uvMax=(1,1)，合成 RT 用 1024 就够 —— 不需要 2048 的图集布局。
+            //
+            // ⚠️ 这里**不用幕布自己的 `_EmissionMap`** —— 2026-10-27 实测点了「投影」
+            // 幕布毫无变化，排查到命令、接管、播放器全部正常，问题只可能出在幕布本身：
+            //   · 幕布网格的 UV0 不一定铺满 0..1（3ds Max 导出的模型常见，多个物体共用图集）
+            //   · 幕布可能是单面片，从教室这侧看到的是背面（Standard 默认 Cull Back）
+            // 这两种都跟"材质支不支持自发光"无关，靠调材质参数救不回来。
+            //
+            // 做法：在幕布**正前方**贴一张自建面片，UV 由我们自己写死 0..1，
+            // 朝向对着投影仪（也就是对着观众那侧）。幕布原材质保持不动（纯色兜底仍在）。
             if (!string.IsNullOrEmpty(_projectorVideo))
             {
-                v.Player = PcScreenPlayer.Create("Projector", _projectorVideo,
-                                                 Vector2.zero, Vector2.one,
-                                                 variant, _projectorVideoTint, anchor.transform,
-                                                 1024, 0f);
-                if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                Material screenMat;
+                GameObject quad = BuildScreenQuad(canvas.bounds, anchor.transform.position,
+                                                  _projectorVideoTint, anchor.transform, out screenMat);
+                if (quad != null)
                 {
-                    variant.SetTexture("_EmissionMap", v.Player.ScreenRT);
-                    variant.SetColor(EmissionId, Color.black);
+                    v.ScreenQuad = quad;
+                    v.Player = PcScreenPlayer.Create("Projector", _projectorVideo,
+                                                     Vector2.zero, Vector2.one,
+                                                     screenMat, _projectorVideoTint, anchor.transform,
+                                                     1024, 0f);
+                    if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                    {
+                        screenMat.SetTexture("_EmissionMap", v.Player.ScreenRT);
+                        screenMat.SetColor(EmissionId, Color.black);
+                    }
+                    quad.SetActive(false);      // 开机时才显形
                 }
             }
 
@@ -2207,6 +2226,111 @@ namespace SchoolTwin.Present
                       "（房间节点 " + room.name + "，聚光灯=" + (v.Beam != null ? "有" : "无") +
                       "，光柱=" + (v.BeamCone != null ? "有" : "无") + "）");
             return v;
+        }
+
+        /// <summary>
+        /// 【P26】在幕布前面贴一张自建面片，UV 固定 0..1。
+        ///
+        /// ── 为什么不直接用幕布的 `_EmissionMap` ────────────────────────────
+        /// 2026-10-27 实测：点「投影」幕布毫无变化。排查确认命令、接管、播放器全部正常，
+        /// 剩下的可能只有幕布网格自身 —— UV0 不铺满 0..1（3ds Max 导出常见），
+        /// 或者幕布是单面片、从教室看的是背面（Standard 默认 Cull Back）。
+        /// 这两种靠调材质参数都救不回来，所以干脆自己造一张面片。
+        ///
+        /// ── 朝向和尺寸怎么定 ────────────────────────────────────────────
+        /// 朝向：**面对投影仪**（也就是对着观众那侧），用 `LookRotation(幕布中心 - 投影仪)`。
+        /// 尺寸：把幕布包围盒的 8 个角点投影到该朝向的局部 X/Y 平面上取范围 ——
+        /// 这样不管幕布绕哪根轴转、缩放怎么非均匀，贴合都是准的。
+        ///
+        /// 面片沿"朝投影仪"方向偏 3cm，避免和幕布 z-fighting。
+        /// </summary>
+        private GameObject BuildScreenQuad(Bounds b, Vector3 projectorPos, Color tint,
+                                           Transform parent, out Material mat)
+        {
+            mat = null;
+
+            Vector3 dir = (b.center - projectorPos);
+            if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
+            dir = dir.normalized;
+
+            Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
+            Quaternion inv = Quaternion.Inverse(rot);
+
+            // 8 个角点投到局部 XY 平面，求范围
+            Vector3 e = b.extents;
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = b.center + new Vector3(
+                    ((i & 1) == 0 ? -e.x : e.x),
+                    ((i & 2) == 0 ? -e.y : e.y),
+                    ((i & 4) == 0 ? -e.z : e.z));
+                Vector3 local = inv * (corner - b.center);
+                if (local.x < minX) minX = local.x;
+                if (local.x > maxX) maxX = local.x;
+                if (local.y < minY) minY = local.y;
+                if (local.y > maxY) maxY = local.y;
+            }
+
+            float w = Mathf.Max(0.05f, maxX - minX);
+            float h = Mathf.Max(0.05f, maxY - minY);
+
+            // 面片中心：幕布中心 + 局部偏移，再沿朝投影仪方向抬 3cm
+            Vector3 localCenter = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, 0f);
+            Vector3 pos = b.center + rot * localCenter + dir * 0.03f;
+
+            // ---- 网格：两个三角形，UV 写死 0..1 ----
+            Mesh mesh = new Mesh();
+            mesh.name = "ProjectorScreenQuad";
+            float hw = w * 0.5f, hh = h * 0.5f;
+            mesh.vertices = new[]
+            {
+                new Vector3(-hw, -hh, 0f),
+                new Vector3( hw, -hh, 0f),
+                new Vector3( hw,  hh, 0f),
+                new Vector3(-hw,  hh, 0f),
+            };
+            mesh.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            GameObject go = new GameObject("TwinProjectorScreenQuad");
+            go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+            go.transform.rotation = rot;
+            go.transform.localScale = Vector3.one;
+
+            MeshFilter mf = go.AddComponent<MeshFilter>();
+            mf.sharedMesh = mesh;
+
+            // ---- 材质：独立新建（不复用幕布材质，避免继承它的 ST / keyword 状态）----
+            Shader sh = Shader.Find("Standard");
+            if (sh == null)
+            {
+                Debug.Log("[TwinPresent] 找不到 Standard 着色器，幕布视频面片不创建。");
+                Destroy(go);
+                return null;
+            }
+
+            mat = new Material(sh);
+            mat.name = "TwinProjectorScreenMat";
+            mat.EnableKeyword("_EMISSION");
+            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            mat.SetColor(EmissionId, Color.black);          // 关机全黑
+            // 底色压黑：让画面只靠 emission 出来，不受灯光影响（投影幕布本来就不吃环境光）
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.black);
+            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0f);
+
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
+                      "m，位置 " + V3(pos) + "，朝向投影仪 " + V3(dir));
+            return go;
         }
 
         /// <summary>

@@ -51,6 +51,7 @@ namespace SchoolTwin.Present
         private float _fit = 1f;
         private bool _dimensionKnown;
         private bool _on;
+        private int _blitCount;      // 【诊断】累计 Blit 次数
 
         private const int AtlasSize = 2048;      // 与 MaskTexWidth/Height 一致
         private const int VideoW = 1024;
@@ -180,6 +181,37 @@ namespace SchoolTwin.Present
                       (_fit >= 1f ? "（裁左右）" : "（裁上下）"));
         }
 
+        /// <summary>
+        /// 【诊断】把播放器的内部状态摊开，用来区分"没播"、"播了但没合成"、"合成了但没贴上去"。
+        /// 用户报"点投影幕布没反应"时，靠这一行就能定位。
+        /// </summary>
+        public string DebugState()
+        {
+            if (!HasVideo) return "HasVideo=false";
+
+            string playing = _player != null ? _player.isPlaying.ToString() : "无player";
+            string prepared = _player != null ? _player.isPrepared.ToString() : "无player";
+            string frame = _player != null ? _player.frame.ToString() : "?";
+            string rt = ScreenRT != null
+                ? (ScreenRT.IsCreated() ? "已创建 " + ScreenRT.width + "²" : "未创建") : "null";
+
+            string mat;
+            if (TargetMaterial == null) mat = "材质null";
+            else
+            {
+                Texture em = TargetMaterial.HasProperty("_EmissionMap")
+                    ? TargetMaterial.GetTexture("_EmissionMap") : null;
+                Color ec = TargetMaterial.HasProperty(EmissionId)
+                    ? TargetMaterial.GetColor(EmissionId) : Color.clear;
+                mat = "emissionMap=" + (em == null ? "null" : em.name) +
+                      " emissionColor=" + ec.r.ToString("0.00") + "," + ec.g.ToString("0.00") +
+                      "," + ec.b.ToString("0.00");
+            }
+
+            return "on=" + _on + " playing=" + playing + " prepared=" + prepared +
+                   " frame=" + frame + " rt=" + rt + " blit=" + _blitCount + " " + mat;
+        }
+
         /// <summary>开关。开 = 播放；关 = 停止并清黑。</summary>
         public void SetOn(bool on)
         {
@@ -190,14 +222,16 @@ namespace SchoolTwin.Present
             if (on)
             {
                 if (_player != null && !_player.isPlaying) _player.Play();
-                if (TargetMaterial != null) TargetMaterial.SetColor("_EmissionColor", _onColor);
+                if (TargetMaterial != null) TargetMaterial.SetColor(EmissionId, _onColor);
             }
             else
             {
                 if (_player != null && _player.isPlaying) _player.Stop();
                 ClearScreen();
-                if (TargetMaterial != null) TargetMaterial.SetColor("_EmissionColor", Color.black);
+                if (TargetMaterial != null) TargetMaterial.SetColor(EmissionId, Color.black);
             }
+
+            Debug.Log("[P26] SetOn(" + on + ") → " + DebugState());
         }
 
         /// <summary>
@@ -237,6 +271,7 @@ namespace SchoolTwin.Present
             if (!_dimensionKnown) UpdateFit();
 
             Graphics.Blit(_videoRT, ScreenRT, _composite);
+            _blitCount++;
         }
 
         private void ClearScreen()
