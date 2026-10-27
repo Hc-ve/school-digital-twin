@@ -333,14 +333,28 @@ namespace SchoolTwin.Present
                 Material m = _targets[i];
                 if (m == null) continue;
 
-                // 显示器走 Standard 的 `_EmissionMap`（用合成后的图集，保住遮罩）
-                if (m.HasProperty("_EmissionMap")) m.SetTexture("_EmissionMap", displayTex);
-                // 幕布走 ScreenOnModel 的 `_MainTex`（直接贴原图，它自己算 UV）
-                if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+                // ⚠️ 必须按**着色器种类**分流，不能看到 `_MainTex` 就往上贴。
+                //
+                // `Standard` 着色器也有 `_MainTex` —— 那是 **Albedo（反照率）**，
+                // 贴上去等于给整个显示器模型换皮肤，机身/底座/支架全都会显示 PPT。
+                // 2026-10-27 用户两次报"主脑材质在跟着变"，就是这个原因。
+                //
+                // 区分依据：幕布的 `SchoolTwin/ScreenOnModel` 有 `_Contain`，
+                // `Standard` 没有。这个属性是幕布独有的，最可靠。
+                bool isProjectorScreen = m.HasProperty("_Contain");
 
-                // 幕布的着色器要额外告诉它"图片比例"并切到 contain
-                if (m.HasProperty("_ImageAspect")) m.SetFloat("_ImageAspect", aspect);
-                if (m.HasProperty("_Contain")) m.SetFloat("_Contain", 1f);
+                if (isProjectorScreen)
+                {
+                    // 幕布：自己的着色器按世界坐标算 UV，直接贴原图
+                    m.SetTexture("_MainTex", tex);
+                    m.SetFloat("_ImageAspect", aspect);
+                    m.SetFloat("_Contain", 1f);
+                }
+                else if (m.HasProperty("_EmissionMap"))
+                {
+                    // 显示器：只动自发光，Albedo 保持模型原样（保住遮罩）
+                    m.SetTexture("_EmissionMap", displayTex);
+                }
 
                 if (m.HasProperty(EmissionId)) m.SetColor(EmissionId, _onColor);
             }

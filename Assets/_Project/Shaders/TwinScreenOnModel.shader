@@ -127,10 +127,14 @@ Shader "SchoolTwin/ScreenOnModel"
 
                 // 关机时显示幕布本色（受环境光影响，关灯会变暗），不是纯黑。
                 // 2026-10-27：第一版关机直接输出黑，整块幕布变成一块黑板，很假。
-                // 用 `ShadeSH9` 取环境球谐光：比 `UNITY_LIGHTMODEL_AMBIENT` 在新版更可靠，
-                // 而且关灯/断電时环境光会变，幕布跟着暗下去才对。
+                //
+                // ⚠️ 环境光**不能直接相乘**：关灯后 `ShadeSH9` 接近 0，
+                // 白布会被乘成纯黑 —— 又变回"黑板"（2026-10-27 用户第二次报这个问题）。
+                // 真实教室即使关灯，窗外/门缝仍有微光，白布看起来是"暗灰"而不是"纯黑"。
+                // 所以给下限 0.55：完全没光时仍是可辨认的浅灰布。
                 float3 amb = ShadeSH9(float4(0, 1, 0, 1));
-                float lum = saturate(dot(amb, float3(0.3333, 0.3333, 0.3333)) * 3.0 + 0.35);
+                float ambLum = saturate(dot(amb, float3(0.3333, 0.3333, 0.3333)) * 3.0);
+                float lum = lerp(0.55, 1.0, ambLum);
                 float3 offCol = _OffColor.rgb * lum;
 
                 float3 video = tex2D(_MainTex, uv2).rgb;

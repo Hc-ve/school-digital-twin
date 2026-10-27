@@ -2478,7 +2478,51 @@ namespace SchoolTwin.Present
             Debug.Log("[P26] 关机动画结束（" + t.ToString("0.0") + "s，" +
                       (includeRoom ? "含机房 18 台" : "仅主脑+投影") + "），断电");
             _shutdownRoutine = null;
+
+            // 【视觉兜底】先把参与关机的屏幕**直接收成"关机态"**，再发命令。
+            //
+            // 为什么：关机动画最后一帧通常是黑的，如果命令因为任何原因没生效
+            // （设备无响应 / 数据源是外部 MQTT / 网络抖动），
+            // 画面就会永远停在那一帧黑 —— 看起来像卡死。
+            // 2026-10-27 用户报"关机后幕布材质还显示黑色"，就是这个。
+            //
+            // `SetOn(false)` 会清屏并把自发光压黑，着色器随即切到"幕布本色"（白布）。
+            // 命令真发成功后 `SyncProjector` 还会再设一次，幂等无害。
+            ForceScreensOff(includeRoom);
+
             if (onComplete != null) onComplete();
+        }
+
+        /// <summary>
+        /// 把屏幕强制收成"关机态"（只改视觉，不发命令）。
+        /// 同时把 `IsOn` 标记同步下来，避免下次开机的早退判断错位。
+        /// </summary>
+        private void ForceScreensOff(bool includeRoom)
+        {
+            ScreenVisual sv;
+            if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
+            {
+                if (sv.Player != null) sv.Player.SetOn(false);
+                sv.IsOn = false;
+                sv.HasApplied = true;
+            }
+
+            if (includeRoom && _screens.TryGetValue("ClassComputer/PC/Room_01", out sv) && sv != null)
+            {
+                if (sv.Player != null) sv.Player.SetOn(false);
+                sv.IsOn = false;
+                sv.HasApplied = true;
+            }
+
+            ProjectorVisual pv;
+            if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null)
+            {
+                if (pv.Player != null) pv.Player.SetOn(false);
+                pv.IsOn = false;
+                pv.HasApplied = true;
+                if (pv.Beam != null) pv.Beam.intensity = 0f;
+                if (pv.BeamCone != null && pv.BeamCone.activeSelf) pv.BeamCone.SetActive(false);
+            }
         }
 
         /// <summary>播放器为 null 视为"已完成"（没这个设备就不该等它）。</summary>
@@ -3148,15 +3192,22 @@ namespace SchoolTwin.Present
             mat.SetVector("_Size", new Vector4(frame.Width, frame.Height, 0f, 0f));
             mat.SetColor(EmissionId, Color.black);      // 关机全黑
 
-            // 关机时显示的"幕布本色"：**沿用幕布原来的材质颜色**，
-            // 这样没投影时它就是一块普通白布，和周围环境一致。
+            // 关机时显示的"幕布本色"：应该是一块**白布**。
+            //
+            // ⚠️ 不能直接沿用原材质颜色 —— 2026-10-27 用户报"关机后幕布还是黑色"，
+            // 就是因为幕布模型的原材质本身就是深色（美术做"屏幕关闭"的效果），
+            // 直接取它的亮度算出来接近黑，看起来像没关机。
+            //
+            // 真实投影幕布是白色/浅灰的布料，无论模型贴图是什么颜色。
+            // 所以：取原材质亮度作为**上限参考**，但设一个下限 0.62，
+            // 保证任何模型关掉后都是一块浅灰白的布。
             Color offCol = new Color(0.78f, 0.78f, 0.75f, 1f);
             Material origMat = canvas.sharedMaterial;
             if (origMat != null && origMat.HasProperty("_Color"))
             {
                 Color oc = origMat.GetColor("_Color");
-                // 只取亮度，避免原材质带奇怪色偏（有些模型材质是蓝灰的）
                 float lum = Mathf.Clamp01(oc.r * 0.299f + oc.g * 0.587f + oc.b * 0.114f);
+                lum = Mathf.Clamp(lum, 0.62f, 1f);       // ← 下限 0.62：白布
                 offCol = new Color(lum, lum, lum * 0.98f, 1f);
             }
             mat.SetColor("_OffColor", offCol);

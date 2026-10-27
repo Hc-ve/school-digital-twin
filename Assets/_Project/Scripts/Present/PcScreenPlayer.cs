@@ -474,17 +474,21 @@ namespace SchoolTwin.Present
         /// </summary>
         public void RestoreTargetTexture()
         {
-            if (TargetMaterial == null) return;
+            if (TargetMaterial == null || ScreenRT == null) return;
 
-            if (TargetMaterial.HasProperty("_EmissionMap") && ScreenRT != null)
-                TargetMaterial.SetTexture("_EmissionMap", ScreenRT);
-
-            if (TargetMaterial.HasProperty("_MainTex") && ScreenRT != null)
-                TargetMaterial.SetTexture("_MainTex", ScreenRT);
-
-            // 幕布的 contain 模式要关掉 —— 视频是 cover
+            // ⚠️ 同样必须按**着色器种类**分流。
+            // `Standard` 的 `_MainTex` 是 Albedo，贴图集上去会把整个模型染黑/染色。
             if (TargetMaterial.HasProperty("_Contain"))
-                TargetMaterial.SetFloat("_Contain", 0f);
+            {
+                // 幕布：`_MainTex` 就是画面
+                TargetMaterial.SetTexture("_MainTex", ScreenRT);
+                TargetMaterial.SetFloat("_Contain", 0f);   // 视频用 cover
+            }
+            else if (TargetMaterial.HasProperty("_EmissionMap"))
+            {
+                // 显示器：只动自发光
+                TargetMaterial.SetTexture("_EmissionMap", ScreenRT);
+            }
         }
 
         /// <summary>
