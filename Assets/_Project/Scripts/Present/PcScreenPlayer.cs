@@ -67,10 +67,12 @@ namespace SchoolTwin.Present
         /// <param name="onColor">点亮时的 `_EmissionColor`（会被 `_EmissionMap` 相乘）。</param>
         /// <param name="parent">挂在谁下面（只影响 Hierarchy 观感）。</param>
         /// <param name="atlasSize">合成 RT 的边长，必须等于显示器图集边长（默认 2048）。</param>
+        /// <param name="inset">四周均匀内缩比例（0~0.3）。模拟真实显示器留一圈黑边。</param>
         public static PcScreenPlayer Create(string name, string fileName,
                                             Vector2 uvMin, Vector2 uvMax,
                                             Material target, Color onColor, Transform parent,
-                                            int atlasSize = AtlasSize)
+                                            int atlasSize = AtlasSize,
+                                            float inset = 0.06f)
         {
             PcScreenPlayer p = new PcScreenPlayer();
             p.TargetMaterial = target;
@@ -110,6 +112,7 @@ namespace SchoolTwin.Present
             p._composite.SetVector("_ScreenMin", new Vector4(uvMin.x, uvMin.y, 0f, 0f));
             p._composite.SetVector("_ScreenMax", new Vector4(uvMax.x, uvMax.y, 0f, 0f));
             p._composite.SetFloat("_Fit", p._fit);
+            p._composite.SetFloat("_Inset", Mathf.Clamp(inset, 0f, 0.3f));
 
             // ---- 解码 ----
             p._videoRT = new RenderTexture(VideoW, VideoH, 0, RenderTextureFormat.ARGB32);

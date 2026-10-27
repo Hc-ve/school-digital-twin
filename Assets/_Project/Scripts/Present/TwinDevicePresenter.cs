@@ -1731,6 +1731,11 @@ namespace SchoolTwin.Present
         [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
         [SerializeField] private int _screenVideoAtlasSize = 2048;
 
+        [Tooltip("视频画面四周均匀内缩的比例。模拟真实显示器「画面不贴边框」，留一圈黑边。" +
+                 "0 = 铺满整块屏幕，0.06 = 每边留 6%")]
+        [Range(0f, 0.3f)]
+        [SerializeField] private float _screenVideoInset = 0.06f;
+
         /// <summary>屏幕矩形在**图集 UV** 里的范围（左下 / 右上）。和 `BuildScreenMask` 用同一套常量。</summary>
         private void ScreenUvRect(out Vector2 min, out Vector2 max)
         {
@@ -1878,7 +1883,7 @@ namespace SchoolTwin.Present
                 ScreenUvRect(out uvMin, out uvMax);
                 v.Player = PcScreenPlayer.Create("Master", _masterBootVideo, uvMin, uvMax,
                                                  variant, _screenEmission, anchor.transform,
-                                                 _screenVideoAtlasSize);
+                                                 _screenVideoAtlasSize, _screenVideoInset);
                 if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
                 {
                     variant.SetTexture("_EmissionMap", v.Player.ScreenRT);
