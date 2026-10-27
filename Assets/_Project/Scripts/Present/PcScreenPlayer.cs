@@ -200,9 +200,36 @@ namespace SchoolTwin.Present
             }
         }
 
+        /// <summary>
+        /// 换一段视频接着播（"打开PPT"/"视频播放"用）。
+        /// 文件不存在就返回 false 并打日志 —— 素材是后补的，不该因此崩。
+        /// </summary>
+        public bool PlayFile(string fileName)
+        {
+            if (!HasVideo || _player == null) return false;
+            if (string.IsNullOrEmpty(fileName)) return false;
+
+            string full = Path.Combine(Application.streamingAssetsPath,
+                                       Path.Combine("PC", fileName).Replace('\\', '/'));
+            if (!File.Exists(full))
+            {
+                Debug.Log("[P26] 找不到视频「" + full + "」，画面保持不变。");
+                return false;
+            }
+
+            _player.url = full;
+            _player.Prepare();
+            _player.Play();          // Unity 会等 prepare 完成后再真正出画面
+            _on = true;
+            if (TargetMaterial != null) TargetMaterial.SetColor("_EmissionColor", _onColor);
+
+            Debug.Log("[P26] 切视频 → " + full);
+            return true;
+        }
+
         /// <summary>每帧调用：把视频合成进 screenRT。</summary>
         public void Tick()
-        {
+        {        public void Tick()
             if (!HasVideo || !_on) return;
             if (_player == null || _videoRT == null || ScreenRT == null || _composite == null) return;
             if (!_player.isPrepared) return;

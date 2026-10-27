@@ -287,6 +287,11 @@ namespace SchoolTwin.UI
 
         private void AddCandidate(string twinId, Vector3 pos, float range, string label)
         {
+            // 【P26】主脑由 `TwinPcMenuPanel` 接管（三个开机模式 + 开机后按钮组），
+            // 这里必须跳过 —— 否则单按钮提示和多按钮面板会同时弹在屏幕上，
+            // 用户点了单按钮只能"开/关"，三个模式等于没做。
+            if (string.Equals(twinId, "ClassComputer/PC/Master_01", StringComparison.Ordinal)) return;
+
             // 同一点位只留一个：墙上的开关方块先加，天花板上的灯锚点后加，
             // 不去重的话两处都在范围内时标签会来回跳。
             for (int i = 0; i < _candidates.Count; i++)

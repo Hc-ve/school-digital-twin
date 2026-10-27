@@ -1993,6 +1993,24 @@ namespace SchoolTwin.Present
             v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
         }
 
+        /// <summary>
+        /// 【P26】给某个点位换视频（"打开PPT" / "视频播放" 用）。
+        /// 显示器点位和幕布点位都支持；素材不存在时返回 false，画面保持不变。
+        /// </summary>
+        public bool PlayPcVideo(string twinId, string fileName)
+        {
+            ScreenVisual sv;
+            if (_screens.TryGetValue(twinId, out sv) && sv != null && sv.Player != null)
+                return sv.Player.PlayFile(fileName);
+
+            ProjectorVisual pv;
+            if (_projectors.TryGetValue(twinId, out pv) && pv != null && pv.Player != null)
+                return pv.Player.PlayFile(fileName);
+
+            Debug.Log("[P26] 点位「" + twinId + "」没有视频载体，换片请求忽略。");
+            return false;
+        }
+
         /// <summary>【P26】每帧把视频合成进各屏的 RT。挂在这里是因为表现层已经有一个 Update。</summary>
         private void TickScreenVideos()
         {
