@@ -1731,10 +1731,10 @@ namespace SchoolTwin.Present
         [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
         [SerializeField] private int _screenVideoAtlasSize = 2048;
 
-        [Tooltip("视频画面四周均匀内缩的比例。模拟真实显示器「画面不贴边框」，留一圈黑边。" +
-                 "0 = 铺满整块屏幕，0.06 = 每边留 6%")]
+        [Tooltip("视频画面四周均匀内缩的比例。0 = 铺满整块屏幕（**默认**）。" +
+                 "⚠️ 显示器模型本身自带白色边框（Monitor04 的 bezel），再加内缩会变成双层边框")]
         [Range(0f, 0.3f)]
-        [SerializeField] private float _screenVideoInset = 0.06f;
+        [SerializeField] private float _screenVideoInset = 0f;
 
         /// <summary>屏幕矩形在**图集 UV** 里的范围（左下 / 右上）。和 `BuildScreenMask` 用同一套常量。</summary>
         private void ScreenUvRect(out Vector2 min, out Vector2 max)
