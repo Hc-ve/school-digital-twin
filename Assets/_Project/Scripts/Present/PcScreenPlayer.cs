@@ -56,6 +56,14 @@ namespace SchoolTwin.Present
         private int _blitCount;      // 【诊断】累计 Blit 次数
         private float _prepareRetryAt = -1f;   // 未就绪重试的时间点
 
+        /// <summary>
+        /// 【P26】这台屏的**默认视频**（创建时传入，通常是开机动画）。
+        /// 关机后再开机会回到它 —— 否则「打开PPT → 关机 → 开机」还会显示 PPT。
+        /// </summary>
+        private string _defaultFile;
+        /// <summary>当前正在播的文件。和 `_defaultFile` 不同就说明被换过片。</summary>
+        private string _currentFile;
+
         /// <summary>调试用名字（日志里区分是哪个点位）。</summary>
         public string Name = "?";
 
@@ -100,6 +108,8 @@ namespace SchoolTwin.Present
             p.TargetMaterial = target;
             p._onColor = onColor;
             p.Name = name;
+            p._defaultFile = fileName;      // 关机后再开机回到这个
+            p._currentFile = fileName;
 
             // 显示区域的真实宽高比。0 = 从 UV 矩形推导（只对正方形图集成立）。
             float aspect = rectAspect;
@@ -319,6 +329,26 @@ namespace SchoolTwin.Present
 
             if (on)
             {
+                // ── 【P26】开机永远从**默认视频**（开机动画）开始 ──────────
+                //
+                // 2026-10-27 用户实测：「打开PPT → 关机 → 再开机」仍然是 PPT 画面。
+                // 原因：`PlayFile` 改了 `_player.url`，关机只是 `Stop()`，
+                // 再 `Play()` 播的还是那个被改过的 url。
+                //
+                // 语义上也不该保留：开机动画是固定流程，跟"上次看到哪"无关。
+                if (!string.IsNullOrEmpty(_defaultFile) &&
+                    !string.Equals(_currentFile, _defaultFile, StringComparison.Ordinal))
+                {
+                    Debug.Log("[P26] " + Name + " 开机 → 从「" + _currentFile +
+                              "」切回默认视频「" + _defaultFile + "」");
+                    if (PlayFile(_defaultFile))
+                    {
+                        // PlayFile 内部已经 Prepare + Play，这里只需补颜色
+                        if (TargetMaterial != null) TargetMaterial.SetColor(EmissionId, _onColor);
+                        return;
+                    }
+                }
+
                 // ⚠️ 未准备就绪时 `Play()` 是空操作，状态机会卡在"未播"。
                 // 2026-10-27 实测：投影仪 `playing=False prepared=False frame=-1 blit=0`，
                 // 而电脑那边同一段代码是 `playing=True`。
@@ -368,6 +398,7 @@ namespace SchoolTwin.Present
                 return false;
             }
 
+            _currentFile = fileName;
             _player.url = full;
             _player.Prepare();
             _player.Play();          // Unity 会等 prepare 完成后再真正出画面
