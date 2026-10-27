@@ -345,6 +345,11 @@ namespace SchoolTwin.Present
 
             if (on)
             {
+                // 【P26】开机先把贴图收回本播放器。
+                // 关机前如果停在 PPT 模式，材质上贴的还是 PPT 那张图 ——
+                // 只把 `_on` 置 true 是不会自动换回视频的。
+                RestoreTargetTexture();
+
                 // ── 【P26】开机永远从**默认视频**（开机动画）开始 ──────────
                 //
                 // 2026-10-27 用户实测：「打开PPT → 关机 → 再开机」仍然是 PPT 画面。
@@ -457,6 +462,32 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
+        /// 【P26】把材质的贴图**收回本播放器**。
+        ///
+        /// ── 为什么必须有这一句 ──────────────────────────────────────────
+        /// PPT 模式会往同一个材质上贴 PPT 图（显示器贴合成图集、幕布贴原图）。
+        /// 退出 PPT 后如果只 `PlayFile` 改 `url`，**贴图还停在 PPT 那张**，
+        /// 表现就是"重新开关机，材质也没变回来"（2026-10-27 用户实测）。
+        ///
+        /// 视频播放靠 `_EmissionMap`（显示器）/ `_MainTex`（幕布）指向自己的
+        /// `ScreenRT` —— 必须显式设回去，视频才有地方输出。
+        /// </summary>
+        public void RestoreTargetTexture()
+        {
+            if (TargetMaterial == null) return;
+
+            if (TargetMaterial.HasProperty("_EmissionMap") && ScreenRT != null)
+                TargetMaterial.SetTexture("_EmissionMap", ScreenRT);
+
+            if (TargetMaterial.HasProperty("_MainTex") && ScreenRT != null)
+                TargetMaterial.SetTexture("_MainTex", ScreenRT);
+
+            // 幕布的 contain 模式要关掉 —— 视频是 cover
+            if (TargetMaterial.HasProperty("_Contain"))
+                TargetMaterial.SetFloat("_Contain", 0f);
+        }
+
+        /// <summary>
         /// 【P26】把播放器停掉但不改自发光（进 PPT 模式时用）。
         /// `SetOn(false)` 会把 `_on` 置 false 并清黑，退出 PPT 后要重新开机流程，
         /// 这里只停画面，回来直接 `Play()` 就行。
@@ -487,11 +518,10 @@ namespace SchoolTwin.Present
             _player.url = full;
             _player.Prepare();
 
-            // 【P26】视频一律用 cover（铺满裁边）。
-            // PPT 模式会把幕布材质的 `_Contain` 设成 1（完整显示、四周留黑），
-            // 退出 PPT 去播视频时必须改回 0，否则视频也会被缩进中间留一圈黑边。
-            if (TargetMaterial != null && TargetMaterial.HasProperty("_Contain"))
-                TargetMaterial.SetFloat("_Contain", 0f);
+            // 【P26】把贴图收回本播放器。
+            // 从 PPT 模式退出来时材质上贴的还是 PPT 那张图，
+            // 不设回 `ScreenRT` 的话视频画面根本没地方输出。
+            RestoreTargetTexture();
 
             // 【只在屏幕开着时才播】关机状态下换片不该把屏幕点亮。
             // 2026-10-27：原来这里无条件 `Play()` + 设亮色，

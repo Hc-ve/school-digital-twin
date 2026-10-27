@@ -1781,8 +1781,22 @@ namespace SchoolTwin.Present
         //   ffmpeg -i in.mp4 -vf "cropdetect=limit=24:round=2:reset=0" -f null -
         // 看输出是不是 crop=W:H:0:0，不是就先裁。
 
-        [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
-        [SerializeField] private int _screenVideoAtlasSize = 2048;
+        [Tooltip("**主脑**的屏幕视频合成分辨率。2048 清晰但吃显存（约 16MB/张）")]
+        [SerializeField] private int _masterVideoAtlasSize = 2048;
+
+        // ---- 【P26】机房 18 台的图集尺寸 ----
+        // 每台显示器都有自己的 RenderTexture + 每帧一次 `Graphics.Blit`。
+        // 19 台 × 2048² = 19 次 2048² 的 blit/帧，光带宽就 300MB/s+，
+        // 帧率会明显掉（2026-10-27 用户实测"视频播放很卡顿"）。
+        //
+        // 但机房那 18 台在画面上只占很小一块（玩家站远处看是一排小屏幕），
+        // 2048 完全是浪费。512 足够 —— 屏幕矩形在图集里约 1386×855 像素，
+        // 缩到 512 后实际显示约 347×214 像素，对远处的显示器绰绰有余。
+        //
+        // 19 台 × 512² = 原来的 1/16 带宽。
+        [Tooltip("**机房 18 台**的屏幕视频合成分辨率。512 足够（远处看是小屏幕），" +
+                 "调高会明显掉帧")]
+        [SerializeField] private int _roomVideoAtlasSize = 512;
 
         // ---- 【P26】逐个亮（开机风暴）----
         // 18 台显示器原来共用一个材质，只能全亮全灭，没有"机房开机"的节奏感。
@@ -1918,6 +1932,15 @@ namespace SchoolTwin.Present
             /// 共用一份材质只能全亮全灭；要"逐个亮"必须一台一份。
             /// </summary>
             public Material[] Units;
+            /// <summary>
+            /// 【P26】18 台是否已经合并回共享材质。
+            ///
+            /// 逐个亮期间 18 份独立材质 = **18 个 draw call**（动态合批失效）。
+            /// 全部点亮后颜色一致了，就该合并回 `Material` 一份 ——
+            /// 重新恢复动态合批，变回 1 个 draw call。
+            /// 2026-10-27 用户报"视频播放很卡顿"，这是主因之一。
+            /// </summary>
+            public bool Merged;
             /// <summary>【P26】逐个亮的起点时间；&lt;0 表示没有正在进行的点亮。</summary>
             public float LitAt = -1f;
             /// <summary>【P26】已经点亮了几台。</summary>
@@ -2065,13 +2088,16 @@ namespace SchoolTwin.Present
                                               StringComparison.Ordinal);
                 float vol = isMaster ? _masterVolume : _roomVolume;
 
+                // 主脑用高分辨率，机房 18 台用低分辨率（省 16 倍带宽）
+                int atlas = isMaster ? _masterVideoAtlasSize : _roomVideoAtlasSize;
+
                 // 音源放音箱处（找不到就跟着锚点）
                 Vector3 audioPos;
                 bool hasAudioPos = TryGetRoomAudioPos(FindRoomNode(anchor.transform), out audioPos);
 
                 v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), videoFile, uvMin, uvMax,
                                                  variant, _screenEmission, anchor.transform,
-                                                 _screenVideoAtlasSize, _screenVideoInset, 0f, vol,
+                                                 atlas, _screenVideoInset, 0f, vol,
                                                  hasAudioPos ? (Vector3?)audioPos : null);
                 if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
                 {
@@ -2171,6 +2197,8 @@ namespace SchoolTwin.Present
             {
                 if (on)
                 {
+                    // 上次点亮完已经合并回共享材质了，这里重新拆开
+                    SplitUnits(v);
                     v.LitAt = Time.time;
                     v.LitCount = 0;
                 }
@@ -2178,6 +2206,10 @@ namespace SchoolTwin.Present
                 {
                     v.LitAt = -1f;
                     v.LitCount = 0;
+                    // 关机：直接全灭（不做逐个熄灭，下课时没人看屏幕）。
+                    // 合并期间发光走的是共享材质，只设 Units 是无效的。
+                    if (v.Material != null && v.Material.HasProperty(EmissionId))
+                        v.Material.SetColor(EmissionId, Color.black);
                     for (int i = 0; i < v.Units.Length; i++)
                         if (v.Units[i] != null) v.Units[i].SetColor(EmissionId, Color.black);
                 }
@@ -2199,6 +2231,48 @@ namespace SchoolTwin.Present
             if (!v.Material.HasProperty(EmissionId)) return;
 
             v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
+        }
+
+        /// <summary>
+        /// 【P26】把 18 份独立材质合并回共享的那一份，恢复动态合批。
+        ///
+        /// 逐个亮期间必须一台一份材质（`_EmissionColor` 是逐材质的），
+        /// 代价是动态合批失效 —— 18 台从 1 个 draw call 变 18 个。
+        /// 全部点亮后颜色都一样了，就没必要再分开：
+        /// 把 18 台的 `sharedMaterial` 都指向 `v.Material`，Unity 会自动重新合批。
+        ///
+        /// 原始 `Units` 数组**保留**（不销毁材质），下次开机重新拆开时直接复用，
+        /// 省掉 18 次 `new Material`。
+        /// </summary>
+        private void MergeUnits(ScreenVisual v)
+        {
+            if (v.Merged || v.Material == null || v.Units == null) return;
+
+            // 共享材质也要是"亮"的，否则合并后屏幕会灭
+            if (v.Material.HasProperty(EmissionId))
+                v.Material.SetColor(EmissionId, _screenEmission);
+
+            for (int i = 0; i < v.Renderers.Length && i < v.Units.Length; i++)
+            {
+                if (v.Renderers[i] != null) v.Renderers[i].sharedMaterial = v.Material;
+            }
+            v.Merged = true;
+        }
+
+        /// <summary>
+        /// 【P26】把共享材质重新拆成每台一份，准备逐个亮。和 `MergeUnits` 配对。
+        /// </summary>
+        private void SplitUnits(ScreenVisual v)
+        {
+            if (!v.Merged || v.Material == null || v.Units == null) return;
+
+            for (int i = 0; i < v.Renderers.Length && i < v.Units.Length; i++)
+            {
+                if (v.Renderers[i] == null || v.Units[i] == null) continue;
+                v.Units[i].SetColor(EmissionId, Color.black);
+                v.Renderers[i].sharedMaterial = v.Units[i];
+            }
+            v.Merged = false;
         }
 
         /// <summary>
@@ -2233,8 +2307,9 @@ namespace SchoolTwin.Present
                 if (v.LitCount >= v.Units.Length)
                 {
                     v.LitAt = -1f;      // 全亮完了，停止推进
+                    MergeUnits(v);
                     Debug.Log("[TwinPresent] 「" + kv.Key + "」" + v.Units.Length +
-                              " 台显示器已全部点亮");
+                              " 台显示器已全部点亮（材质已合并，恢复合批）");
                 }
             }
         }
@@ -2427,8 +2502,13 @@ namespace SchoolTwin.Present
                     mats.Add(pv.ScreenMaterial);
                 }
 
+                // 屏幕矩形在显示器图集里的 UV —— PPT 合成要用同一套，否则遮罩对不上
+                Vector2 uvMin, uvMax;
+                ScreenUvRect(out uvMin, out uvMax);
+
                 _slideShow = PcSlideShow.Create(PcMediaLibrary.GetSlides(), mats.ToArray(),
-                                                _slideEmission);
+                                                _slideEmission, uvMin, uvMax,
+                                                _masterVideoAtlasSize);
             }
 
             if (!_slideShow.HasSlides)
@@ -2556,14 +2636,26 @@ namespace SchoolTwin.Present
         /// <summary>
         /// 退出演示后把屏幕恢复成"待机画面"（开机视频）。
         /// 主脑和幕布都回各自的默认素材，不留上一段内容的残影。
+        ///
+        /// 【顺序很重要】必须先 `RestoreTargetTexture()` 把贴图收回播放器，
+        /// 再 `PlayFile`。反过来的话 `PlayFile` 里虽然也会调，但此时 `_on` 可能还是
+        /// PPT 期间的状态，贴图会被 PPT 那张盖住一帧。
         /// </summary>
         private void RestoreIdleScreen()
         {
             PcScreenPlayer mp = MasterPlayer();
-            if (mp != null && !string.IsNullOrEmpty(_masterBootVideo)) mp.PlayFile(_masterBootVideo);
+            if (mp != null)
+            {
+                mp.RestoreTargetTexture();
+                if (!string.IsNullOrEmpty(_masterBootVideo)) mp.PlayFile(_masterBootVideo);
+            }
 
             PcScreenPlayer pp = ProjectorPlayer();
-            if (pp != null && !string.IsNullOrEmpty(_projectorVideo)) pp.PlayFile(_projectorVideo);
+            if (pp != null)
+            {
+                pp.RestoreTargetTexture();
+                if (!string.IsNullOrEmpty(_projectorVideo)) pp.PlayFile(_projectorVideo);
+            }
         }
 
         /// <summary>把当前选中的视频同时播到主脑和幕布上。</summary>

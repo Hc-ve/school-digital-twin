@@ -26,7 +26,9 @@ import pymupdf
 from PIL import Image
 
 CANVAS_W, CANVAS_H = 1920, 1200      # 16:10，和视频素材一致
-JPG_QUALITY = 92
+# 95 而不是 92：PPT 是文字/线条为主，压缩率调低后文字边缘明显更干净。
+# 代价：12 页从 1.4MB 涨到约 2.5MB —— 完全可以接受（视频动辄几十 MB）。
+JPG_QUALITY = 95
 BG = (0, 0, 0)                        # 黑边颜色
 
 

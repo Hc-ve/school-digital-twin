@@ -31,6 +31,24 @@ namespace SchoolTwin.Present
         private int _index = -1;
         private bool _visible;
 
+        // ---- 显示器的图集合成 ----
+        // 显示器的材质是 Standard + `_EmissionMap`，那张图集里**只有屏幕矩形是白的**，
+        // 其余全黑 —— 这就是"只有屏幕发光、边框不亮"的实现方式。
+        //
+        // 如果直接把 PPT 图片塞进 `_EmissionMap`，等于把遮罩换掉了：
+        // 整个显示器（机身、底座、支架）都会显示 PPT 画面。
+        // 2026-10-27 用户实测："我切换PPT，主脑的材质也在跟着变" —— 就是这个。
+        //
+        // 正确做法：先把 PPT 画到一张 **2048² 的合成图集**里（屏幕矩形内是画面、
+        // 其余黑），再把合成结果当 `_EmissionMap`。用的是和视频完全相同的
+        // `SchoolTwin/ScreenComposite` 着色器。
+        private RenderTexture _atlasRT;
+        private Material _compositeMat;
+        private int _atlasSize = 2048;
+        private Vector2 _uvMin;
+        private Vector2 _uvMax;
+        private bool _needComposite;
+
         /// <summary>一共几页。</summary>
         public int Count { get { return _files != null ? _files.Length : 0; } }
 
@@ -52,12 +70,19 @@ namespace SchoolTwin.Present
         /// 幕布的材质有 `_MainTex`（ScreenOnModel）—— 这里自动识别。
         /// </param>
         /// <param name="onColor">自发光颜色（白色 = 正常亮度）。</param>
-        public static PcSlideShow Create(string[] files, Material[] targets, Color onColor)
+        /// <param name="uvMin">屏幕矩形在显示器图集里的左下 UV。</param>
+        /// <param name="uvMax">屏幕矩形在显示器图集里的右上 UV。</param>
+        /// <param name="atlasSize">显示器图集边长（和视频用的一致，2048）。</param>
+        public static PcSlideShow Create(string[] files, Material[] targets, Color onColor,
+                                         Vector2 uvMin, Vector2 uvMax, int atlasSize)
         {
             PcSlideShow s = new PcSlideShow();
             s._files = files ?? new string[0];
             s._targets = targets ?? new Material[0];
             s._onColor = onColor;
+            s._uvMin = uvMin;
+            s._uvMax = uvMax;
+            s._atlasSize = Mathf.Max(256, atlasSize);
 
             if (s._files.Length == 0)
             {
@@ -65,7 +90,53 @@ namespace SchoolTwin.Present
                                  PcMediaLibrary.FolderPath + "/" + PcMediaLibrary.SlideFolder +
                                  "/ 下，文件名用 slide_01.jpg 这种数字前缀（决定页序）。");
             }
+
+            // 有任何一个目标材质用 `_EmissionMap`（Standard 显示器）就需要合成
+            for (int i = 0; i < s._targets.Length; i++)
+            {
+                Material m = s._targets[i];
+                if (m != null && m.HasProperty("_EmissionMap"))
+                {
+                    s._needComposite = true;
+                    break;
+                }
+            }
+
+            if (s._needComposite) s.BuildComposite();
+
             return s;
+        }
+
+        /// <summary>建合成用的 RT 和材质。</summary>
+        private void BuildComposite()
+        {
+            Shader sh = Shader.Find("SchoolTwin/ScreenComposite");
+            if (sh == null)
+            {
+                Debug.LogWarning("[P26] 找不到 `SchoolTwin/ScreenComposite`，" +
+                                 "PPT 会直接贴到显示器材质上（机身会跟着变色）。");
+                _needComposite = false;
+                return;
+            }
+
+            _atlasRT = new RenderTexture(_atlasSize, _atlasSize, 0, RenderTextureFormat.ARGB32);
+            _atlasRT.name = "PcSlideAtlasRT";
+            _atlasRT.wrapMode = TextureWrapMode.Clamp;
+            _atlasRT.filterMode = FilterMode.Bilinear;
+            _atlasRT.Create();
+
+            // 先清黑：屏幕矩形之外必须是黑的，否则整个机身都会亮
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = _atlasRT;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = prev;
+
+            _compositeMat = new Material(sh);
+            _compositeMat.name = "PcSlideComposite";
+            _compositeMat.SetVector("_ScreenMin", new Vector4(_uvMin.x, _uvMin.y, 0f, 0f));
+            _compositeMat.SetVector("_ScreenMax", new Vector4(_uvMax.x, _uvMax.y, 0f, 0f));
+            _compositeMat.SetFloat("_Inset", 0f);
+            _compositeMat.SetColor("_Tint", Color.white);
         }
 
         /// <summary>显示指定页。返回 false 表示这张图读不出来。</summary>
@@ -132,6 +203,19 @@ namespace SchoolTwin.Present
                 UnityEngine.Object.Destroy(_current);
                 _current = null;
             }
+
+            if (_atlasRT != null)
+            {
+                _atlasRT.Release();
+                UnityEngine.Object.Destroy(_atlasRT);
+                _atlasRT = null;
+            }
+            if (_compositeMat != null)
+            {
+                UnityEngine.Object.Destroy(_compositeMat);
+                _compositeMat = null;
+            }
+
             _visible = false;
             _index = -1;
         }
@@ -177,13 +261,26 @@ namespace SchoolTwin.Present
         {
             float aspect = tex.height > 0 ? (float)tex.width / tex.height : 1.6f;
 
+            // 先合成一张"只有屏幕矩形有画面"的图集（显示器用）
+            Texture displayTex = tex;
+            if (_needComposite && _atlasRT != null && _compositeMat != null)
+            {
+                float rectAspect = Mathf.Abs(_uvMax.x - _uvMin.x) /
+                                   Mathf.Max(1e-5f, Mathf.Abs(_uvMax.y - _uvMin.y));
+                _compositeMat.SetFloat("_Fit", aspect / Mathf.Max(1e-5f, rectAspect));
+
+                Graphics.Blit(tex, _atlasRT, _compositeMat);
+                displayTex = _atlasRT;
+            }
+
             for (int i = 0; i < _targets.Length; i++)
             {
                 Material m = _targets[i];
                 if (m == null) continue;
 
-                // 显示器走 Standard 的 `_EmissionMap`；幕布走 ScreenOnModel 的 `_MainTex`
-                if (m.HasProperty("_EmissionMap")) m.SetTexture("_EmissionMap", tex);
+                // 显示器走 Standard 的 `_EmissionMap`（用合成后的图集，保住遮罩）
+                if (m.HasProperty("_EmissionMap")) m.SetTexture("_EmissionMap", displayTex);
+                // 幕布走 ScreenOnModel 的 `_MainTex`（直接贴原图，它自己算 UV）
                 if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
 
                 // 幕布的着色器要额外告诉它"图片比例"并切到 contain
