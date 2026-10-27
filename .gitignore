@@ -85,3 +85,6 @@ crashlytics-build.properties
 /p19_door.txt
 /p19_doorfix.txt
 /p19_door_runtime.txt
+
+# P26 素材备份（不该进仓库，也不该进包体）
+video/_backup/

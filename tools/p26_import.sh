@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# ============================================================================
+# P26 素材导入脚本
+#
+# 把任意来源的视频转成标准参数并放进 StreamingAssets，自动备份旧文件。
+#
+# 用法：
+#   ./tools/p26_import.sh <源视频> <槽位>
+#
+# 槽位：
+#   boot      开机动画（主脑 + 18 台 + 幕布共用）
+#   ppt       「打开PPT」
+#   lesson    「视频播放」
+#
+# 例：
+#   ./tools/p26_import.sh ~/Downloads/豆包视频.mp4 boot
+#   ./tools/p26_import.sh video/教学演示.mp4 lesson
+#
+# 做了什么：
+#   1. 检测源视频规格和黑边
+#   2. 自动裁掉黑边（如果有）
+#   3. cover 转成 1920×1200 (16:10) / H.264 / yuv420p / 30fps
+#   4. 备份旧文件到 _backup/
+#   5. 复检并报告
+# ============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+OUT_DIR="$PROJECT_DIR/Assets/StreamingAssets/PC/master"
+# 备份放在 StreamingAssets **外面** —— 那里的所有文件都会被打进包体
+BACKUP_DIR="$PROJECT_DIR/video/_backup"
+
+W=1920
+H=1200
+CRF=18
+FPS=30
+
+usage() {
+    echo "用法: $0 <源视频> <槽位>"
+    echo ""
+    echo "槽位: boot | ppt | lesson"
+    echo "例:   $0 ~/Downloads/豆包.mp4 boot"
+    exit 1
+}
+
+[ $# -lt 2 ] && usage
+
+IN="$1"
+SLOT="$2"
+
+case "$SLOT" in
+    boot|ppt|lesson) ;;
+    *) echo "✘ 槽位只能是 boot / ppt / lesson"; usage ;;
+esac
+
+if [ ! -f "$IN" ]; then
+    echo "✘ 找不到源文件: $IN"
+    exit 1
+fi
+
+OUT="$OUT_DIR/${SLOT}.mp4"
+mkdir -p "$OUT_DIR"
+
+echo "════════════════════════════════════════════════"
+echo " 源文件: $IN"
+echo " 槽位  : $SLOT  →  $OUT"
+echo "════════════════════════════════════════════════"
+
+# ── 1. 源规格 ────────────────────────────────────────────────────────
+echo ""
+echo "[1/5] 源视频规格"
+ffprobe -v error -select_streams v:0 \
+    -show_entries stream=width,height,r_frame_rate,codec_name,pix_fmt,duration \
+    -of default=noprint_wrappers=1 "$IN" | sed 's/^/      /'
+
+HAS_AUDIO=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$IN" || true)
+if [ -n "$HAS_AUDIO" ]; then
+    echo "      音轨: 有 ($HAS_AUDIO)"
+else
+    echo "      音轨: 无（转码时补一条静音轨，避免 Unity 那边 SetTargetAudioSource 报错）"
+fi
+
+# ── 2. 黑边检测 ──────────────────────────────────────────────────────
+echo ""
+echo "[2/5] 黑边检测"
+DETECT=$(ffmpeg -hide_banner -i "$IN" -vf "cropdetect=limit=24:round=2:reset=0" \
+         -f null - 2>&1 | grep -oE "crop=[0-9]+:[0-9]+:[0-9]+:[0-9]+" | sort -u | tail -1 || true)
+echo "      $DETECT"
+
+IN_W=$(ffprobe -v error -select_streams v:0 -show_entries stream=width  -of csv=p=0 "$IN")
+IN_H=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$IN")
+CW=$(echo "$DETECT" | sed 's/crop=//' | cut -d: -f1)
+CH=$(echo "$DETECT" | cut -d: -f2)
+CX=$(echo "$DETECT" | cut -d: -f3)
+CY=$(echo "$DETECT" | cut -d: -f4)
+
+PRE=""
+if [ -n "$CW" ] && [ "$CW" != "$IN_W" ]; then
+    echo "      ⚠ 自带黑边 ${IN_W}x${IN_H} → 内容 ${CW}x${CH}，先裁"
+    PRE="crop=${CW}:${CH}:${CX}:${CY},"
+else
+    echo "      ✔ 无黑边"
+fi
+
+# ── 3. 转码 ──────────────────────────────────────────────────────────
+echo ""
+echo "[3/5] 转码 → ${W}x${H} (16:10) / H.264 / crf $CRF / ${FPS}fps"
+TMP="$(mktemp -u).mp4"
+
+if [ -n "$HAS_AUDIO" ]; then
+    ffmpeg -hide_banner -loglevel error -y -i "$IN" \
+        -vf "${PRE}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS}" \
+        -c:v libx264 -preset slow -crf "$CRF" -pix_fmt yuv420p \
+        -c:a aac -b:a 128k -ac 2 \
+        -movflags +faststart "$TMP"
+else
+    # 无音轨：补一条静音，避免 VideoPlayer 的 SetTargetAudioSource 拿不到轨道
+    ffmpeg -hide_banner -loglevel error -y -i "$IN" \
+        -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+        -vf "${PRE}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS}" \
+        -c:v libx264 -preset slow -crf "$CRF" -pix_fmt yuv420p \
+        -c:a aac -b:a 128k -ac 2 -shortest \
+        -movflags +faststart "$TMP"
+fi
+
+# ── 4. 备份 + 替换 ───────────────────────────────────────────────────
+echo ""
+echo "[4/5] 备份并替换"
+if [ -f "$OUT" ]; then
+    mkdir -p "$BACKUP_DIR"
+    STAMP=$(date +%Y%m%d_%H%M%S)
+    cp "$OUT" "$BACKUP_DIR/${SLOT}_${STAMP}.mp4"
+    echo "      旧文件 → _backup/${SLOT}_${STAMP}.mp4"
+else
+    echo "      槽位原来是空的，无需备份"
+fi
+mv "$TMP" "$OUT"
+echo "      ✔ 已写入 $OUT"
+
+# ── 5. 复检 ──────────────────────────────────────────────────────────
+echo ""
+echo "[5/5] 复检"
+ffprobe -v error -select_streams v:0 \
+    -show_entries stream=width,height,r_frame_rate,codec_name,pix_fmt,duration \
+    -of default=noprint_wrappers=1 "$OUT" | sed 's/^/      /'
+
+FINAL=$(ffmpeg -hide_banner -i "$OUT" -vf "cropdetect=limit=24:round=2:reset=0" \
+        -f null - 2>&1 | grep -oE "crop=[0-9]+:[0-9]+:[0-9]+:[0-9]+" | sort -u | tail -1 || true)
+echo "      黑边复检: $FINAL"
+if [ "$FINAL" = "crop=${W}:${H}:0:0" ]; then
+    echo "      ✔ 通过"
+else
+    echo "      ⚠ 不是 crop=${W}:${H}:0:0，请检查"
+fi
+
+SIZE=$(du -h "$OUT" | cut -f1)
+echo ""
+echo "完成: $OUT  ($SIZE)"
+echo ""
+echo "回 Unity 会自动重新导入，然后 Play 即可。"
+echo "如果 Console 报「找不到视频」，检查文件名是不是 ${SLOT}.mp4"
