@@ -54,6 +54,7 @@ namespace SchoolTwin.Present
         private bool _dimensionKnown;
         private bool _on;
         private int _blitCount;      // 【诊断】累计 Blit 次数
+        private float _prepareRetryAt = -1f;   // 未就绪重试的时间点
 
         /// <summary>调试用名字（日志里区分是哪个点位）。</summary>
         public string Name = "?";
@@ -347,7 +348,30 @@ namespace SchoolTwin.Present
         {
             if (!HasVideo || !_on) return;
             if (_player == null || _videoRT == null || ScreenRT == null || _composite == null) return;
-            if (!_player.isPrepared) return;
+
+            if (!_player.isPrepared)
+            {
+                // 尚未就绪：什么都不做，等 `OnPreparedPlay` 回调。
+                // 但如果已经等了很久还没就绪（超过 3 秒），重试一次 Prepare ——
+                // 这是"点了没反应"的兜底，避免状态机静默卡死。
+                if (_prepareRetryAt < 0f) _prepareRetryAt = Time.unscaledTime + 3f;
+                else if (Time.unscaledTime >= _prepareRetryAt)
+                {
+                    _prepareRetryAt = -1f;
+                    Debug.LogWarning("[P26] " + Name + " 3 秒仍未就绪，重试 Prepare");
+                    _player.prepareCompleted -= OnPreparedPlay;
+                    _player.prepareCompleted += OnPreparedPlay;
+                    _player.Prepare();
+                }
+                return;
+            }
+            _prepareRetryAt = -1f;
+
+            // 【逐帧兜底】就绪了但没在播 → 补一次 Play。
+            // 2026-10-27：`SetOn(true)` 在 `Prepare()` 完成**之前**被调用时，
+            // `Play()` 是空操作，状态机会一直停在"未播"（prepared=True / playing=False）。
+            if (!_player.isPlaying && _player.frame <= 0)
+                _player.Play();
 
             if (!_dimensionKnown) UpdateFit();
 
