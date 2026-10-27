@@ -49,6 +49,8 @@ namespace SchoolTwin.Present
         private Material _composite;
         private Color _onColor;
         private float _fit = 1f;
+        /// <summary>显示区域的真实宽高比（宽/高）。由调用方显式传入或从 UV 推导。</summary>
+        private float _rectAspect = 1f;
         private bool _dimensionKnown;
         private bool _on;
         private int _blitCount;      // 【诊断】累计 Blit 次数
@@ -77,15 +79,32 @@ namespace SchoolTwin.Present
         /// <param name="parent">挂在谁下面（只影响 Hierarchy 观感）。</param>
         /// <param name="atlasSize">合成 RT 的边长，必须等于显示器图集边长（默认 2048）。</param>
         /// <param name="inset">四周均匀内缩比例（0~0.3）。模拟真实显示器留一圈黑边。</param>
+        /// <param name="rectAspect">
+        /// 显示区域的**真实宽高比**（宽 / 高）。
+        /// 传 0 表示"从 UV 矩形的宽高比推导" —— 只对**正方形图集**成立（显示器 2048² 是这种情况）。
+        /// 幕布面片是 3.11×2.13 这种非正方形，UV 却是 0..1，必须**显式传入真实比例**，
+        /// 否则会让 cover 裁掉过多画面（2026-10-27 用户报"投影画面显示不全、比例不符合"）。
+        /// </param>
         public static PcScreenPlayer Create(string name, string fileName,
                                             Vector2 uvMin, Vector2 uvMax,
                                             Material target, Color onColor, Transform parent,
                                             int atlasSize = AtlasSize,
-                                            float inset = 0.06f)
+                                            float inset = 0.06f,
+                                            float rectAspect = 0f)
         {
             PcScreenPlayer p = new PcScreenPlayer();
             p.TargetMaterial = target;
             p._onColor = onColor;
+
+            // 显示区域的真实宽高比。0 = 从 UV 矩形推导（只对正方形图集成立）。
+            float aspect = rectAspect;
+            if (aspect <= 0.0001f)
+            {
+                float dw = Mathf.Abs(uvMax.x - uvMin.x);
+                float dh = Mathf.Abs(uvMax.y - uvMin.y);
+                aspect = dh > 1e-5f ? dw / dh : 1f;
+            }
+            p._rectAspect = Mathf.Max(1e-4f, aspect);
 
             string full = Path.Combine(Application.streamingAssetsPath,
                                        Path.Combine("PC", fileName ?? "").Replace('\\', '/'));
@@ -174,10 +193,8 @@ namespace SchoolTwin.Present
 
             float videoAspect = (float)w / h;
 
-            // 屏幕矩形在图集里的宽高比（图集是正方形，所以直接用 UV 差值）
-            Vector4 mn = _composite.GetVector("_ScreenMin");
-            Vector4 mx = _composite.GetVector("_ScreenMax");
-            float rectAspect = Mathf.Max(1e-5f, (mx.x - mn.x) / Mathf.Max(1e-5f, mx.y - mn.y));
+            // 显示区域的真实宽高比：用调用方传的（幕布面片），或从 UV 推（正方形图集的显示器）
+            float rectAspect = Mathf.Max(1e-5f, _rectAspect);
 
             _fit = videoAspect / rectAspect;
             _composite.SetFloat("_Fit", _fit);

@@ -2199,15 +2199,21 @@ namespace SchoolTwin.Present
             if (!string.IsNullOrEmpty(_projectorVideo))
             {
                 Material screenMat;
+                float quadAspect;
                 GameObject quad = BuildScreenQuad(canvas.bounds, anchor.transform.position,
-                                                  _projectorVideoTint, anchor.transform, out screenMat);
+                                                  _projectorVideoTint, anchor.transform,
+                                                  out screenMat, out quadAspect);
                 if (quad != null)
                 {
                     v.ScreenQuad = quad;
+                    // ⚠️ 必须显式传面片的真实宽高比（如 3.11×2.13 → 1.46）。
+                    // UV 是 0..1（正方形空间），着色器若从 UV 推导会得到 1.00，
+                    // cover 就会按 1.96/1.00 去裁 —— 只采样视频中间 51% 宽度，
+                    // 表现就是"画面显示不全、比例不对"（2026-10-27 用户实测）。
                     v.Player = PcScreenPlayer.Create("Projector", _projectorVideo,
                                                      Vector2.zero, Vector2.one,
                                                      screenMat, _projectorVideoTint, anchor.transform,
-                                                     1024, 0f);
+                                                     1024, 0f, quadAspect);
                     if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
                     {
                         screenMat.SetTexture("_EmissionMap", v.Player.ScreenRT);
@@ -2245,9 +2251,10 @@ namespace SchoolTwin.Present
         /// 面片沿"朝投影仪"方向偏 3cm，避免和幕布 z-fighting。
         /// </summary>
         private GameObject BuildScreenQuad(Bounds b, Vector3 projectorPos, Color tint,
-                                           Transform parent, out Material mat)
+                                           Transform parent, out Material mat, out float aspect)
         {
             mat = null;
+            aspect = 0f;
 
             Vector3 dir = (b.center - projectorPos);
             if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
@@ -2275,6 +2282,7 @@ namespace SchoolTwin.Present
 
             float w = Mathf.Max(0.05f, maxX - minX);
             float h = Mathf.Max(0.05f, maxY - minY);
+            aspect = w / h;                     // 交给播放器算 cover，别让它从 UV 推
 
             // 面片中心：幕布中心 + 局部偏移，再沿朝投影仪方向抬 3cm
             Vector3 localCenter = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, 0f);
@@ -2329,7 +2337,8 @@ namespace SchoolTwin.Present
             mr.receiveShadows = false;
 
             Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
-                      "m，位置 (" + pos.x.ToString("0.00") + ", " + pos.y.ToString("0.00") + ", " +
+                      "m（比例 " + aspect.ToString("0.000") + "），位置 (" +
+                      pos.x.ToString("0.00") + ", " + pos.y.ToString("0.00") + ", " +
                       pos.z.ToString("0.00") + ")，朝向投影仪 (" + dir.x.ToString("0.00") + ", " +
                       dir.y.ToString("0.00") + ", " + dir.z.ToString("0.00") + ")");
             return go;
