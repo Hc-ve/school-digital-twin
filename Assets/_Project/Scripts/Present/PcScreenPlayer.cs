@@ -401,11 +401,18 @@ namespace SchoolTwin.Present
             _currentFile = fileName;
             _player.url = full;
             _player.Prepare();
-            _player.Play();          // Unity 会等 prepare 完成后再真正出画面
-            _on = true;
-            if (TargetMaterial != null) TargetMaterial.SetColor("_EmissionColor", _onColor);
 
-            Debug.Log("[P26] 切视频 → " + full);
+            // 【只在屏幕开着时才播】关机状态下换片不该把屏幕点亮。
+            // 2026-10-27：原来这里无条件 `Play()` + 设亮色，
+            // 若从别的入口（总控面板关屏后再换片）调到，屏幕会自己亮起来。
+            // 关机时只换 url，下次 `SetOn(true)` 会按"回默认视频"的规则处理。
+            if (_on)
+            {
+                _player.Play();      // Unity 会等 prepare 完成后再真正出画面
+                if (TargetMaterial != null) TargetMaterial.SetColor(EmissionId, _onColor);
+            }
+
+            Debug.Log("[P26] 切视频 → " + full + (_on ? "" : "（屏幕未开，仅换片不播）"));
             return true;
         }
 
