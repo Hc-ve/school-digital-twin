@@ -63,6 +63,12 @@ namespace SchoolTwin.Present
         private string _defaultFile;
         /// <summary>当前正在播的文件。和 `_defaultFile` 不同就说明被换过片。</summary>
         private string _currentFile;
+        /// <summary>
+        /// 当前显示的是**静态图**（退出演示后的桌面）。
+        /// 下次开机要据此判断"该切回默认视频了"——
+        /// 因为静态图不是视频，`_currentFile` 没变，不加这个标志会以为还在播默认视频。
+        /// </summary>
+        private bool _showingStill;
 
         /// <summary>调试用名字（日志里区分是哪个点位）。</summary>
         public string Name = "?";
@@ -358,9 +364,10 @@ namespace SchoolTwin.Present
                 //
                 // 语义上也不该保留：开机动画是固定流程，跟"上次看到哪"无关。
                 if (!string.IsNullOrEmpty(_defaultFile) &&
-                    !string.Equals(_currentFile, _defaultFile, StringComparison.Ordinal))
+                    (_showingStill || !string.Equals(_currentFile, _defaultFile, StringComparison.Ordinal)))
                 {
-                    Debug.Log("[P26] " + Name + " 开机 → 从「" + _currentFile +
+                    Debug.Log("[P26] " + Name + " 开机 → 从「" +
+                              (_showingStill ? "待机图" : _currentFile) +
                               "」切回默认视频「" + _defaultFile + "」");
                     if (PlayFile(_defaultFile))
                     {
@@ -462,7 +469,90 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 【P26】把材质的贴图**收回本播放器**。
+        /// 【P26】显示一张静态图（退出演示时回"桌面"用）。
+        ///
+        /// ── 为什么不重播开机视频 ──────────────────────────────────────
+        /// 退出 PPT/视频时如果重播 `boot.mp4`，看起来像"又开机了一遍"
+        /// （2026-10-27 用户报的 bug）。
+        /// 真实电脑开机后停在**桌面**不动，所以这里贴一张 `desktop.jpg`
+        /// （由 `boot.mp4` 的末帧提取），视觉上等于"开机完成后的待机状态"。
+        ///
+        /// ── 为什么复用 ScreenRT ───────────────────────────────────────
+        /// 显示器的贴图必须经过"图集合成"才能保住屏幕遮罩（不然整个机身会显示图）。
+        /// `ScreenRT` + `_composite` 就是干这个的，直接拿来用，不用另建一套。
+        /// 幕布的着色器自己算 UV，直接贴 `_MainTex` 即可。
+        /// </summary>
+        public bool ShowStill(string fileName)
+        {
+            if (TargetMaterial == null) return false;
+
+            string full = PcMediaLibrary.Resolve(fileName);
+            if (string.IsNullOrEmpty(full) || !File.Exists(full))
+            {
+                // 没有桌面图就安静放着不动 —— 比黑屏好
+                Debug.Log("[P26] 找不到待机图「" + full + "」，画面保持不变。");
+                return false;
+            }
+
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(full); }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[P26] 读待机图失败：" + e.Message);
+                return false;
+            }
+
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGB24, false);
+            if (!tex.LoadImage(bytes))
+            {
+                UnityEngine.Object.Destroy(tex);
+                Debug.LogWarning("[P26] 解码待机图失败：" + full);
+                return false;
+            }
+
+            // 停掉视频，否则还在后台解码浪费性能
+            if (_player != null && _player.isPlaying) _player.Stop();
+
+            float aspect = tex.height > 0 ? (float)tex.width / tex.height : 1.6f;
+
+            // 【统一走 ScreenRT】两条路径都先合成进 RT，再改材质指向。
+            // 反面教材：幕布分支曾直接 `SetTexture("_MainTex", tex)`，
+            // 后面又 `Destroy(tex)` —— 材质会拿着一个已销毁的贴图（粉色/黑屏）。
+            // 而且幕布的 RT 是整幅（`uvMin=(0,0) uvMax=(1,1)`），跟视频路径完全一致，
+            // 没必要单独走一套。
+            if (ScreenRT != null && _composite != null)
+            {
+                float rectAspect = Mathf.Max(1e-5f, _rectAspect);
+                _composite.SetFloat("_Fit", aspect / rectAspect);
+                Graphics.Blit(tex, ScreenRT, _composite);
+
+                if (TargetMaterial.HasProperty("_Contain"))
+                {
+                    // 幕布着色器自己算 UV，贴 RT 即可。`_Contain=0` = cover 铺满，
+                    // 和开机视频的观感一致（真实屏幕也不会留边）。
+                    TargetMaterial.SetTexture("_MainTex", ScreenRT);
+                    TargetMaterial.SetFloat("_ImageAspect", rectAspect);
+                    TargetMaterial.SetFloat("_Contain", 0f);
+                }
+                else if (TargetMaterial.HasProperty("_EmissionMap"))
+                {
+                    // 显示器：RT 里已经合成好了屏幕遮罩，机身不会亮
+                    TargetMaterial.SetTexture("_EmissionMap", ScreenRT);
+                }
+            }
+
+            TargetMaterial.SetColor(EmissionId, _onColor);
+            _showingStill = true;
+
+            // 拷进 RT 之后源纹理就没用了，立刻释放（1920×1200 一张 6.6MB）
+            UnityEngine.Object.Destroy(tex);
+
+            Debug.Log("[P26] " + Name + " 显示待机图：" + fileName);
+            return true;
+        }
+
+        /// <summary>
+        /// 把材质的贴图**收回本播放器**。
         ///
         /// ── 为什么必须有这一句 ──────────────────────────────────────────
         /// PPT 模式会往同一个材质上贴 PPT 图（显示器贴合成图集、幕布贴原图）。
@@ -519,6 +609,7 @@ namespace SchoolTwin.Present
             }
 
             _currentFile = fileName;
+            _showingStill = false;
             _player.url = full;
             _player.Prepare();
 
@@ -545,6 +636,12 @@ namespace SchoolTwin.Present
         public void Tick()
         {
             if (!HasVideo || !_on) return;
+
+            // 【待机图期间不许动画面】2026-10-27 用户报"退出 PPT 又播了一遍开机"。
+            // `Stop()` 之后 `_videoRT` 里还留着最后一帧，这里每帧无条件 blit
+            // 会把 `ShowStill` 刚合进去的桌面图立刻盖掉 —— 看起来就像视频又开始了。
+            if (_showingStill) return;
+
             if (_player == null || _videoRT == null || ScreenRT == null || _composite == null) return;
 
             if (!_player.isPrepared)

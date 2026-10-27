@@ -37,15 +37,25 @@ namespace SchoolTwin.Present
         public const string VideoFolder = "videos";
 
         /// <summary>
-        /// 【P26】「打开PPT」按钮现在改成**图片轮播**，不再播视频。
-        /// 保留这个常量只是为了兼容旧配置里的字段值。
+        /// 旧版「打开PPT」视频路径。**已废弃** ——
+        /// PPT 现在用 `SlideFolder` 下的图片轮播，这个常量只为兼容旧配置字段保留。
         /// </summary>
         public const string Ppt = "master/ppt.mp4";
 
         /// <summary>旧版「视频播放」的单文件路径（已被 `VideoFolder` 列表取代）。</summary>
         public const string Lesson = "videos/01_数字孪生科普.mp4";
 
-        /// <summary>关机动画（目前没接进流程，预留给"下课时播一段"）。</summary>
+        /// <summary>
+        /// 桌面待机图（相对 `PC/`）。`boot.mp4` 的最后一帧，退出演示时显示。
+        ///
+        /// 【为什么需要】退出 PPT/视频时如果重播开机动画，
+        /// 看起来像"又开机了一遍"（2026-10-27 用户报的 bug）。
+        /// 真实电脑开机后停在桌面不动，所以这里也放一张静态图。
+        /// 由 `tools/p26_desktop.sh` 从 `boot.mp4` 末帧提取。
+        /// </summary>
+        public const string Desktop = "master/desktop.jpg";
+
+        /// <summary>关机动画（点关机时先播，播完才真正断电）。</summary>
         public const string Shutdown = "master/shutdown.mp4";
 
         /// <summary>

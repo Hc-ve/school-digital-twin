@@ -2676,15 +2676,15 @@ namespace SchoolTwin.Present
             return true;
         }
 
-        /// <summary>退出 PPT 模式，画面回到开机视频。</summary>
+        /// <summary>退出 PPT 模式，画面回到桌面待机图。</summary>
         public void ExitPptMode()
         {
             if (_playMode != PcPlayMode.Ppt) return;
             _playMode = PcPlayMode.None;
             if (_slideShow != null) _slideShow.Hide();
 
-            // 【为什么回开机视频而不是黑屏】退出演示后屏幕全黑，用户会以为设备坏了。
-            // 回到开机画面 = "演示结束，待机中"，和真实教室一致。
+            // 【为什么回待机图而不是重播开机】2026-10-27 用户报"退出 PPT 又开始开机"。
+            // 真实电脑退出全屏放映是回到桌面，不会重启。
             RestoreIdleScreen();
             Debug.Log("[P26] 退出 PPT 模式");
         }
@@ -2746,7 +2746,7 @@ namespace SchoolTwin.Present
             return true;
         }
 
-        /// <summary>退出视频模式，画面回到开机视频。</summary>
+        /// <summary>退出视频模式，画面回到桌面待机图。</summary>
         public void ExitVideoMode()
         {
             if (_playMode != PcPlayMode.Video) return;
@@ -2756,12 +2756,19 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 退出演示后把屏幕恢复成"待机画面"（开机视频）。
-        /// 主脑和幕布都回各自的默认素材，不留上一段内容的残影。
+        /// 退出演示后把屏幕恢复成"待机画面"（桌面静态图）。
         ///
-        /// 【顺序很重要】必须先 `RestoreTargetTexture()` 把贴图收回播放器，
-        /// 再 `PlayFile`。反过来的话 `PlayFile` 里虽然也会调，但此时 `_on` 可能还是
-        /// PPT 期间的状态，贴图会被 PPT 那张盖住一帧。
+        /// ── 为什么不是重播开机视频 ──────────────────────────────────────
+        /// 2026-10-27 用户报的 bug：「打开PPT功能，并退出后，会重新进入开机状态：
+        /// 重新播放开机视频」。这确实不对 —— 退出演示不是重启，
+        /// 真实电脑退出全屏播放是回到**桌面**，不会重放开机动画。
+        ///
+        /// 所以这里贴一张 `desktop.jpg`（`boot.mp4` 的末帧，即"开机完成"的画面）。
+        /// 视觉上就是"演示结束，停在桌面"。
+        ///
+        /// ── 为什么必须先 `RestoreTargetTexture()` ──────────────────────
+        /// 从 PPT 退出来时材质上贴的还是 PPT 那张合成图。
+        /// 先收回贴图（指向 `ScreenRT`），`ShowStill` 才能把桌面图合进去。
         /// </summary>
         private void RestoreIdleScreen()
         {
@@ -2769,14 +2776,21 @@ namespace SchoolTwin.Present
             if (mp != null)
             {
                 mp.RestoreTargetTexture();
-                if (!string.IsNullOrEmpty(_masterBootVideo)) mp.PlayFile(_masterBootVideo);
+                if (!mp.ShowStill(PcMediaLibrary.Desktop))
+                {
+                    // 没有待机图：退回开机视频（至少画面不是黑的）
+                    if (!string.IsNullOrEmpty(_masterBootVideo)) mp.PlayFile(_masterBootVideo);
+                }
             }
 
             PcScreenPlayer pp = ProjectorPlayer();
             if (pp != null)
             {
                 pp.RestoreTargetTexture();
-                if (!string.IsNullOrEmpty(_projectorVideo)) pp.PlayFile(_projectorVideo);
+                if (!pp.ShowStill(PcMediaLibrary.Desktop))
+                {
+                    if (!string.IsNullOrEmpty(_projectorVideo)) pp.PlayFile(_projectorVideo);
+                }
             }
         }
 
