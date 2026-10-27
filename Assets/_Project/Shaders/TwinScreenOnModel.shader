@@ -31,6 +31,10 @@ Shader "SchoolTwin/ScreenOnModel"
         _MaxBright ("Max Brightness", Range(0.3, 1.5)) = 0.92
         // 投影灯泡偏暖：画面整体略微偏黄
         _Warmth ("Warmth", Range(-1, 1)) = 0.12
+        // 图片宽高比（宽/高）。`_Contain = 1` 时用来算留边。
+        _ImageAspect ("Image Aspect", Float) = 1.6
+        // 0 = cover（铺满，裁掉多余，视频用）；1 = contain（完整显示，四周留黑，PPT 用）
+        _Contain ("Contain Mode", Float) = 0
         // 调试：1 = 整块面涂亮红，用来确认"改的是不是这块模型"
         _DebugRed ("Debug Red", Float) = 0
     }
@@ -60,6 +64,8 @@ Shader "SchoolTwin/ScreenOnModel"
             float _Vignette;
             float _MaxBright;
             float _Warmth;
+            float _ImageAspect;
+            float _Contain;
             float _DebugRed;
 
             struct appdata
@@ -94,6 +100,28 @@ Shader "SchoolTwin/ScreenOnModel"
                 // 屏幕之外（同一 Renderer 里可能还连着别的几何）
                 float inside = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
 
+                // ── contain 模式（PPT 用）─────────────────────────────────
+                // PPT 是 16:9/16:10，幕布是 1.47。cover 会裁掉左右各 4%，
+                // PPT 的文字贴着边就没了。contain 改成"完整显示、四周留黑"。
+                //
+                // 推导：屏幕宽高比 S，图片宽高比 I
+                //   I > S（图比屏宽）→ 按宽度贴合，上下留黑，v 范围收窄到 S/I
+                //   I < S（图比屏高）→ 按高度贴合，左右留黑，u 范围收窄到 I/S
+                float2 uv2 = float2(u, v);
+                float inImg = 1.0;
+                if (_Contain > 0.5)
+                {
+                    float S = _Size.x / max(1e-5, _Size.y);
+                    float I = max(1e-5, _ImageAspect);
+                    if (I > S)
+                        uv2.y = (v - 0.5) * (S / I) + 0.5;
+                    else
+                        uv2.x = (u - 0.5) * (I / S) + 0.5;
+
+                    inImg = step(0.0, uv2.x) * step(uv2.x, 1.0) *
+                            step(0.0, uv2.y) * step(uv2.y, 1.0);
+                }
+
                 // 开关：`_EmissionColor` 被 `PcScreenPlayer.SetOn` 设成黑 / 亮色，用它判断是否在播。
                 float on = step(0.001, dot(_EmissionColor.rgb, float3(0.3333, 0.3333, 0.3333)));
 
@@ -105,7 +133,7 @@ Shader "SchoolTwin/ScreenOnModel"
                 float lum = saturate(dot(amb, float3(0.3333, 0.3333, 0.3333)) * 3.0 + 0.35);
                 float3 offCol = _OffColor.rgb * lum;
 
-                float3 video = tex2D(_MainTex, float2(u, v)).rgb;
+                float3 video = tex2D(_MainTex, uv2).rgb;
 
                 // ── 投影质感（2026-10-27 用户反馈"没有模拟现实的投影效果"）──────
                 // 之前的幕布是均匀满亮度，看起来就是一块 LED 屏。真实投影有三件事：
@@ -119,6 +147,9 @@ Shader "SchoolTwin/ScreenOnModel"
                 video *= falloff * _MaxBright;
                 video.r *= (1.0 + _Warmth * 0.35);
                 video.b *= (1.0 - _Warmth * 0.35);
+
+                // contain 的留边区域 → 纯黑（投影 PPT 时的正常表现）
+                video *= inImg;
 
                 float3 c = lerp(offCol, video * _EmissionColor.rgb, on * inside);
                 return fixed4(c, 1);

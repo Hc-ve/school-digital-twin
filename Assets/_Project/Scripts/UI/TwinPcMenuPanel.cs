@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;              // Path.GetFileName
 using SchoolTwin.Command;
 using SchoolTwin.Core;      // TwinValue 在这里（不在 SchoolTwin.Twin）
 using SchoolTwin.Player;
@@ -160,7 +159,19 @@ namespace SchoolTwin.UI
             // 【为什么需要 2】用户可能只点「关闭主脑」，18 台和投影仪还开着。
             // 这时面板切回关机态，如果只有「开机/联动/投影」，用户就没有入口把剩下的关掉了
             // —— 2026-10-27 用户实测踩到这个："怎么全部关机"。
-            int state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
+            //
+            // 【3 = PPT 模式 / 4 = 视频模式】播放模式下只留「翻页/切换/暂停/退出」，
+            // 把「全部关机」「关闭主脑」这些破坏性按钮藏起来 —— 用户要求。
+            // 课堂上正在放 PPT，误触「全部关机」是很尴尬的。
+            int state;
+            TwinDevicePresenter pres = TwinDevicePresenter.Instance;
+            TwinDevicePresenter.PcPlayMode mode = pres != null
+                ? pres.PlayMode : TwinDevicePresenter.PcPlayMode.None;
+
+            if (mode == TwinDevicePresenter.PcPlayMode.Ppt) state = 3;
+            else if (mode == TwinDevicePresenter.PcPlayMode.Video) state = 4;
+            else state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
+
             if (state != _shownState) Rebuild(state);
 
             _alphaTarget = 1f;
@@ -241,10 +252,33 @@ namespace SchoolTwin.UI
                 AddButton("全部关机", OnShutdownAll);
                 AddButton("联动开机", OnLinkBoot);
             }
+            else if (state == 3)
+            {
+                // ── PPT 模式 ──
+                TwinDevicePresenter p = TwinDevicePresenter.Instance;
+                int cur = p != null ? p.SlideNumber : 0;
+                int total = p != null ? p.SlideCount : 0;
+
+                AddButton("上一页", OnPrevSlide);
+                AddButton("下一页  " + cur + "/" + total, OnNextSlide);
+                AddButton("退出PPT", OnExitPlayMode);
+            }
+            else if (state == 4)
+            {
+                // ── 视频模式 ──
+                TwinDevicePresenter p = TwinDevicePresenter.Instance;
+                int cur = p != null ? p.VideoNumber : 0;
+                int total = p != null ? p.VideoCount : 0;
+                bool paused = p != null && p.VideoPaused;
+
+                AddButton("切换  " + cur + "/" + total, OnNextVideo);
+                AddButton(paused ? "继续" : "暂停", OnToggleVideoPause);
+                AddButton("退出视频", OnExitPlayMode);
+            }
             else
             {
-                AddButton("打开PPT", () => PlayOnMasterAndProjector(PcMediaLibrary.Ppt, "PPT"));
-                AddButton("视频播放", () => PlayOnMasterAndProjector(PcMediaLibrary.Lesson, "视频"));
+                AddButton("打开PPT", OnEnterPptMode);
+                AddButton("视频播放", OnEnterVideoMode);
                 AddButton("关闭主脑", () => Send(MasterId, 0f, "关闭主脑"));
                 AddButton("全部关机", OnShutdownAll);
             }
@@ -315,28 +349,82 @@ namespace SchoolTwin.UI
         /// 直接失败会让用户"点了没反应"—— 最差的体验。
         /// 所以退回开机视频：画面至少还在动，同时打一条日志说明该放什么文件。
         /// </summary>
-        private void PlayOnMasterAndProjector(string fileName, string label)
+        // ---------------------------------------------------------------- 播放模式
+
+        /// <summary>
+        /// 进入 PPT 模式：面板切成「上一页 / 下一页 / 退出」。
+        /// 失败（没素材）就什么都不做，留在原面板 —— 比切到一个空模式好。
+        /// </summary>
+        private void OnEnterPptMode()
         {
             TwinDevicePresenter p = TwinDevicePresenter.Instance;
-            if (p == null) { Debug.LogWarning("[P26] 找不到表现层，无法换片"); return; }
+            if (p == null) { Debug.LogWarning("[P26] 找不到表现层"); return; }
 
-            // 首选素材不存在 → 退回开机视频（而不是什么都不做）
-            string use = PcMediaLibrary.FirstAvailable(fileName, PcMediaLibrary.Boot);
-            if (string.IsNullOrEmpty(use))
-            {
-                Debug.LogWarning("[P26] 「" + label + "」和开机视频都找不到，" + PcMediaLibrary.Describe());
-                return;
-            }
+            if (!p.EnterPptMode()) return;
+            ForceRebuild();
+        }
 
-            if (!string.Equals(use, fileName, StringComparison.Ordinal))
-            {
-                Debug.Log("[P26] 「" + label + "」素材还没放进来，暂时播开机视频兜底。\n" +
-                          "   想要真内容：把 mp4 放到 " + PcMediaLibrary.FolderPath +
-                          "/" + Path.GetFileName(fileName) + "（文件名对上即可，不用改代码）");
-            }
+        /// <summary>进入视频模式：面板切成「切换 / 暂停 / 退出」。</summary>
+        private void OnEnterVideoMode()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p == null) { Debug.LogWarning("[P26] 找不到表现层"); return; }
 
-            p.PlayPcVideo(MasterId, use);
-            p.PlayPcVideo(ProjectorId, use);
+            if (!p.EnterVideoMode()) return;
+            ForceRebuild();
+        }
+
+        private void OnPrevSlide()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null) p.PrevSlide();
+            ForceRebuild();
+        }
+
+        private void OnNextSlide()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null) p.NextSlide();
+            ForceRebuild();
+        }
+
+        private void OnNextVideo()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null) p.NextVideo();
+            ForceRebuild();
+        }
+
+        private void OnToggleVideoPause()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null) p.ToggleVideoPause();
+            ForceRebuild();
+        }
+
+        /// <summary>退出播放模式（PPT 和视频共用）。</summary>
+        private void OnExitPlayMode()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p == null) return;
+
+            if (p.PlayMode == TwinDevicePresenter.PcPlayMode.Ppt) p.ExitPptMode();
+            else if (p.PlayMode == TwinDevicePresenter.PcPlayMode.Video) p.ExitVideoMode();
+
+            ForceRebuild();
+        }
+
+        /// <summary>
+        /// 强制下一帧重建面板。
+        ///
+        /// 【为什么需要】`Rebuild` 平时只在 `state` 变化时调用，
+        /// 但「第 3/12 页」这种文案、以及「暂停/继续」的文字，
+        /// 都是在**同一个 state 内**变化的 —— 不强制重建就不会刷新。
+        /// 置 -1 让下一帧的 `state != _shownState` 一定成立。
+        /// </summary>
+        private void ForceRebuild()
+        {
+            _shownState = -1;
         }
 
         private void Send(string twinId, float value, string what)

@@ -397,7 +397,47 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 换一段视频接着播（"打开PPT"/"视频播放"用）。
+        /// 暂停 / 继续。
+        ///
+        /// 【和 `SetOn(false)` 的区别】`SetOn(false)` 是**关机**：停止 + 清黑 + 灭自发光。
+        /// 暂停只是冻住画面，屏幕还亮着，回来接着播 —— 课堂上"暂停一下讲两句"就是这个。
+        /// </summary>
+        public void SetPaused(bool paused)
+        {
+            if (_player == null || !HasVideo) return;
+
+            if (paused)
+            {
+                if (_player.isPlaying) _player.Pause();
+            }
+            else
+            {
+                if (!_player.isPlaying)
+                {
+                    RestartIfFinished();
+                    _player.Play();
+                }
+            }
+            Debug.Log("[P26] " + Name + (paused ? " 已暂停" : " 继续播放"));
+        }
+
+        /// <summary>当前是否暂停中。</summary>
+        public bool IsPaused
+        {
+            get { return _player != null && HasVideo && _player.isPaused; }
+        }
+
+        /// <summary>
+        /// 【P26】把播放器停掉但不改自发光（进 PPT 模式时用）。
+        /// `SetOn(false)` 会把 `_on` 置 false 并清黑，退出 PPT 后要重新开机流程，
+        /// 这里只停画面，回来直接 `Play()` 就行。
+        /// </summary>
+        public void HaltForOverlay()
+        {
+            if (_player != null && _player.isPlaying) _player.Pause();
+        }
+
+        /// <summary>换一段视频接着播（"打开PPT"/"视频播放"用）。
         /// 文件不存在就返回 false 并打日志 —— 素材是后补的，不该因此崩。
         /// </summary>
         public bool PlayFile(string fileName)
@@ -417,6 +457,12 @@ namespace SchoolTwin.Present
             _currentFile = fileName;
             _player.url = full;
             _player.Prepare();
+
+            // 【P26】视频一律用 cover（铺满裁边）。
+            // PPT 模式会把幕布材质的 `_Contain` 设成 1（完整显示、四周留黑），
+            // 退出 PPT 去播视频时必须改回 0，否则视频也会被缩进中间留一圈黑边。
+            if (TargetMaterial != null && TargetMaterial.HasProperty("_Contain"))
+                TargetMaterial.SetFloat("_Contain", 0f);
 
             // 【只在屏幕开着时才播】关机状态下换片不该把屏幕点亮。
             // 2026-10-27：原来这里无条件 `Play()` + 设亮色，

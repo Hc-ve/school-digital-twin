@@ -1812,6 +1812,12 @@ namespace SchoolTwin.Present
         [Range(0f, 1f)]
         [SerializeField] private float _projectorVolume = 0.15f;
 
+        // ---- 【P26】PPT 显示 ----
+        // PPT 图片是白底为主，用显示器那套偏暗的自发光（0.55/0.60/0.66）会整体发灰。
+        // 这里给接近纯白、略偏暖，看起来像投影仪投的白底幻灯片。
+        [Tooltip("PPT 图片的自发光颜色。接近白但略暖，模拟投影仪投白底幻灯片")]
+        [SerializeField] private Color _slideEmission = new Color(0.95f, 0.95f, 0.92f, 1f);
+
         [Tooltip("视频画面四周均匀内缩的比例。0 = 铺满整块屏幕（**默认**）。" +
                  "⚠️ 显示器模型本身自带白色边框（Monitor04 的 bezel），再加内缩会变成双层边框")]
         [Range(0f, 0.3f)]
@@ -2251,9 +2257,255 @@ namespace SchoolTwin.Present
             return false;
         }
 
+        // ================================================================
+        // 【P26】播放模式（PPT / 视频）
+        //
+        // 用户要求：点「打开PPT」进 PPT 模式，面板只留「上一页 / 下一页 / 退出」；
+        // 点「视频播放」进视频模式，只留「切换 / 暂停 / 退出」。
+        // 这样避免误触「全部关机」这类破坏性按钮，也更像真实的设备操作。
+        //
+        // 两种模式**互斥**：进 PPT 就停视频，进视频就藏 PPT —— 它们往同一批材质上贴图。
+        // ================================================================
+
+        /// <summary>当前处于哪种播放模式。</summary>
+        public enum PcPlayMode
+        {
+            /// <summary>没有在演示（面板显示常规按钮）。</summary>
+            None = 0,
+            /// <summary>PPT 图片轮播。</summary>
+            Ppt = 1,
+            /// <summary>视频播放。</summary>
+            Video = 2
+        }
+
+        private PcPlayMode _playMode = PcPlayMode.None;
+        private PcSlideShow _slideShow;
+        private string[] _videoList;
+        private int _videoIndex = -1;
+
+        /// <summary>当前播放模式。</summary>
+        public PcPlayMode PlayMode { get { return _playMode; } }
+
+        /// <summary>PPT 总页数。</summary>
+        public int SlideCount { get { return _slideShow != null ? _slideShow.Count : 0; } }
+
+        /// <summary>PPT 当前页（1 起，给 UI 显示用）。</summary>
+        public int SlideNumber { get { return _slideShow != null ? _slideShow.Index + 1 : 0; } }
+
+        /// <summary>视频总数。</summary>
+        public int VideoCount { get { return _videoList != null ? _videoList.Length : 0; } }
+
+        /// <summary>当前视频序号（1 起）。</summary>
+        public int VideoNumber { get { return _videoIndex + 1; } }
+
+        /// <summary>视频是否暂停中。</summary>
+        public bool VideoPaused
+        {
+            get
+            {
+                PcScreenPlayer p = MasterPlayer();
+                return p != null && p.IsPaused;
+            }
+        }
+
+        /// <summary>取主脑的播放器（换片/暂停都通过它）。</summary>
+        private PcScreenPlayer MasterPlayer()
+        {
+            ScreenVisual sv;
+            if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
+                return sv.Player;
+            return null;
+        }
+
+        /// <summary>取投影仪的播放器。</summary>
+        private PcScreenPlayer ProjectorPlayer()
+        {
+            ProjectorVisual pv;
+            if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null)
+                return pv.Player;
+            return null;
+        }
+
         /// <summary>
-        /// 【P26】投影画面跟随主脑：主脑关机后幕布不该继续显示旧画面。
-        ///
+        /// 进入 PPT 模式：停视频，显示第一页（或上次那一页）。
+        /// 返回 false 表示没有 PPT 素材。
+        /// </summary>
+        public bool EnterPptMode()
+        {
+            if (_slideShow == null)
+            {
+                // 材质：主脑屏幕 + 幕布。两个都贴同一张图（课堂上幕布是主视野）
+                List<Material> mats = new List<Material>(2);
+
+                ScreenVisual sv;
+                if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
+                {
+                    if (sv.Material != null) mats.Add(sv.Material);
+                    if (sv.Units != null) mats.AddRange(sv.Units);
+                }
+
+                ProjectorVisual pv;
+                if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null
+                    && pv.ScreenMaterial != null)
+                {
+                    mats.Add(pv.ScreenMaterial);
+                }
+
+                _slideShow = PcSlideShow.Create(PcMediaLibrary.GetSlides(), mats.ToArray(),
+                                                _slideEmission);
+            }
+
+            if (!_slideShow.HasSlides)
+            {
+                Debug.Log("[P26] 「打开PPT」失败：没找到 PPT 图片。" +
+                          "放到 " + PcMediaLibrary.FolderPath + "/" +
+                          PcMediaLibrary.SlideFolder + "/ 下，文件名用 slide_01.jpg 这种前缀。");
+                return false;
+            }
+
+            // 停视频，避免两边抢同一个材质
+            PcScreenPlayer mp = MasterPlayer();
+            if (mp != null) mp.HaltForOverlay();
+            PcScreenPlayer pp = ProjectorPlayer();
+            if (pp != null) pp.HaltForOverlay();
+
+            _playMode = PcPlayMode.Ppt;
+
+            // 第一次进从第 1 页开始；再次进入保持上次那一页
+            if (_slideShow.Index < 0) _slideShow.Show(0);
+            else _slideShow.Show(_slideShow.Index);
+
+            Debug.Log("[P26] 进入 PPT 模式：" + _slideShow.Count + " 页，当前第 " +
+                      SlideNumber + " 页");
+            return true;
+        }
+
+        /// <summary>下一页。返回 false 表示没在 PPT 模式或没有素材。</summary>
+        public bool NextSlide()
+        {
+            if (_playMode != PcPlayMode.Ppt || _slideShow == null) return false;
+            if (!_slideShow.Next()) return false;
+            Debug.Log("[P26] PPT → 第 " + SlideNumber + "/" + SlideCount + " 页");
+            return true;
+        }
+
+        /// <summary>上一页。</summary>
+        public bool PrevSlide()
+        {
+            if (_playMode != PcPlayMode.Ppt || _slideShow == null) return false;
+            if (!_slideShow.Prev()) return false;
+            Debug.Log("[P26] PPT → 第 " + SlideNumber + "/" + SlideCount + " 页");
+            return true;
+        }
+
+        /// <summary>退出 PPT 模式，画面回到开机视频。</summary>
+        public void ExitPptMode()
+        {
+            if (_playMode != PcPlayMode.Ppt) return;
+            _playMode = PcPlayMode.None;
+            if (_slideShow != null) _slideShow.Hide();
+
+            // 【为什么回开机视频而不是黑屏】退出演示后屏幕全黑，用户会以为设备坏了。
+            // 回到开机画面 = "演示结束，待机中"，和真实教室一致。
+            RestoreIdleScreen();
+            Debug.Log("[P26] 退出 PPT 模式");
+        }
+
+        /// <summary>
+        /// 进入视频模式：从列表里播第 1 个。
+        /// 返回 false 表示没有视频素材。
+        /// </summary>
+        public bool EnterVideoMode()
+        {
+            if (_videoList == null || _videoList.Length == 0)
+                _videoList = PcMediaLibrary.GetVideos();
+
+            if (_videoList == null || _videoList.Length == 0)
+            {
+                Debug.Log("[P26] 「视频播放」失败：没找到视频。" +
+                          "放到 " + PcMediaLibrary.FolderPath + "/" +
+                          PcMediaLibrary.VideoFolder + "/ 下，文件名用 01_xxx.mp4 这种前缀。");
+                return false;
+            }
+
+            // 退出 PPT（两者互斥）
+            if (_playMode == PcPlayMode.Ppt && _slideShow != null) _slideShow.Hide();
+
+            _playMode = PcPlayMode.Video;
+            _videoIndex = 0;
+            PlayCurrentVideo();
+
+            Debug.Log("[P26] 进入视频模式：" + _videoList.Length + " 个视频，正在播第 " +
+                      VideoNumber + " 个「" + _videoList[_videoIndex] + "」");
+            return true;
+        }
+
+        /// <summary>切到下一个视频（循环）。</summary>
+        public bool NextVideo()
+        {
+            if (_playMode != PcPlayMode.Video || _videoList == null || _videoList.Length == 0)
+                return false;
+
+            _videoIndex = (_videoIndex + 1) % _videoList.Length;
+            PlayCurrentVideo();
+            Debug.Log("[P26] 切换视频 → 第 " + VideoNumber + "/" + _videoList.Length +
+                      " 个「" + _videoList[_videoIndex] + "」");
+            return true;
+        }
+
+        /// <summary>暂停 / 继续当前视频。</summary>
+        public bool ToggleVideoPause()
+        {
+            if (_playMode != PcPlayMode.Video) return false;
+
+            PcScreenPlayer mp = MasterPlayer();
+            bool nowPaused = mp != null && mp.IsPaused;
+            if (mp != null) mp.SetPaused(!nowPaused);
+
+            PcScreenPlayer pp = ProjectorPlayer();
+            if (pp != null) pp.SetPaused(!nowPaused);
+
+            return true;
+        }
+
+        /// <summary>退出视频模式，画面回到开机视频。</summary>
+        public void ExitVideoMode()
+        {
+            if (_playMode != PcPlayMode.Video) return;
+            _playMode = PcPlayMode.None;
+            RestoreIdleScreen();
+            Debug.Log("[P26] 退出视频模式");
+        }
+
+        /// <summary>
+        /// 退出演示后把屏幕恢复成"待机画面"（开机视频）。
+        /// 主脑和幕布都回各自的默认素材，不留上一段内容的残影。
+        /// </summary>
+        private void RestoreIdleScreen()
+        {
+            PcScreenPlayer mp = MasterPlayer();
+            if (mp != null && !string.IsNullOrEmpty(_masterBootVideo)) mp.PlayFile(_masterBootVideo);
+
+            PcScreenPlayer pp = ProjectorPlayer();
+            if (pp != null && !string.IsNullOrEmpty(_projectorVideo)) pp.PlayFile(_projectorVideo);
+        }
+
+        /// <summary>把当前选中的视频同时播到主脑和幕布上。</summary>
+        private void PlayCurrentVideo()
+        {
+            if (_videoList == null || _videoIndex < 0 || _videoIndex >= _videoList.Length) return;
+
+            string file = _videoList[_videoIndex];
+
+            PcScreenPlayer mp = MasterPlayer();
+            if (mp != null) mp.PlayFile(file);
+
+            PcScreenPlayer pp = ProjectorPlayer();
+            if (pp != null) pp.PlayFile(file);
+        }
+
+        /// <summary>
+        /// 【P26】投影画面跟随主脑：主脑关机后幕布不该继续显示旧画面。        ///
         /// 真实投影仪没信号会显示"无信号"（黑屏），不会把最后一帧冻在那儿。
         /// 这条同时补一个逻辑漏洞：`SyncProjector` 的早退是按"投影仪自己的开关"判断的，
         /// 主脑开关变化时投影仪状态没变、不会重跑 —— 所以必须单独盯主脑。

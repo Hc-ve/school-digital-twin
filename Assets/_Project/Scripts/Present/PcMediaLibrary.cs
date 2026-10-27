@@ -29,12 +29,86 @@ namespace SchoolTwin.Present
         // ---- 文件清单 ----
         /// <summary>开机动画。主脑 / 机房 18 台 / 投影幕布共用。</summary>
         public const string Boot = "master/boot.mp4";
-        /// <summary>「打开PPT」播放的内容。</summary>
+
+        /// <summary>PPT 图片目录。一页一张，按文件名排序（`slide_01.jpg` …）。</summary>
+        public const string SlideFolder = "ppt";
+
+        /// <summary>视频目录。「视频播放」模式在这里取列表，按文件名排序。</summary>
+        public const string VideoFolder = "videos";
+
+        /// <summary>
+        /// 【P26】「打开PPT」按钮现在改成**图片轮播**，不再播视频。
+        /// 保留这个常量只是为了兼容旧配置里的字段值。
+        /// </summary>
         public const string Ppt = "master/ppt.mp4";
-        /// <summary>「视频播放」播放的内容。</summary>
-        public const string Lesson = "master/lesson.mp4";
+
+        /// <summary>旧版「视频播放」的单文件路径（已被 `VideoFolder` 列表取代）。</summary>
+        public const string Lesson = "videos/01_数字孪生科普.mp4";
+
         /// <summary>关机动画（目前没接进流程，预留给"下课时播一段"）。</summary>
         public const string Shutdown = "master/shutdown.mp4";
+
+        /// <summary>
+        /// 扫描目录取文件列表（按文件名排序）。
+        ///
+        /// 【为什么按文件名排序】`Directory.GetFiles` 的返回顺序**不保证**，
+        /// 在 NTFS 上通常按目录项顺序，复制/删除几次就乱了。
+        /// PPT 页序错了是致命的（第 3 页跑到第 7 页前面），所以必须显式排序。
+        /// 约定：文件名用 `slide_01` / `01_xxx` 这种数字前缀。
+        /// </summary>
+        private static string[] ScanFolder(string subFolder, string pattern)
+        {
+            string dir = Path.Combine(Application.streamingAssetsPath,
+                                      Path.Combine(RootFolder, subFolder).Replace('\\', '/'));
+            if (!Directory.Exists(dir)) return new string[0];
+
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(dir, pattern, SearchOption.TopDirectoryOnly);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[P26] 扫描素材目录失败：" + dir + " — " + e.Message);
+                return new string[0];
+            }
+
+            if (files == null || files.Length == 0) return new string[0];
+
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+            // 转成相对 `PC/` 的路径，和 `Boot` 这类常量保持同一套格式
+            string[] rel = new string[files.Length];
+            for (int i = 0; i < files.Length; i++)
+            {
+                string full = files[i].Replace('\\', '/');
+                int idx = full.IndexOf("/PC/", StringComparison.OrdinalIgnoreCase);
+                rel[i] = idx >= 0 ? full.Substring(idx + 4) : Path.GetFileName(full);
+            }
+            return rel;
+        }
+
+        /// <summary>PPT 图片列表（相对 `PC/` 的路径，按文件名排序）。</summary>
+        public static string[] GetSlides()
+        {
+            string[] jpg = ScanFolder(SlideFolder, "*.jpg");
+            string[] png = ScanFolder(SlideFolder, "*.png");
+            if (jpg.Length == 0) return png;
+            if (png.Length == 0) return jpg;
+
+            // 两种格式混放时合并后再排序
+            string[] all = new string[jpg.Length + png.Length];
+            Array.Copy(jpg, all, jpg.Length);
+            Array.Copy(png, 0, all, jpg.Length, png.Length);
+            Array.Sort(all, StringComparer.OrdinalIgnoreCase);
+            return all;
+        }
+
+        /// <summary>视频列表（相对 `PC/` 的路径，按文件名排序）。</summary>
+        public static string[] GetVideos()
+        {
+            return ScanFolder(VideoFolder, "*.mp4");
+        }
 
         /// <summary>素材目录的绝对路径，报错时展示给用户。</summary>
         public static string FolderPath
