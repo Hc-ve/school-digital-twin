@@ -35,7 +35,6 @@ W=1920
 H=1200
 CRF=18
 FPS=30
-
 usage() {
     echo "用法: $0 <源视频> <槽位>"
     echo ""
@@ -102,6 +101,38 @@ if [ -n "$CW" ] && [ "$CW" != "$IN_W" ]; then
 else
     echo "      ✔ 无黑边"
 fi
+
+# ── 竖屏检查 ─────────────────────────────────────────────────────────
+if [ "$IN_H" -gt "$IN_W" ]; then
+    echo ""
+    echo "      ⚠⚠ 这是**竖屏**视频（${IN_W}x${IN_H}）"
+    echo "          我们的载体是横屏 16:10（显示器 1.62 / 幕布 1.47）"
+    echo "          竖屏转横屏只能裁掉 70%+ 画面，或者加黑边（黑边会被当画面显示）"
+    echo "          建议换一个横屏素材。继续执行会裁掉大量内容 —— 5 秒后继续，Ctrl+C 取消"
+    sleep 5
+fi
+
+# ── 按时长自动选参数 ─────────────────────────────────────────────────
+# 为什么：StreamingAssets 里所有文件都进包体。
+# 2 分钟的 1920×1200 crf18 要 200~400MB，完全不能接受。
+# 按时长分档，短片子给高画质，长片子降分辨率+提 CRF 控体积。
+DUR=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of csv=p=0 "$IN")
+DUR_INT=$(printf '%.0f' "$DUR" 2>/dev/null || echo 0)
+
+if [ "$DUR_INT" -le 20 ]; then
+    W=1920; H=1200; CRF=18
+    TIER="短片（≤20s）→ 高画质"
+elif [ "$DUR_INT" -le 60 ]; then
+    W=1920; H=1200; CRF=21
+    TIER="中片（≤60s）→ 标准画质"
+else
+    W=1600; H=1000; CRF=23
+    TIER="长片（>60s）→ 降分辨率控体积"
+fi
+
+echo ""
+echo "      时长 ${DUR_INT}s → $TIER"
+echo "      目标 ${W}x${H} / crf $CRF"
 
 # ── 3. 转码 ──────────────────────────────────────────────────────────
 echo ""
