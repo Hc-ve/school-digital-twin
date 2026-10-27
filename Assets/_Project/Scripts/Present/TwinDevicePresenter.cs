@@ -2235,31 +2235,30 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 【P26】在幕布前贴一张自建面片，UV 固定 0..1，材质双面。
+        /// 【P26】在幕布位置贴一张等比面片，作为投影画面的载体。
         ///
-        /// ── 为什么不直接用幕布的材质 ────────────────────────────────────
-        /// 2026-10-27 实测：点「投影」幕布毫无变化。排查确认命令、投影仪状态、
-        /// 播放器全部正常。真正原因最后查出来了 —— **这个场景是合并网格**：
-        /// ```
-        /// ProjectorScreen01 的 MeshFilter → 「Combined Mesh (root: scene) 7」
-        ///                                    62851 顶点 / 73 个 submesh
-        /// ```
-        /// 整个房间的几何被合批成一个大网格，`sharedMaterial` 只作用于**第 0 个 submesh**，
-        /// 幕布面在别的 submesh 上，所以怎么改材质都没反应。
+        /// ── 这个场景有三个坑，前两版都踩过 ────────────────────────────────
+        /// ① **合并网格**：`ProjectorScreen01` 的 `sharedMesh` 是
+        ///    `Combined Mesh (root: scene) N`（几万顶点、几十个 submesh），
+        ///    那是**整间房**合批后的几何，不是一块幕布。
+        ///    → 不能拿它做任何几何推断（复制它 = 把房间贴到幕布上，报 217 个错）。
+        /// ② **sharedMaterial 只作用第 0 个 submesh** —— 所以最初改幕布材质毫无反应。
+        /// ③ **模型的 transform 轴是错乱的**：3ds Max 导入带旋转，
+        ///    `forward` 实测是 `(0,1,0)`（朝上）。
+        ///    上一版按 `transform.forward` 当法线、`transform.up` 当上方向，
+        ///    两者平行导致正交化退化成零向量，算出 **0.10×3.11m 的细条**。
+        ///    （2026-10-27 日志：`0.10×3.11m（比例 0.031），法线 (0.00, 1.00, 0.00)`）
         ///
-        /// ⚠️ **不要试图复制/拆分这个网格** —— 它是整间房的几何，
-        ///    复制出来就是"把房间的一大块贴到幕布上"（2026-10-27 第二版踩过，报 217 个错）。
-        ///    正确做法：**完全不碰网格**，自己造一张面片。
+        /// ── 最终算法：只信包围盒，按"最薄的那个轴"当法线 ────────────────
+        /// 幕布是一块薄板，所以包围盒（`Renderer.bounds`，世界 AABB）
+        /// **最小的那个维度就是厚度**，其方向就是幕布法线。
+        /// 另外两个维度构成幕布面：大的当宽、小的当高。
+        /// 这样完全不依赖 `transform` 轴、不依赖网格、不依赖模型的导出姿态。
         ///
-        /// ── 朝向和尺寸 ──────────────────────────────────────────────────
-        /// 朝向用**幕布自身**的 `transform` 轴（`forward` = 法线），不用"朝投影仪"算 ——
-        /// 幕布相对投影仪往往是斜的，按"朝投影仪"摆会把面片转歪，投影只盖住一部分。
-        /// 若 `forward` 背对投影仪就翻 180°，再用 `Cull Off` 兜底，朝向永不成为问题。
+        /// 尺寸取包围盒的原始 size（不做斜切投影）——
+        /// 幕布实测 3.11×2.13m 且基本轴对齐，这样最接近真实。
         ///
-        /// 尺寸：把包围盒的 8 个角点投到幕布的 `right` / `up` 轴上取范围。
-        /// 幕布真实尺寸是 3.11×2.13m，这套算法实测准确。
-        ///
-        /// 面片沿法线朝观众那侧偏 2cm，避免与幕布 z-fighting。
+        /// 面片朝投影仪方向偏移 2cm，避免和幕布 z-fighting；材质双面渲染。
         /// </summary>
         private GameObject BuildScreenQuad(Renderer canvas, Vector3 projectorPos, Color tint,
                                            Transform parent, out Material mat, out float aspect)
@@ -2268,52 +2267,37 @@ namespace SchoolTwin.Present
             aspect = 0f;
 
             Bounds b = canvas.bounds;
+            Vector3 size = b.size;
 
-            // ── 朝向：优先用幕布自身轴，退化时用"朝投影仪" ────────────────
-            Vector3 toProj = projectorPos - b.center;
+            // ── ① 最薄的轴 = 厚度 = 法线方向 ────────────────────────────
+            int axis = 0;                       // 0=X 1=Y 2=Z
+            if (size.y < size.x) axis = 1;
+            if (size.z < size[axis]) axis = 2;
 
-            Vector3 normal = canvas.transform.forward;
-            Vector3 up = canvas.transform.up;
-            Vector3 right = canvas.transform.right;
+            Vector3 normal = Vector3.zero;
+            normal[axis] = 1f;
 
-            // 幕布模型的 forward 也可能指向墙里；用"哪一面朝投影仪"判断要不要翻
-            if (Vector3.Dot(normal, toProj) < 0f)
-            {
+            // 法线朝投影仪那侧（观众侧）；投影仪在幕布另一侧时翻过来
+            if (Vector3.Dot(normal, projectorPos - b.center) < 0f)
                 normal = -normal;
-                right = -right;      // 保持右手系：翻法线就要翻一个切向，否则贴图会镜像
-            }
-            // 退化保护：法线必须与"朝投影仪"大致同向
-            if (normal.sqrMagnitude < 1e-6f) normal = toProj.normalized;
-            normal = normal.normalized;
-            up = (up - normal * Vector3.Dot(up, normal)).normalized;   // 正交化
-            if (up.sqrMagnitude < 1e-6f) up = Vector3.up;
-            right = Vector3.Cross(up, normal).normalized;
 
-            // ── 尺寸：包围盒 8 角点投到幕布的 right / up 轴 ────────────────
-            Vector3 ext = b.extents;
-            float mnR = float.MaxValue, mxR = float.MinValue;
-            float mnU = float.MaxValue, mxU = float.MinValue;
-            for (int i = 0; i < 8; i++)
-            {
-                Vector3 corner = b.center + new Vector3(
-                    ((i & 1) == 0 ? -ext.x : ext.x),
-                    ((i & 2) == 0 ? -ext.y : ext.y),
-                    ((i & 4) == 0 ? -ext.z : ext.z));
-                Vector3 rel = corner - b.center;
-                float dr = Vector3.Dot(rel, right);
-                float du = Vector3.Dot(rel, up);
-                if (dr < mnR) mnR = dr;
-                if (dr > mxR) mxR = dr;
-                if (du < mnU) mnU = du;
-                if (du > mxU) mxU = du;
-            }
-            float w = Mathf.Max(0.05f, mxR - mnR);
-            float h = Mathf.Max(0.05f, mxU - mnU);
+            // ── ② 另外两个轴 = 幕布面，大的当宽、小的当高 ────────────────
+            int a1 = (axis + 1) % 3;
+            int a2 = (axis + 2) % 3;
+            int wideAxis = size[a1] >= size[a2] ? a1 : a2;
+            int highAxis = wideAxis == a1 ? a2 : a1;
+
+            Vector3 up = Vector3.zero; up[highAxis] = 1f;
+            // 这三者（axis / wideAxis / highAxis）是 0/1/2 的一个排列，
+            // 所以 normal 与 up 必然垂直，`LookRotation` 不会退化。
+
+            float w = Mathf.Max(0.05f, size[wideAxis]);
+            float h = Mathf.Max(0.05f, size[highAxis]);
             aspect = w / h;
 
             Quaternion rot = Quaternion.LookRotation(normal, up);
 
-            // ── 网格：两个三角形，UV 写死 0..1 ────────────────────────────
+            // ── ③ 网格：两个三角形，UV 写死 0..1 ─────────────────────────
             float hw = w * 0.5f, hh = h * 0.5f;
             Mesh mesh = new Mesh();
             mesh.name = "TwinProjectorScreenQuad";
@@ -2333,7 +2317,7 @@ namespace SchoolTwin.Present
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
-            // ── 物体 ──────────────────────────────────────────────────────
+            // ── ④ 物体 ──────────────────────────────────────────────────
             GameObject go = new GameObject("TwinProjectorScreenQuad");
             go.transform.SetParent(parent, false);
             go.transform.position = b.center + normal * 0.02f;
@@ -2367,10 +2351,11 @@ namespace SchoolTwin.Present
             mr.receiveShadows = false;
 
             Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
-                      "m（比例 " + aspect.ToString("0.000") + "），中心 (" +
-                      b.center.x.ToString("0.00") + ", " + b.center.y.ToString("0.00") + ", " +
-                      b.center.z.ToString("0.00") + ")，法线 (" + normal.x.ToString("0.00") + ", " +
-                      normal.y.ToString("0.00") + ", " + normal.z.ToString("0.00") + ")");
+                      "m（比例 " + aspect.ToString("0.000") + "），包围盒 " +
+                      size.x.ToString("0.00") + "×" + size.y.ToString("0.00") + "×" +
+                      size.z.ToString("0.00") + "m，法线轴 " + "XYZ"[axis] +
+                      "，中心 (" + b.center.x.ToString("0.00") + ", " +
+                      b.center.y.ToString("0.00") + ", " + b.center.z.ToString("0.00") + ")");
             return go;
         }
 
