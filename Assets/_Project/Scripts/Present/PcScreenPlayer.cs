@@ -229,7 +229,7 @@ namespace SchoolTwin.Present
 
         /// <summary>每帧调用：把视频合成进 screenRT。</summary>
         public void Tick()
-        {        public void Tick()
+        {
             if (!HasVideo || !_on) return;
             if (_player == null || _videoRT == null || ScreenRT == null || _composite == null) return;
             if (!_player.isPrepared) return;
