@@ -97,12 +97,26 @@ namespace SchoolTwin.Present
         /// 幕布面片是 3.11×2.13 这种非正方形，UV 却是 0..1，必须**显式传入真实比例**，
         /// 否则会让 cover 裁掉过多画面（2026-10-27 用户报"投影画面显示不全、比例不符合"）。
         /// </param>
+        /// <param name="volume">
+        /// 音源音量 0~1。主脑给 0.9，机房给低值 ——
+        /// 主脑和机房是**两个独立音源**（各在自己的锚点位置），
+        /// 都给 0.9 的话开机音效会叠加成两倍响。
+        /// </param>
+        /// <param name="audioPos">
+        /// 音源的**世界位置**。传 null 就跟着 `parent` 走。
+        ///
+        /// 【为什么需要这个】声音应该从**音箱**出来，不是从显示器/投影仪出来。
+        /// 这个场景里机房墙上有两个 `SubBuffer02` 音箱，把音源放它们中间，
+        /// 走近时能听出"声音来自那面墙"而不是"屏幕在响"。
+        /// </param>
         public static PcScreenPlayer Create(string name, string fileName,
                                             Vector2 uvMin, Vector2 uvMax,
                                             Material target, Color onColor, Transform parent,
                                             int atlasSize = AtlasSize,
                                             float inset = 0.06f,
-                                            float rectAspect = 0f)
+                                            float rectAspect = 0f,
+                                            float volume = 0.9f,
+                                            Vector3? audioPos = null)
         {
             PcScreenPlayer p = new PcScreenPlayer();
             p.TargetMaterial = target;
@@ -165,6 +179,8 @@ namespace SchoolTwin.Present
 
             p._go = new GameObject("PcScreenPlayer_" + name);
             if (parent != null) p._go.transform.SetParent(parent, false);
+            // 音源放到音箱位置（不 parent，避免继承缩放；VideoPlayer 不依赖位置）
+            if (audioPos.HasValue) p._go.transform.position = audioPos.Value;
 
             // 【声音】走 3D AudioSource，挂在显示器位置上 —— 站在哪台机器前就听哪台的。
             // 之前为了省事设成 `None`，结果开机视频完全没声音（用户实测）。
@@ -174,7 +190,7 @@ namespace SchoolTwin.Present
             src.rolloffMode = AudioRolloffMode.Linear;
             src.minDistance = 1.5f;
             src.maxDistance = 14f;
-            src.volume = 0.9f;
+            src.volume = Mathf.Clamp01(volume);
             src.dopplerLevel = 0f;                      // 机器不动，不需要多普勒
 
             p._player = p._go.AddComponent<VideoPlayer>();

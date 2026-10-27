@@ -1792,10 +1792,92 @@ namespace SchoolTwin.Present
         [Range(0f, 0.5f)]
         [SerializeField] private float _screenStagger = 0.15f;
 
+        // ---- 【P26】音量 ----
+        // 主脑和机房是**两个独立音源**（各在自己的锚点位置）。
+        // 开机音效两边都给满音量的话，站在中间会听到两倍响 + 相位差。
+        // 真实机房里也是"主脑那台最响，其余十几台是背景嗡声"。
+        [Tooltip("主脑屏幕音量")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _masterVolume = 0.9f;
+
+        // ⚠️ 主脑和机房在**同一间教室**，音源都会被定位到同一对音箱（`SubBuffer02`），
+        // 所以两个 AudioSource 是**同位置、同相位**叠加 —— 音量会直接相加。
+        // 0.9 + 0.2 = 1.1，刚好略响一点，不会削波。
+        // 如果都调高（比如 0.9 + 0.6 = 1.5）会听到明显的失真。
+        [Tooltip("机房 18 台的音量。它们和主脑共用同一对音箱，音量会直接相加，别调太高")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _roomVolume = 0.20f;
+
+        [Tooltip("投影仪（幕布）的音量。同样和主脑共用音箱，注意叠加")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _projectorVolume = 0.15f;
+
         [Tooltip("视频画面四周均匀内缩的比例。0 = 铺满整块屏幕（**默认**）。" +
                  "⚠️ 显示器模型本身自带白色边框（Monitor04 的 bezel），再加内缩会变成双层边框")]
         [Range(0f, 0.3f)]
         [SerializeField] private float _screenVideoInset = 0f;
+
+        /// <summary>
+        /// 往上走到「父节点叫 Interior」的那一层 —— 那就是**房间节点**。
+        ///
+        /// 直接取 parent 也行（实测投影仪/显示器就挂在房间节点下），但多走两步不花钱，
+        /// 而且换成"设备挂在吊架/桌腿下"这种结构时仍然正确。
+        ///
+        /// 【为什么要找房间节点】给投影仪找幕布、给屏幕找音箱，都得在**同一间房**里找，
+        /// 否则会串到隔壁教室（两个教室都有 ProjectorScreen01 / SubBuffer02）。
+        /// </summary>
+        private Transform FindRoomNode(Transform from)
+        {
+            Transform room = from;
+            while (room != null && room.parent != null && room.parent.name != "Interior")
+                room = room.parent;
+            return room;
+        }
+
+        /// <summary>
+        /// 【P26】找房间里的**音箱**，返回它们的中心点。
+        ///
+        /// 声音应该从音箱出来，不是从显示器/投影仪出来。
+        /// 这个场景的机房墙上有两个 `SubBuffer02`（截图里幕布两侧的黑色箱子），
+        /// 把音源放在两者中点，走近时能听出"声音来自那面墙"。
+        ///
+        /// 用 `Renderer` 而不是 `Transform` 收集：同一个音箱可能有子物体也带同名，
+        /// 用 Transform 会重复计数导致中心点偏移。Renderer 每个音箱只有一个。
+        ///
+        /// 找不到就返回 false，调用方退回"跟着锚点走"。
+        /// </summary>
+        private bool TryGetRoomAudioPos(Transform room, out Vector3 pos)
+        {
+            pos = Vector3.zero;
+            if (room == null) return false;
+
+            Renderer[] rs = room.GetComponentsInChildren<Renderer>(true);
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+
+            for (int i = 0; i < rs.Length; i++)
+            {
+                if (rs[i] == null) continue;
+                string nm = rs[i].name;
+
+                // 这个场景叫 SubBuffer02；再兜几个常见命名，换模型时不至于失效
+                bool hit = nm.IndexOf("SubBuffer", StringComparison.OrdinalIgnoreCase) >= 0
+                        || nm.IndexOf("Speaker", StringComparison.OrdinalIgnoreCase) >= 0
+                        || nm.IndexOf("AudioBox", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!hit) continue;
+
+                sum += rs[i].bounds.center;
+                n++;
+            }
+
+            if (n == 0) return false;
+
+            pos = sum / n;
+            Debug.Log("[TwinPresent] 找到 " + n + " 个音箱（" + room.name + "），" +
+                      "音源放在 (" + pos.x.ToString("0.00") + ", " +
+                      pos.y.ToString("0.00") + ", " + pos.z.ToString("0.00") + ")");
+            return true;
+        }
 
         /// <summary>屏幕矩形在**图集 UV** 里的范围（左下 / 右上）。和 `BuildScreenMask` 用同一套常量。</summary>
         private void ScreenUvRect(out Vector2 min, out Vector2 max)
@@ -1971,9 +2053,20 @@ namespace SchoolTwin.Present
             {
                 Vector2 uvMin, uvMax;
                 ScreenUvRect(out uvMin, out uvMax);
+
+                // 主脑满音量，机房给低值（两个独立音源，都给满会叠成两倍响）
+                bool isMaster = string.Equals(anchor.TwinId, "ClassComputer/PC/Master_01",
+                                              StringComparison.Ordinal);
+                float vol = isMaster ? _masterVolume : _roomVolume;
+
+                // 音源放音箱处（找不到就跟着锚点）
+                Vector3 audioPos;
+                bool hasAudioPos = TryGetRoomAudioPos(FindRoomNode(anchor.transform), out audioPos);
+
                 v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), videoFile, uvMin, uvMax,
                                                  variant, _screenEmission, anchor.transform,
-                                                 _screenVideoAtlasSize, _screenVideoInset);
+                                                 _screenVideoAtlasSize, _screenVideoInset, 0f, vol,
+                                                 hasAudioPos ? (Vector3?)audioPos : null);
                 if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
                 {
                     variant.SetTexture("_EmissionMap", v.Player.ScreenRT);
@@ -2323,11 +2416,7 @@ namespace SchoolTwin.Present
         private ProjectorVisual BuildProjector(TwinAnchor anchor)
         {
             // 往上走到「父节点叫 Interior」的那一层 —— 那就是房间节点。
-            // 直接取 parent 也行（实测投影仪就挂在房间节点下），但多走两步不花钱，
-            // 而且换成"投影仪挂在吊架下"这种结构时仍然正确。
-            Transform room = anchor.transform;
-            while (room != null && room.parent != null && room.parent.name != "Interior")
-                room = room.parent;
+            Transform room = FindRoomNode(anchor.transform);
 
             if (room == null)
             {
@@ -2380,10 +2469,16 @@ namespace SchoolTwin.Present
                     if (modelMat != null)
                     {
                         v.ScreenMaterial = modelMat;
+
+                        // 音源放音箱处（机房墙上的两个 SubBuffer02 中点）
+                        Vector3 audioPos;
+                        bool hasAudioPos = TryGetRoomAudioPos(room, out audioPos);
+
                         v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), _projectorVideo,
                                                          Vector2.zero, Vector2.one,
                                                          modelMat, _projectorVideoTint, anchor.transform,
-                                                         1024, 0f, frame.Aspect);
+                                                         1024, 0f, frame.Aspect, _projectorVolume,
+                                                         hasAudioPos ? (Vector3?)audioPos : null);
                         if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
                         {
                             modelMat.SetTexture("_MainTex", v.Player.ScreenRT);
