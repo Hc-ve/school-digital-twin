@@ -122,14 +122,32 @@ namespace SchoolTwin.Present
             p._go = new GameObject("PcScreenPlayer_" + name);
             if (parent != null) p._go.transform.SetParent(parent, false);
 
+            // 【声音】走 3D AudioSource，挂在显示器位置上 —— 站在哪台机器前就听哪台的。
+            // 之前为了省事设成 `None`，结果开机视频完全没声音（用户实测）。
+            AudioSource src = p._go.AddComponent<AudioSource>();
+            src.playOnAwake = false;
+            src.spatialBlend = 1f;                      // 全 3D
+            src.rolloffMode = AudioRolloffMode.Linear;
+            src.minDistance = 1.5f;
+            src.maxDistance = 14f;
+            src.volume = 0.9f;
+            src.dopplerLevel = 0f;                      // 机器不动，不需要多普勒
+
             p._player = p._go.AddComponent<VideoPlayer>();
             p._player.playOnAwake = false;
             p._player.isLooping = false;
             p._player.skipOnDrop = true;
-            p._player.audioOutputMode = VideoAudioOutputMode.None;   // 开机音效以后再说，先不占 AudioSource
             p._player.renderMode = VideoRenderMode.RenderTexture;
             p._player.targetTexture = p._videoRT;
             p._player.url = full;
+
+            // ⚠️ 音轨配置必须写在 `Prepare()` **之前** ——
+            // 准备阶段才会按这里的设置创建音频输出，之后改要重新 Prepare。
+            p._player.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            p._player.controlledAudioTrackCount = 1;
+            p._player.EnableAudioTrack(0, true);
+            p._player.SetTargetAudioSource(0, src);
+
             p._player.prepareCompleted += _ => { p.UpdateFit(); };
             p._player.Prepare();
 
