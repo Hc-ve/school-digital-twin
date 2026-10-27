@@ -262,22 +262,28 @@ namespace SchoolTwin.Command
 
                 case "PC":
                 {
-                    // 【P26】台数按点位自己的功率量程推（`Power.Max / 180W`）：
-                    // 机房整间 3000W → 16 台，主脑单台 300W → 1 台。
-                    // 原来硬编码「10 台 / 1800W」，主脑卡片上显示"10 台"，一眼就错。
-                    // 这个值必须和 `ApplyState` 里「开」的取值一致，否则按 Play 后会看到
-                    // 功率跳变 —— 那会被误当成"有人在操作"。
-                    float units = PcUnitCount(model);
-                    SetState(twinId, "Power", units * 180f);
-                    SetState(twinId, "OnCount", units);
+                    // 【P26】初始状态 = **关机**。
+                    //
+                    // 原来播的是"开机"（units × 180W），结果一进 Play 机房 19 台全亮着，
+                    // 而交互设计的第一步就是「开机 / 联动开机 / 投影」三选一 ——
+                    // 机器本来就开着，这三个按钮就全成了摆设。
+                    //
+                    // 真实场景也对：上课前机房是关的，学生/老师进来才开。
+                    // 关机时 `OnCount` 也要一起归零，否则卡片会写「已关」旁边「开机 1 台」。
+                    SetState(twinId, "Power", 0f);
+                    SetState(twinId, "OnCount", 0f);
                     seeded++;
                     break;
                 }
 
                 case "Projector":
-                    // 【P19】默认「开着」。两台投影仪都在教室里、和灯一样是上课就开的东西。
-                    // 310W 与 ApplyState 里「开」的取值必须一致（理由同上一条）。
-                    SetState(twinId, "Power", 310f);
+                    // 【P26】初始状态改成**关机**（P19 时是默认开着）。
+                    //
+                    // P19 的理由是"投影仪和灯一样，上课就开着"。但 P26 的交互设计里
+                    // 「投影模式」是三种开机模式之一 —— 投影仪本来就开着的话，
+                    // 这个按钮点了也看不出区别，和 PC 那三条一样形同虚设。
+                    // 灯泡累计时长 `LampHours` 仍然保留（那是设备寿命，与开关无关）。
+                    SetState(twinId, "Power", 0f);
                     SetState(twinId, "LampHours", 1240f);   // 灯泡已用 1240 小时（量程 0~10000）
                     seeded++;
                     break;
