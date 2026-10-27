@@ -2314,19 +2314,25 @@ namespace SchoolTwin.Present
             Vector3 up = Vector3.zero; up[highAxis] = 1f;
 
             // ⚠️ `right` 必须由右手系算出，**不能直接取世界轴**。
-            // 2026-10-27：第一版直接 `right[wideAxis] = 1f`，结果画面**左右镜像**。
-            // 原因：法线是 (1,0,0) 时宽度沿 Z 轴，观众看到的"右手边"是 **-Z** 而不是 +Z。
             //
-            // 推导：观众视线 = -normal（从幕布看向观众），上 = up，
-            //       观众的右方 = Cross(视线, up) = Cross(-normal, up) = Cross(up, normal)。
-            // 这样 u 轴正好是观众眼里的"从左到右"，不会镜像。
-            Vector3 right = Vector3.Cross(up, normal).normalized;
+            // 2026-10-27 第一次改：直接 `right[wideAxis] = 1f` → 画面**左右镜像**。
+            // 2026-10-27 第二次改：`Cross(up, normal)` → **还是镜像**，符号搞反了。
+            //
+            // 正确推导（Unity 是**左手坐标系**，用相机验证）：
+            //   相机的 `right = Cross(up, forward)`，其中 forward 是**视线方向**。
+            //   观众的视线 = -normal（从幕布看向自己），
+            //   所以 right = Cross(up, -normal) = **-Cross(up, normal)**。
+            //
+            // 代入本例验证：normal=(1,0,0)（朝 +X，面向观众），up=(0,1,0)
+            //   → 视线 = (-1,0,0) → right = Cross((0,1,0),(-1,0,0)) = (0,0,1) = **+Z** ✔
+            //   （之前取 -Z，正好左右翻）
+            Vector3 right = -Vector3.Cross(up, normal).normalized;
 
             // 保险：若 up 与 normal 意外平行（同轴退化），换一个正交基
             if (right.sqrMagnitude < 1e-6f)
             {
                 up = axis == 1 ? Vector3.forward : Vector3.up;
-                right = Vector3.Cross(up, normal).normalized;
+                right = -Vector3.Cross(up, normal).normalized;
             }
 
             frame.Center = b.center;
