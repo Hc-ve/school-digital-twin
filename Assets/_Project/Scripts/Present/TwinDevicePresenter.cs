@@ -1741,6 +1741,17 @@ namespace SchoolTwin.Present
         [Tooltip("幕布播视频时的自发光颜色。纯色模式仍用 _screenCanvasEmission")]
         [SerializeField] private Color _projectorVideoTint = new Color(0.95f, 0.98f, 1.05f, 1f);
 
+        // ---- 【P26】幕布面片的调试开关 ----
+        // 面片是**运行时 `new GameObject` 建的**，编辑模式的 Hierarchy 里没有，
+        // 只有 Play 时才出现，名字固定为 `TwinProjectorScreenQuad`（挂在场景根节点）。
+        // 排查"看不见"时打开下面这个开关：面片会变成**不透明亮红**，
+        // 一眼就能看出它在哪、多大、朝向对不对。确认完记得关掉。
+        [Tooltip("【调试】把幕布视频面片染成不透明亮红，用来确认位置/大小/朝向")]
+        [SerializeField] private bool _debugScreenQuad;
+
+        [Tooltip("【调试】把面片的世界包围盒、缩放打到 Console")]
+        [SerializeField] private bool _debugScreenQuadLog = true;
+
         // ⚠️ 素材要求：**视频本身不能带黑边**。
         // 着色器只能做「等比铺满 + 裁掉多余」，救不了编码进去的黑边。
         // 2026-10-27 用户给的 `开机视频.mp4` 是 1920×880，左右各 98px 是编码进去的黑边，
@@ -2318,8 +2329,17 @@ namespace SchoolTwin.Present
             mesh.RecalculateBounds();
 
             // ── ④ 物体 ──────────────────────────────────────────────────
+            // ⚠️ **不 parent 到任何物体**，直接放场景根节点。
+            //
+            // 【为什么不 parent】幕布/显示器这些模型的 transform 常带**整体缩放**
+            // （3ds Max 导出常见 lossyScale = 0.01 之类）。parent 过去 + localScale=1
+            // 会让 3.11m 的面片实际只有 3cm 大小 —— 完全看不见，而且日志里尺寸还是对的，
+            // 极难查（2026-10-27 排查到这里）。
+            // 放根节点则 localScale == worldScale，`Renderer.bounds` 量出来的尺寸直接可用。
+            //
+            // 副作用只是 Hierarchy 根节点多一个 `TwinProjectorScreenQuad`，
+            // 反而方便用户在 Play 时点选、按 F 聚焦定位 —— 这正是排查需要的。
             GameObject go = new GameObject("TwinProjectorScreenQuad");
-            go.transform.SetParent(parent, false);
             go.transform.position = b.center + normal * 0.02f;
             go.transform.rotation = rot;
             go.transform.localScale = Vector3.one;
@@ -2345,10 +2365,38 @@ namespace SchoolTwin.Present
             if (mat.HasProperty("_Cull"))
                 mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);   // 双面
 
+            // 【调试】把面片染成不透明亮红：因为它平时是"靠自发光出画面"的，
+            // 关机时纯黑、和幕布同色，肉眼完全分不清它到底存不存在。
+            if (_debugScreenQuad)
+            {
+                if (mat.HasProperty("_Color")) mat.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
+                mat.SetColor(EmissionId, new Color(0.6f, 0f, 0f, 1f));
+                Debug.Log("[P26][调试] 幕布面片已染成亮红");
+            }
+
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             mr.receiveShadows = false;
+
+            if (_debugScreenQuadLog)
+            {
+                Bounds wb = mr.bounds;      // 世界包围盒（此时 scale=1，所以就是真实尺寸）
+                Transform ap = parent;
+                Vector3 parentScale = ap != null ? ap.lossyScale : Vector3.one;
+                Debug.Log("[P26][调试] 面片物体「" + go.name + "」已创建（场景根节点）\n" +
+                          "   位置 " + go.transform.position.x.ToString("0.00") + ", " +
+                          go.transform.position.y.ToString("0.00") + ", " +
+                          go.transform.position.z.ToString("0.00") + "\n" +
+                          "   世界包围盒 size " + wb.size.x.ToString("0.00") + " × " +
+                          wb.size.y.ToString("0.00") + " × " + wb.size.z.ToString("0.00") + "\n" +
+                          "   父物体 " + (ap != null ? ap.name : "无") + " 的 lossyScale " +
+                          parentScale.x.ToString("0.0000") + ", " + parentScale.y.ToString("0.0000") +
+                          ", " + parentScale.z.ToString("0.0000") + "（已不再乘到面片上）\n" +
+                          "   法线 " + normal.x.ToString("0.00") + ", " + normal.y.ToString("0.00") +
+                          ", " + normal.z.ToString("0.00") +
+                          "   摄像机能看到的概率：面片朝投影仪一侧");
+            }
 
             Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
                       "m（比例 " + aspect.ToString("0.000") + "），包围盒 " +

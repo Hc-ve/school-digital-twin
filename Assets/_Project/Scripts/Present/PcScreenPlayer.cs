@@ -235,12 +235,33 @@ namespace SchoolTwin.Present
                       (_fit >= 1f ? "（裁左右）" : "（裁上下）"));
         }
 
+        /// <summary>
+        /// 视频已经播到结尾时把播放位置拉回 0。
+        ///
+        /// 【为什么必须做】`isLooping = false`，播完停在最后一帧。再调 `Play()`
+        /// **不会**从头开始 —— 画面就停在结尾那一帧，从外部看就是"点了没变化"。
+        /// 2026-10-27 实测：`SetOn(False)` 和 `SetOn(True)` 两次日志都是 `frame=293`
+        /// （视频共 294 帧），说明位置一直没回到开头。
+        /// </summary>
+        private void RestartIfFinished()
+        {
+            if (_player == null) return;
+            long count = (long)_player.frameCount;
+            if (count > 0 && _player.frame >= count - 1)
+            {
+                _player.frame = 0;
+                Debug.Log("[P26] " + Name + " 视频已播完（frame " + (count - 1) + "/" + count +
+                          "），回到第 0 帧重播");
+            }
+        }
+
         /// <summary>`Prepare()` 完成后的兜底播放（`SetOn(true)` 时还没就绪的情况）。</summary>
         private void OnPreparedPlay(VideoPlayer vp)
         {
             UpdateFit();
             if (_on && vp != null && !vp.isPlaying)
             {
+                RestartIfFinished();
                 vp.Play();
                 Debug.Log("[P26] " + Name + " 就绪后补播 → frame=" + vp.frame);
             }
@@ -301,6 +322,7 @@ namespace SchoolTwin.Present
                 }
                 else if (_player != null && !_player.isPlaying)
                 {
+                    RestartIfFinished();
                     _player.Play();
                 }
 
@@ -372,7 +394,6 @@ namespace SchoolTwin.Present
             // `Play()` 是空操作，状态机会一直停在"未播"（prepared=True / playing=False）。
             if (!_player.isPlaying && _player.frame <= 0)
                 _player.Play();
-
             if (!_dimensionKnown) UpdateFit();
 
             Graphics.Blit(_videoRT, ScreenRT, _composite);
