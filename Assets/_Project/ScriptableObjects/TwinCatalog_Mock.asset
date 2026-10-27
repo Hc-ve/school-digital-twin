@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -1625,21 +1625,21 @@ MonoBehaviour:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 3000
+      Max: 300
       WarnLow: 0
-      WarnHigh: 2600
+      WarnHigh: 260
       AlarmLow: 0
-      AlarmHigh: 2900
+      AlarmHigh: 290
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: OnCount
       Unit: "\u53F0"
       Min: 0
-      Max: 30
+      Max: 1
       WarnLow: 0
-      WarnHigh: 30
+      WarnHigh: 1
       AlarmLow: 0
-      AlarmHigh: 30
+      AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: CPULoad
