@@ -486,6 +486,10 @@ namespace SchoolTwin.Present
         {
             if (TargetMaterial == null) return false;
 
+            // 屏幕关着就别点亮它。下面会写 `EmissionId = _onColor`，
+            // 不加这一句，退出一瞬间幕布/显示器会被硬点成亮的（看着像闪一下）。
+            if (!_on) return false;
+
             string full = PcMediaLibrary.Resolve(fileName);
             if (string.IsNullOrEmpty(full) || !File.Exists(full))
             {
