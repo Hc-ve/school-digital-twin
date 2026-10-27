@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SchoolTwin.Command;
+using SchoolTwin.Core;      // TwinValue 在这里（不在 SchoolTwin.Twin）
 using SchoolTwin.Player;
 using SchoolTwin.Present;
 using SchoolTwin.Twin;
