@@ -2210,7 +2210,7 @@ namespace SchoolTwin.Present
                     // UV 是 0..1（正方形空间），着色器若从 UV 推导会得到 1.00，
                     // cover 就会按 1.96/1.00 去裁 —— 只采样视频中间 51% 宽度，
                     // 表现就是"画面显示不全、比例不对"（2026-10-27 用户实测）。
-                    v.Player = PcScreenPlayer.Create("Projector", _projectorVideo,
+                    v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), _projectorVideo,
                                                      Vector2.zero, Vector2.one,
                                                      screenMat, _projectorVideoTint, anchor.transform,
                                                      1024, 0f, quadAspect);

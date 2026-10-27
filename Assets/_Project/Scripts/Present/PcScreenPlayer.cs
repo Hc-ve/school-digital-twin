@@ -55,6 +55,9 @@ namespace SchoolTwin.Present
         private bool _on;
         private int _blitCount;      // 【诊断】累计 Blit 次数
 
+        /// <summary>调试用名字（日志里区分是哪个点位）。</summary>
+        public string Name = "?";
+
         private const int AtlasSize = 2048;      // 与 MaskTexWidth/Height 一致
         private const int VideoW = 1024;
         private const int VideoH = 576;
@@ -95,6 +98,7 @@ namespace SchoolTwin.Present
             PcScreenPlayer p = new PcScreenPlayer();
             p.TargetMaterial = target;
             p._onColor = onColor;
+            p.Name = name;
 
             // 显示区域的真实宽高比。0 = 从 UV 矩形推导（只对正方形图集成立）。
             float aspect = rectAspect;
@@ -176,19 +180,43 @@ namespace SchoolTwin.Present
             p._player.EnableAudioTrack(0, true);
             p._player.SetTargetAudioSource(0, src);
 
-            p._player.prepareCompleted += _ => { p.UpdateFit(); };
-            p._player.Prepare();
+            p._player.prepareCompleted += p.OnPreparedPlay;
+            try
+            {
+                p._player.Prepare();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[P26] " + name + " 准备视频失败：" + e.Message +
+                                 "（SetOn 时会再试一次）");
+            }
 
             Debug.Log("[P26] 屏幕视频就绪：" + name + " ← " + full);
             return p;
         }
 
-        /// <summary>视频尺寸要等 `prepareCompleted` 才知道，拿到后重算 letterbox。</summary>
+        /// <summary>视频尺寸要等 `prepareCompleted` 才知道，拿到后重算 cover 比例。</summary>
         private void UpdateFit()
         {
             if (_player == null) return;
-            int w = (int)_player.width;
-            int h = (int)_player.height;
+            // ⚠️ `_composite` 为空时直接返回。
+            // 2026-10-27：`prepareCompleted` 回调在某些时序下会早于 `_composite` 赋值，
+            // 里面抛 NullReference 会让 VideoPlayer 的状态机停在"未就绪"，
+            // 表现是 `playing=False prepared=False frame=-1 blit=0` —— 画面永远出不来。
+            if (_composite == null) return;
+
+            int w = 0, h = 0;
+            try
+            {
+                w = (int)_player.width;
+                h = (int)_player.height;
+            }
+            catch (Exception)
+            {
+                // 极少数情况下解码器还没给出尺寸，读 width 会抛。
+                // 静默返回，等下一帧/下次回调再算 —— 比例只是观感，不能因为它中断播放。
+                return;
+            }
             if (w <= 0 || h <= 0) return;
 
             float videoAspect = (float)w / h;
@@ -204,6 +232,17 @@ namespace SchoolTwin.Present
                       "），屏幕矩形比例 " + rectAspect.ToString("0.00") +
                       " → _Fit=" + _fit.ToString("0.000") +
                       (_fit >= 1f ? "（裁左右）" : "（裁上下）"));
+        }
+
+        /// <summary>`Prepare()` 完成后的兜底播放（`SetOn(true)` 时还没就绪的情况）。</summary>
+        private void OnPreparedPlay(VideoPlayer vp)
+        {
+            UpdateFit();
+            if (_on && vp != null && !vp.isPlaying)
+            {
+                vp.Play();
+                Debug.Log("[P26] " + Name + " 就绪后补播 → frame=" + vp.frame);
+            }
         }
 
         /// <summary>
@@ -246,7 +285,24 @@ namespace SchoolTwin.Present
 
             if (on)
             {
-                if (_player != null && !_player.isPlaying) _player.Play();
+                // ⚠️ 未准备就绪时 `Play()` 是空操作，状态机会卡在"未播"。
+                // 2026-10-27 实测：投影仪 `playing=False prepared=False frame=-1 blit=0`，
+                // 而电脑那边同一段代码是 `playing=True`。
+                // 原因是幕布播放器的 `Prepare()` 在某个时机没跑成功（`prepareCompleted`
+                // 回调里抛异常导致状态机中断）。
+                // 兜底：这里判断一次，没就绪就重新 Prepare，并在回调里补一次 Play。
+                if (_player != null && !_player.isPrepared)
+                {
+                    Debug.Log("[P26] " + Name + " 尚未就绪，重新 Prepare 并在回调里播放");
+                    _player.prepareCompleted -= OnPreparedPlay;
+                    _player.prepareCompleted += OnPreparedPlay;
+                    _player.Prepare();
+                }
+                else if (_player != null && !_player.isPlaying)
+                {
+                    _player.Play();
+                }
+
                 if (TargetMaterial != null) TargetMaterial.SetColor(EmissionId, _onColor);
             }
             else
