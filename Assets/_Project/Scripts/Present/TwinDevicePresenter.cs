@@ -1741,6 +1741,21 @@ namespace SchoolTwin.Present
         [Tooltip("幕布播视频时的自发光颜色。纯色模式仍用 _screenCanvasEmission")]
         [SerializeField] private Color _projectorVideoTint = new Color(0.95f, 0.98f, 1.05f, 1f);
 
+        // ---- 【P26】投影质感（2026-10-27 用户反馈"没有模拟现实的投影效果"）----
+        // 之前幕布是均匀满亮度，看起来像一块 LED 屏。真实投影最标志性的特征是
+        // **暗角**：镜头光强中心强、四角弱。这个参数一开，立刻就有"投影"的味道。
+        [Tooltip("投影暗角强度。0 = 均匀（像 LED 屏），0.3 = 明显暗角（像投影）")]
+        [Range(0f, 0.8f)]
+        [SerializeField] private float _projectorVignette = 0.30f;
+
+        [Tooltip("投影画面最高亮度。白幕反射率有限，到不了纯白；显示器可以设 1.0")]
+        [Range(0.3f, 1.5f)]
+        [SerializeField] private float _projectorMaxBright = 0.92f;
+
+        [Tooltip("投影灯泡色温偏移。正值偏暖（黄），负值偏冷（蓝）")]
+        [Range(-1f, 1f)]
+        [SerializeField] private float _projectorWarmth = 0.12f;
+
         // ---- 【P26】幕布调试开关 ----
         // 现在视频直接画在**幕布模型本体**上（材质数组整体替换），没有独立面片了。
         // 排查"看不见"时打开这个开关：幕布会变成**不透明亮红**，
@@ -2053,14 +2068,14 @@ namespace SchoolTwin.Present
         //   ① 一盏聚光灯（灯罩朝幕布）—— 让幕布周围真的被照亮
         //   ② 一段锥形光束网格（加法混合）—— 机房那种"空气里有光柱"的感觉
         [Tooltip("投影光束的聚光灯强度。0 = 不打光，只亮幕布")]
-        [SerializeField] private float _beamIntensity = 1.6f;
+        [SerializeField] private float _beamIntensity = 2.4f;
 
         [Tooltip("光束颜色（偏冷白，和幕布一致）")]
         [SerializeField] private Color _beamColor = new Color(0.80f, 0.88f, 1.00f, 1f);
 
         [Tooltip("光束网格的透明度。0 = 不画光柱，只留聚光灯")]
         [Range(0f, 1f)]
-        [SerializeField] private float _beamConeAlpha = 0.16f;
+        [SerializeField] private float _beamConeAlpha = 0.30f;
 
         private sealed class ProjectorVisual
         {
@@ -2389,6 +2404,11 @@ namespace SchoolTwin.Present
                 offCol = new Color(lum, lum, lum * 0.98f, 1f);
             }
             mat.SetColor("_OffColor", offCol);
+
+            // 投影质感参数
+            mat.SetFloat("_Vignette", Mathf.Clamp(_projectorVignette, 0f, 0.8f));
+            mat.SetFloat("_MaxBright", Mathf.Clamp(_projectorMaxBright, 0.3f, 1.5f));
+            mat.SetFloat("_Warmth", Mathf.Clamp(_projectorWarmth, -1f, 1f));
 
             mat.SetFloat("_DebugRed", _debugScreenQuad ? 1f : 0f);
 

@@ -23,6 +23,14 @@ Shader "SchoolTwin/ScreenOnModel"
         _Right ("Screen Right (world)", Vector) = (1, 0, 0, 0)
         _Up ("Screen Up (world)", Vector) = (0, 1, 0, 0)
         _Size ("Screen Size (w, h)", Vector) = (1, 1, 0, 0)
+        // ---- 投影质感 ----
+        // 真实投影仪镜头的光强分布：中心亮、边缘暗。这是"投影"和"显示器"最直观的区别。
+        // 0 = 均匀（像 LED 屏），0.3 = 明显暗角（像投影）
+        _Vignette ("Vignette", Range(0, 0.8)) = 0.30
+        // 投影画面比显示器暗一档（白幕反射率有限，不可能到纯白 1.0）
+        _MaxBright ("Max Brightness", Range(0.3, 1.5)) = 0.92
+        // 投影灯泡偏暖：画面整体略微偏黄
+        _Warmth ("Warmth", Range(-1, 1)) = 0.12
         // 调试：1 = 整块面涂亮红，用来确认"改的是不是这块模型"
         _DebugRed ("Debug Red", Float) = 0
     }
@@ -49,6 +57,9 @@ Shader "SchoolTwin/ScreenOnModel"
             float4 _Right;
             float4 _Up;
             float4 _Size;
+            float _Vignette;
+            float _MaxBright;
+            float _Warmth;
             float _DebugRed;
 
             struct appdata
@@ -94,8 +105,22 @@ Shader "SchoolTwin/ScreenOnModel"
                 float lum = saturate(dot(amb, float3(0.3333, 0.3333, 0.3333)) * 3.0 + 0.35);
                 float3 offCol = _OffColor.rgb * lum;
 
-                float3 video = tex2D(_MainTex, float2(u, v)).rgb * _EmissionColor.rgb;
-                float3 c = lerp(offCol, video, on * inside);
+                float3 video = tex2D(_MainTex, float2(u, v)).rgb;
+
+                // ── 投影质感（2026-10-27 用户反馈"没有模拟现实的投影效果"）──────
+                // 之前的幕布是均匀满亮度，看起来就是一块 LED 屏。真实投影有三件事：
+                //   ① 镜头光强分布：中心亮、四角暗（暗角）
+                //   ② 白幕反射率有限，最亮也到不了纯白
+                //   ③ 灯泡偏暖，整体略泛黄
+                float2 d = float2(u, v) - 0.5;
+                float r2 = saturate(dot(d, d) * 4.0);          // 中心 0，四角 1
+                float falloff = 1.0 - _Vignette * r2;
+
+                video *= falloff * _MaxBright;
+                video.r *= (1.0 + _Warmth * 0.35);
+                video.b *= (1.0 - _Warmth * 0.35);
+
+                float3 c = lerp(offCol, video * _EmissionColor.rgb, on * inside);
                 return fixed4(c, 1);
             }
             ENDCG
