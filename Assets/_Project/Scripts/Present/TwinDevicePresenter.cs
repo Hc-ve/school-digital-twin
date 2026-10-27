@@ -1728,6 +1728,19 @@ namespace SchoolTwin.Present
         [Tooltip("主脑屏幕的开机视频（相对 StreamingAssets/PC/）。留空 = 不启用视频")]
         [SerializeField] private string _masterBootVideo = "master/boot.mp4";
 
+        [Tooltip("机房其余 18 台的视频（相对 StreamingAssets/PC/）。" +
+                 "按设计「19 台同步同画面」，默认和主脑用同一个文件")]
+        [SerializeField] private string _roomVideo = "master/boot.mp4";
+
+        [Tooltip("投影幕布的视频（相对 StreamingAssets/PC/）。留空 = 幕布只用纯色自发光")]
+        [SerializeField] private string _projectorVideo = "master/boot.mp4";
+
+        // `_EmissionColor` 是**乘**在 `_EmissionMap` 上的。
+        // `_screenCanvasEmission`(0.55) 适合"一块发白的幕布"，但乘在视频上会把画面压暗一档，
+        // 所以播视频时换这个近白的色调（略偏冷，>0.9 还能吃到 Bloom）。
+        [Tooltip("幕布播视频时的自发光颜色。纯色模式仍用 _screenCanvasEmission")]
+        [SerializeField] private Color _projectorVideoTint = new Color(0.95f, 0.98f, 1.05f, 1f);
+
         // ⚠️ 素材要求：**视频本身不能带黑边**。
         // 着色器只能做「等比铺满 + 裁掉多余」，救不了编码进去的黑边。
         // 2026-10-27 用户给的 `开机视频.mp4` 是 1920×880，左右各 98px 是编码进去的黑边，
@@ -1754,6 +1767,16 @@ namespace SchoolTwin.Present
             float v1 = 1f - (ScreenPxTop + inset) / MaskTexHeight;
             min = new Vector2(u0, v0);
             max = new Vector2(u1, v1);
+        }
+
+        /// <summary>这个 PC 点位该播哪个视频。返回 null/空 = 该点位不启用视频。</summary>
+        private string VideoFileFor(string twinId)
+        {
+            if (string.Equals(twinId, "ClassComputer/PC/Master_01", StringComparison.Ordinal))
+                return _masterBootVideo;
+            if (string.Equals(twinId, "ClassComputer/PC/Room_01", StringComparison.Ordinal))
+                return _roomVideo;
+            return null;
         }
 
         private sealed class ScreenVisual
@@ -1881,15 +1904,15 @@ namespace SchoolTwin.Present
             v.Renderers = hits.ToArray();
             v.Material = variant;
 
-            // 【P26】主脑屏幕接视频：把 `_EmissionMap` 从静态遮罩换成"视频合成 RT"。
+            // 【P26】屏幕接视频：把 `_EmissionMap` 从静态遮罩换成"视频合成 RT"。
             // RT 里屏幕矩形内是画面、其余纯黑，所以边框不会被点亮。
             // 找不到素材时 `HasVideo = false`，这块屏退回纯色自发光，不影响其它逻辑。
-            if (!string.IsNullOrEmpty(_masterBootVideo) &&
-                string.Equals(anchor.TwinId, "ClassComputer/PC/Master_01", StringComparison.Ordinal))
+            string videoFile = VideoFileFor(anchor.TwinId);
+            if (!string.IsNullOrEmpty(videoFile))
             {
                 Vector2 uvMin, uvMax;
                 ScreenUvRect(out uvMin, out uvMax);
-                v.Player = PcScreenPlayer.Create("Master", _masterBootVideo, uvMin, uvMax,
+                v.Player = PcScreenPlayer.Create(anchor.TwinId.Replace('/', '_'), videoFile, uvMin, uvMax,
                                                  variant, _screenEmission, anchor.transform,
                                                  _screenVideoAtlasSize, _screenVideoInset);
                 if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
@@ -1973,11 +1996,23 @@ namespace SchoolTwin.Present
         /// <summary>【P26】每帧把视频合成进各屏的 RT。挂在这里是因为表现层已经有一个 Update。</summary>
         private void TickScreenVideos()
         {
-            if (_screens.Count == 0) return;
-            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            if (_screens.Count > 0)
             {
-                ScreenVisual v = kv.Value;
-                if (v != null && v.Player != null) v.Player.Tick();
+                foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+                {
+                    ScreenVisual v = kv.Value;
+                    if (v != null && v.Player != null) v.Player.Tick();
+                }
+            }
+
+            // 幕布也算一块屏，一起合成
+            if (_projectors.Count > 0)
+            {
+                foreach (KeyValuePair<string, ProjectorVisual> kv in _projectors)
+                {
+                    ProjectorVisual v = kv.Value;
+                    if (v != null && v.Player != null) v.Player.Tick();
+                }
             }
         }
 
@@ -2006,6 +2041,8 @@ namespace SchoolTwin.Present
         {
             public Renderer Canvas;
             public Material CanvasMaterial;
+            /// <summary>【P26】幕布视频。为 null 或 `!HasVideo` 时退回纯色自发光。</summary>
+            public PcScreenPlayer Player;
             /// <summary>【P26】朝幕布的聚光灯；光束关掉时为 null。</summary>
             public Light Beam;
             /// <summary>【P26】可见光柱的网格物体；不画光柱时为 null。</summary>
@@ -2037,8 +2074,15 @@ namespace SchoolTwin.Present
             v.HasApplied = true;
             v.IsOn = on;
 
-            if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
+            // 【P26】有视频的幕布：开关与自发光都交给播放器统一管
+            if (v.Player != null && v.Player.HasVideo)
+            {
+                v.Player.SetOn(on);
+            }
+            else if (v.CanvasMaterial != null && v.CanvasMaterial.HasProperty(EmissionId))
+            {
                 v.CanvasMaterial.SetColor(EmissionId, on ? _screenCanvasEmission : Color.black);
+            }
 
             // 【P26】光束跟着开关走：聚光灯改强度（不改 enabled，避免每帧重建光照），
             // 光柱网格直接显隐（它只是个面片，开关一次没有开销）。
@@ -2111,6 +2155,22 @@ namespace SchoolTwin.Present
             ProjectorVisual v = new ProjectorVisual();
             v.Canvas = canvas;
             v.CanvasMaterial = variant;
+
+            // 【P26】幕布接视频。
+            // 幕布是**独立的一块面片**，UV 直接铺满 0..1（不像显示器要按图集 UV 抠矩形），
+            // 所以这里 uvMin=(0,0) / uvMax=(1,1)，合成 RT 用 1024 就够 —— 不需要 2048 的图集布局。
+            if (!string.IsNullOrEmpty(_projectorVideo))
+            {
+                v.Player = PcScreenPlayer.Create("Projector", _projectorVideo,
+                                                 Vector2.zero, Vector2.one,
+                                                 variant, _projectorVideoTint, anchor.transform,
+                                                 1024, 0f);
+                if (v.Player != null && v.Player.HasVideo && v.Player.ScreenRT != null)
+                {
+                    variant.SetTexture("_EmissionMap", v.Player.ScreenRT);
+                    variant.SetColor(EmissionId, Color.black);
+                }
+            }
 
             // 【P26】投影"打光"：一盏朝幕布的聚光灯 + 一段可见光柱
             v.Beam = BuildProjectorBeam(anchor.transform, canvas.bounds);
