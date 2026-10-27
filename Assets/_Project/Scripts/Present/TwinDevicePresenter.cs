@@ -2311,8 +2311,23 @@ namespace SchoolTwin.Present
             Vector3 normal = Vector3.zero; normal[axis] = 1f;
             if (Vector3.Dot(normal, projectorPos - b.center) < 0f) normal = -normal;
 
-            Vector3 right = Vector3.zero; right[wideAxis] = 1f;
             Vector3 up = Vector3.zero; up[highAxis] = 1f;
+
+            // ⚠️ `right` 必须由右手系算出，**不能直接取世界轴**。
+            // 2026-10-27：第一版直接 `right[wideAxis] = 1f`，结果画面**左右镜像**。
+            // 原因：法线是 (1,0,0) 时宽度沿 Z 轴，观众看到的"右手边"是 **-Z** 而不是 +Z。
+            //
+            // 推导：观众视线 = -normal（从幕布看向观众），上 = up，
+            //       观众的右方 = Cross(视线, up) = Cross(-normal, up) = Cross(up, normal)。
+            // 这样 u 轴正好是观众眼里的"从左到右"，不会镜像。
+            Vector3 right = Vector3.Cross(up, normal).normalized;
+
+            // 保险：若 up 与 normal 意外平行（同轴退化），换一个正交基
+            if (right.sqrMagnitude < 1e-6f)
+            {
+                up = axis == 1 ? Vector3.forward : Vector3.up;
+                right = Vector3.Cross(up, normal).normalized;
+            }
 
             frame.Center = b.center;
             frame.Right = right;
@@ -2355,6 +2370,20 @@ namespace SchoolTwin.Present
             mat.SetVector("_Up", new Vector4(frame.Up.x, frame.Up.y, frame.Up.z, 0f));
             mat.SetVector("_Size", new Vector4(frame.Width, frame.Height, 0f, 0f));
             mat.SetColor(EmissionId, Color.black);      // 关机全黑
+
+            // 关机时显示的"幕布本色"：**沿用幕布原来的材质颜色**，
+            // 这样没投影时它就是一块普通白布，和周围环境一致。
+            Color offCol = new Color(0.78f, 0.78f, 0.75f, 1f);
+            Material origMat = canvas.sharedMaterial;
+            if (origMat != null && origMat.HasProperty("_Color"))
+            {
+                Color oc = origMat.GetColor("_Color");
+                // 只取亮度，避免原材质带奇怪色偏（有些模型材质是蓝灰的）
+                float lum = Mathf.Clamp01(oc.r * 0.299f + oc.g * 0.587f + oc.b * 0.114f);
+                offCol = new Color(lum, lum, lum * 0.98f, 1f);
+            }
+            mat.SetColor("_OffColor", offCol);
+
             mat.SetFloat("_DebugRed", _debugScreenQuad ? 1f : 0f);
 
             // **整个数组**都换成这一个材质 —— 只改第 0 个会导致"改了没反应"

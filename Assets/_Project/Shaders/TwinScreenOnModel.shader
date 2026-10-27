@@ -17,6 +17,8 @@ Shader "SchoolTwin/ScreenOnModel"
     {
         _MainTex ("Video", 2D) = "black" {}
         _EmissionColor ("Tint", Color) = (1, 1, 1, 1)
+        // 关机时幕布的本色。真实幕布是一块白布，不能因为"没画面"就变成纯黑
+        _OffColor ("Screen Off Color", Color) = (0.78, 0.78, 0.75, 1)
         _Center ("Screen Center (world)", Vector) = (0, 0, 0, 0)
         _Right ("Screen Right (world)", Vector) = (1, 0, 0, 0)
         _Up ("Screen Up (world)", Vector) = (0, 1, 0, 0)
@@ -42,6 +44,7 @@ Shader "SchoolTwin/ScreenOnModel"
 
             sampler2D _MainTex;
             float4 _EmissionColor;
+            float4 _OffColor;
             float4 _Center;
             float4 _Right;
             float4 _Up;
@@ -77,13 +80,23 @@ Shader "SchoolTwin/ScreenOnModel"
                 float u = dot(rel, _Right.xyz) / max(1e-5, _Size.x) + 0.5;
                 float v = dot(rel, _Up.xyz)    / max(1e-5, _Size.y) + 0.5;
 
-                // 屏幕之外（同一 Renderer 里可能还连着别的几何）→ 纯黑
+                // 屏幕之外（同一 Renderer 里可能还连着别的几何）
                 float inside = step(0.0, u) * step(u, 1.0) * step(0.0, v) * step(v, 1.0);
-                if (inside < 0.5)
-                    return fixed4(0, 0, 0, 1);
 
-                float3 c = tex2D(_MainTex, float2(u, v)).rgb;
-                return fixed4(c * _EmissionColor.rgb, 1);
+                // 开关：`_EmissionColor` 被 `PcScreenPlayer.SetOn` 设成黑 / 亮色，用它判断是否在播。
+                float on = step(0.001, dot(_EmissionColor.rgb, float3(0.3333, 0.3333, 0.3333)));
+
+                // 关机时显示幕布本色（受环境光影响，关灯会变暗），不是纯黑。
+                // 2026-10-27：第一版关机直接输出黑，整块幕布变成一块黑板，很假。
+                // 用 `ShadeSH9` 取环境球谐光：比 `UNITY_LIGHTMODEL_AMBIENT` 在新版更可靠，
+                // 而且关灯/断電时环境光会变，幕布跟着暗下去才对。
+                float3 amb = ShadeSH9(float4(0, 1, 0, 1));
+                float lum = saturate(dot(amb, float3(0.3333, 0.3333, 0.3333)) * 3.0 + 0.35);
+                float3 offCol = _OffColor.rgb * lum;
+
+                float3 video = tex2D(_MainTex, float2(u, v)).rgb * _EmissionColor.rgb;
+                float3 c = lerp(offCol, video, on * inside);
+                return fixed4(c, 1);
             }
             ENDCG
         }
