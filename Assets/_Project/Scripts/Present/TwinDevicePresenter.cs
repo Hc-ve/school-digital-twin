@@ -388,6 +388,9 @@ namespace SchoolTwin.Present
             // 【P26】屏幕视频：必须逐帧合成，不能挂在 0.1 秒的轮询里（会像幻灯片）
             TickScreenVideos();
 
+            // 【P26】逐个亮：同样要逐帧推进，0.15 秒一台在 10Hz 轮询下会漏拍
+            TickScreenStagger();
+
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + Mathf.Max(0.02f, _pollInterval);
 
@@ -1774,6 +1777,14 @@ namespace SchoolTwin.Present
         [Tooltip("屏幕视频的合成结果分辨率。2048 与显示器图集一致；吃内存（约 16MB/张）时可降到 1024")]
         [SerializeField] private int _screenVideoAtlasSize = 2048;
 
+        // ---- 【P26】逐个亮（开机风暴）----
+        // 18 台显示器原来共用一个材质，只能全亮全灭，没有"机房开机"的节奏感。
+        // 给每台一份材质副本，按时间逐个点亮 —— 每台间隔 `_screenStagger` 秒。
+        // 19 台 × 0.15s ≈ 2.9 秒，正好是"一台台亮起来"的观感。
+        [Tooltip("联动开机时每台显示器的间隔（秒）。0 = 同时全亮")]
+        [Range(0f, 0.5f)]
+        [SerializeField] private float _screenStagger = 0.15f;
+
         [Tooltip("视频画面四周均匀内缩的比例。0 = 铺满整块屏幕（**默认**）。" +
                  "⚠️ 显示器模型本身自带白色边框（Monitor04 的 bezel），再加内缩会变成双层边框")]
         [Range(0f, 0.3f)]
@@ -1807,6 +1818,15 @@ namespace SchoolTwin.Present
             public Renderer[] Renderers;
             /// <summary>运行时材质副本，带 `_EmissionMap` 遮罩。19 台共用这一个。</summary>
             public Material Material;
+            /// <summary>
+            /// 【P26】每台独立的材质副本（只在这台点位管**多块**屏时才建）。
+            /// 共用一份材质只能全亮全灭；要"逐个亮"必须一台一份。
+            /// </summary>
+            public Material[] Units;
+            /// <summary>【P26】逐个亮的起点时间；&lt;0 表示没有正在进行的点亮。</summary>
+            public float LitAt = -1f;
+            /// <summary>【P26】已经点亮了几台。</summary>
+            public int LitCount;
             /// <summary>【P26】视频载体。为 null 或 `!HasVideo` 时退回纯色自发光。</summary>
             public PcScreenPlayer Player;
             /// <summary>见 `LampVisual.HasApplied`：不能只判 IsOn，否则「第一次就是关」会早退（99 号清单第 20 条）。</summary>
@@ -1944,9 +1964,38 @@ namespace SchoolTwin.Present
                 }
             }
 
+            // ---- 【P26】逐个亮：给每台一份独立材质 ----
+            //
+            // 原来 18 台共用 `variant` 一个材质 → 只能全亮全灭，没有"机房开机"的节奏。
+            // 要一台台亮，就必须一台一份材质（`_EmissionColor` 是逐材质的状态）。
+            //
+            // 代价：破坏静态合批，18 台变 18 个 draw call。对这个规模的场景可以接受，
+            // 换来的是"开机风暴"这个最有辨识度的观感。
+            //
+            // 顺序：按 **X 坐标** 排序，让点亮从房间一侧扫到另一侧。
+            // `FindObjectsOfType` 的返回顺序是引擎内部的，不稳定 —— 不排序的话
+            // 每次 Play 点亮顺序都不一样，看起来像 bug。
+            if (hits.Count > 1 && _screenStagger > 0.001f)
+            {
+                hits.Sort((a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
+
+                v.Units = new Material[hits.Count];
+                for (int i = 0; i < hits.Count; i++)
+                {
+                    Material unit = new Material(variant);
+                    unit.name = variant.name + "_u" + i.ToString("00");
+                    unit.SetColor(EmissionId, Color.black);     // 初始全黑
+                    hits[i].sharedMaterial = unit;
+                    v.Units[i] = unit;
+                }
+                v.LitCount = 0;
+                v.LitAt = -1f;
+            }
+
             Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」接管了 " + hits.Count +
                       " 台显示器（分区 " + (string.IsNullOrEmpty(zone) ? "未指定" : zone) +
-                      (v.Player != null && v.Player.HasVideo ? "，屏幕视频=开" : "") + "）");
+                      (v.Player != null && v.Player.HasVideo ? "，屏幕视频=开" : "") +
+                      (v.Units != null ? "，逐个亮=" + _screenStagger.ToString("0.00") + "s/台" : "") + "）");
             return v;
         }
 
@@ -2001,6 +2050,27 @@ namespace SchoolTwin.Present
             v.HasApplied = true;
             v.IsOn = on;
 
+            // 【P26】有独立材质的（多块屏）→ 颜色交给 `TickScreenStagger` 按时间推进
+            if (v.Units != null && v.Units.Length > 1)
+            {
+                if (on)
+                {
+                    v.LitAt = Time.time;
+                    v.LitCount = 0;
+                }
+                else
+                {
+                    v.LitAt = -1f;
+                    v.LitCount = 0;
+                    for (int i = 0; i < v.Units.Length; i++)
+                        if (v.Units[i] != null) v.Units[i].SetColor(EmissionId, Color.black);
+                }
+
+                // 视频播放仍由播放器管（它作用在模板材质 `Material` 上，不影响 Units 的颜色）
+                if (v.Player != null && v.Player.HasVideo) v.Player.SetOn(on);
+                return;
+            }
+
             // 【P26】有视频的屏：开关与自发光都交给播放器统一管
             // （它要负责"播/停 + 清黑 + 自发光颜色"三件事，拆开容易漏）
             if (v.Player != null && v.Player.HasVideo)
@@ -2013,6 +2083,44 @@ namespace SchoolTwin.Present
             if (!v.Material.HasProperty(EmissionId)) return;
 
             v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
+        }
+
+        /// <summary>
+        /// 【P26】逐个亮的推进。每帧检查一次，按 `_screenStagger` 把屏幕一台台点亮。
+        ///
+        /// 【为什么用时间驱动而不是协程】协程要处理"点亮途中又被关机"的取消逻辑，
+        /// 而且 `TwinDevicePresenter` 的 Update 已经在轮询了，这里顺手算一下最省事，
+        /// 状态永远由 `LitAt` + 当前时间决定，不存在"卡在中间"的状态。
+        /// </summary>
+        private void TickScreenStagger()
+        {
+            if (_screens.Count == 0) return;
+
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                ScreenVisual v = kv.Value;
+                if (v == null || v.Units == null || v.Units.Length < 2) continue;
+                if (!v.IsOn || v.LitAt < 0f) continue;
+
+                float elapsed = Time.time - v.LitAt;
+                int want = Mathf.Clamp(
+                    1 + Mathf.FloorToInt(elapsed / Mathf.Max(0.01f, _screenStagger)),
+                    0, v.Units.Length);
+
+                if (want <= v.LitCount) continue;
+
+                for (int i = v.LitCount; i < want; i++)
+                    if (v.Units[i] != null) v.Units[i].SetColor(EmissionId, _screenEmission);
+
+                v.LitCount = want;
+
+                if (v.LitCount >= v.Units.Length)
+                {
+                    v.LitAt = -1f;      // 全亮完了，停止推进
+                    Debug.Log("[TwinPresent] 「" + kv.Key + "」" + v.Units.Length +
+                              " 台显示器已全部点亮");
+                }
+            }
         }
 
         /// <summary>
