@@ -2235,20 +2235,31 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
-        /// 【P26】在幕布前面贴一张自建面片，UV 固定 0..1。
+        /// 【P26】在幕布前贴一张自建面片，UV 固定 0..1，材质双面。
         ///
-        /// ── 为什么不直接用幕布的 `_EmissionMap` ────────────────────────────
-        /// 2026-10-27 实测：点「投影」幕布毫无变化。排查确认命令、接管、播放器全部正常，
-        /// 剩下的可能只有幕布网格自身 —— UV0 不铺满 0..1（3ds Max 导出常见），
-        /// 或者幕布是单面片、从教室看的是背面（Standard 默认 Cull Back）。
-        /// 这两种靠调材质参数都救不回来，所以干脆自己造一张面片。
+        /// ── 为什么不直接用幕布的材质 ────────────────────────────────────
+        /// 2026-10-27 实测：点「投影」幕布毫无变化。排查确认命令、投影仪状态、
+        /// 播放器全部正常。真正原因最后查出来了 —— **这个场景是合并网格**：
+        /// ```
+        /// ProjectorScreen01 的 MeshFilter → 「Combined Mesh (root: scene) 7」
+        ///                                    62851 顶点 / 73 个 submesh
+        /// ```
+        /// 整个房间的几何被合批成一个大网格，`sharedMaterial` 只作用于**第 0 个 submesh**，
+        /// 幕布面在别的 submesh 上，所以怎么改材质都没反应。
         ///
-        /// ── 朝向和尺寸怎么定 ────────────────────────────────────────────
-        /// 朝向：**面对投影仪**（也就是对着观众那侧），用 `LookRotation(幕布中心 - 投影仪)`。
-        /// 尺寸：把幕布包围盒的 8 个角点投影到该朝向的局部 X/Y 平面上取范围 ——
-        /// 这样不管幕布绕哪根轴转、缩放怎么非均匀，贴合都是准的。
+        /// ⚠️ **不要试图复制/拆分这个网格** —— 它是整间房的几何，
+        ///    复制出来就是"把房间的一大块贴到幕布上"（2026-10-27 第二版踩过，报 217 个错）。
+        ///    正确做法：**完全不碰网格**，自己造一张面片。
         ///
-        /// 面片沿"朝投影仪"方向偏 3cm，避免和幕布 z-fighting。
+        /// ── 朝向和尺寸 ──────────────────────────────────────────────────
+        /// 朝向用**幕布自身**的 `transform` 轴（`forward` = 法线），不用"朝投影仪"算 ——
+        /// 幕布相对投影仪往往是斜的，按"朝投影仪"摆会把面片转歪，投影只盖住一部分。
+        /// 若 `forward` 背对投影仪就翻 180°，再用 `Cull Off` 兜底，朝向永不成为问题。
+        ///
+        /// 尺寸：把包围盒的 8 个角点投到幕布的 `right` / `up` 轴上取范围。
+        /// 幕布真实尺寸是 3.11×2.13m，这套算法实测准确。
+        ///
+        /// 面片沿法线朝观众那侧偏 2cm，避免与幕布 z-fighting。
         /// </summary>
         private GameObject BuildScreenQuad(Renderer canvas, Vector3 projectorPos, Color tint,
                                            Transform parent, out Material mat, out float aspect)
@@ -2256,118 +2267,82 @@ namespace SchoolTwin.Present
             mat = null;
             aspect = 0f;
 
-            MeshFilter srcMf = canvas.GetComponent<MeshFilter>();
-            if (srcMf == null || srcMf.sharedMesh == null)
-            {
-                Debug.Log("[TwinPresent] 幕布没有 MeshFilter/Mesh，无法生成视频面片。");
-                return null;
-            }
-
-            // ── 复制幕布的网格，只把 UV 归一化到 0..1 ────────────────────────
-            //
-            // 【为什么不再自己算尺寸】2026-10-27 第一版按包围盒 8 角点投影求宽高，
-            // 用户反馈仍"画面不全、有残缺"。原因：包围盒是**轴对齐**的，
-            // 幕布一旦斜放，求出来的矩形和实际轮廓对不上，面片就盖不住。
-            //
-            // 复制网格没有这个问题：形状、尺寸、倾斜、非均匀缩放全部继承。
-            // 唯一改动是 UV —— 而 UV 正是我们要改的（原 UV 未必铺满 0..1）。
-            Mesh mesh = UnityEngine.Object.Instantiate(srcMf.sharedMesh);
-            mesh.name = srcMf.sharedMesh.name + "_ScreenUV";
-
-            Vector2[] uv = mesh.uv;
-            if (uv == null || uv.Length == 0)
-            {
-                // 没有 UV 就按顶点 XY 补一套 0..1
-                Vector3[] v = mesh.vertices;
-                uv = new Vector2[v.Length];
-                float ax = float.MaxValue, bx = float.MinValue;
-                float ay = float.MaxValue, by = float.MinValue;
-                for (int i = 0; i < v.Length; i++)
-                {
-                    if (v[i].x < ax) ax = v[i].x;
-                    if (v[i].x > bx) bx = v[i].x;
-                    if (v[i].y < ay) ay = v[i].y;
-                    if (v[i].y > by) by = v[i].y;
-                }
-                float dx = Mathf.Max(1e-5f, bx - ax);
-                float dy = Mathf.Max(1e-5f, by - ay);
-                for (int i = 0; i < v.Length; i++)
-                    uv[i] = new Vector2((v[i].x - ax) / dx, (v[i].y - ay) / dy);
-            }
-            else
-            {
-                // 把原 UV 的跨度归一化到 0..1，让画面铺满整个网格
-                float minU = float.MaxValue, maxU = float.MinValue;
-                float minV = float.MaxValue, maxV = float.MinValue;
-                for (int i = 0; i < uv.Length; i++)
-                {
-                    if (uv[i].x < minU) minU = uv[i].x;
-                    if (uv[i].x > maxU) maxU = uv[i].x;
-                    if (uv[i].y < minV) minV = uv[i].y;
-                    if (uv[i].y > maxV) maxV = uv[i].y;
-                }
-                float du = Mathf.Max(1e-5f, maxU - minU);
-                float dv = Mathf.Max(1e-5f, maxV - minV);
-                for (int i = 0; i < uv.Length; i++)
-                    uv[i] = new Vector2((uv[i].x - minU) / du, (uv[i].y - minV) / dv);
-            }
-            // 把原 UV 的跨度归一化到 0..1，让画面铺满整个网格
-            mesh.uv = uv;
-            mesh.RecalculateBounds();
-
-            // ── 只保留面积最大的那个 submesh ────────────────────────────────
-            //
-            // 幕布预制体里往往不止一块面：卷轴筒、上横杆、两侧边框都可能是独立 submesh。
-            // 整份复制的话视频会**铺到所有部件上**（卷轴上也有画面），
-            // 看起来就是"比例不对、画面残缺"。
-            // 面积最大的那块才是真正的幕布面，只留它。
-            mesh = ExtractLargestSubMesh(mesh, uv);
-
-            // ── 真实宽高比：包围盒角点投到"朝投影仪"的局部平面取范围 ────────
-            // UV 空间恒为正方形，推不出真实比例，只能这样量。
             Bounds b = canvas.bounds;
-            Vector3 dir = b.center - projectorPos;
-            if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
-            dir = dir.normalized;
 
-            Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
-            Quaternion inv = Quaternion.Inverse(rot);
-            Vector3 e3 = b.extents;
-            float mnX = float.MaxValue, mxX = float.MinValue;
-            float mnY = float.MaxValue, mxY = float.MinValue;
+            // ── 朝向：优先用幕布自身轴，退化时用"朝投影仪" ────────────────
+            Vector3 toProj = projectorPos - b.center;
+
+            Vector3 normal = canvas.transform.forward;
+            Vector3 up = canvas.transform.up;
+            Vector3 right = canvas.transform.right;
+
+            // 幕布模型的 forward 也可能指向墙里；用"哪一面朝投影仪"判断要不要翻
+            if (Vector3.Dot(normal, toProj) < 0f)
+            {
+                normal = -normal;
+                right = -right;      // 保持右手系：翻法线就要翻一个切向，否则贴图会镜像
+            }
+            // 退化保护：法线必须与"朝投影仪"大致同向
+            if (normal.sqrMagnitude < 1e-6f) normal = toProj.normalized;
+            normal = normal.normalized;
+            up = (up - normal * Vector3.Dot(up, normal)).normalized;   // 正交化
+            if (up.sqrMagnitude < 1e-6f) up = Vector3.up;
+            right = Vector3.Cross(up, normal).normalized;
+
+            // ── 尺寸：包围盒 8 角点投到幕布的 right / up 轴 ────────────────
+            Vector3 ext = b.extents;
+            float mnR = float.MaxValue, mxR = float.MinValue;
+            float mnU = float.MaxValue, mxU = float.MinValue;
             for (int i = 0; i < 8; i++)
             {
                 Vector3 corner = b.center + new Vector3(
-                    ((i & 1) == 0 ? -e3.x : e3.x),
-                    ((i & 2) == 0 ? -e3.y : e3.y),
-                    ((i & 4) == 0 ? -e3.z : e3.z));
-                Vector3 lc = inv * (corner - b.center);
-                if (lc.x < mnX) mnX = lc.x;
-                if (lc.x > mxX) mxX = lc.x;
-                if (lc.y < mnY) mnY = lc.y;
-                if (lc.y > mxY) mxY = lc.y;
+                    ((i & 1) == 0 ? -ext.x : ext.x),
+                    ((i & 2) == 0 ? -ext.y : ext.y),
+                    ((i & 4) == 0 ? -ext.z : ext.z));
+                Vector3 rel = corner - b.center;
+                float dr = Vector3.Dot(rel, right);
+                float du = Vector3.Dot(rel, up);
+                if (dr < mnR) mnR = dr;
+                if (dr > mxR) mxR = dr;
+                if (du < mnU) mnU = du;
+                if (du > mxU) mxU = du;
             }
-            float w = Mathf.Max(0.05f, mxX - mnX);
-            float h = Mathf.Max(0.05f, mxY - mnY);
+            float w = Mathf.Max(0.05f, mxR - mnR);
+            float h = Mathf.Max(0.05f, mxU - mnU);
             aspect = w / h;
 
-            // ── 物体：做成幕布的子物体，完整继承它的变换 ──────────────────
-            GameObject go = new GameObject("TwinProjectorScreenQuad");
-            go.transform.SetParent(canvas.transform, false);
-            go.transform.localPosition = Vector3.zero;
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one;
+            Quaternion rot = Quaternion.LookRotation(normal, up);
 
-            // 沿"朝投影仪"方向浮起 3cm（靠近观众那侧），避免和幕布 z-fighting。
-            // 用世界坐标施加，因为幕布可能有非均匀缩放，改 localPosition 会变形。
-            Vector3 towardProj = projectorPos - b.center;
-            if (towardProj.sqrMagnitude < 1e-4f) towardProj = -dir;
-            go.transform.position = canvas.transform.position + towardProj.normalized * 0.03f;
+            // ── 网格：两个三角形，UV 写死 0..1 ────────────────────────────
+            float hw = w * 0.5f, hh = h * 0.5f;
+            Mesh mesh = new Mesh();
+            mesh.name = "TwinProjectorScreenQuad";
+            mesh.vertices = new[]
+            {
+                new Vector3(-hw, -hh, 0f),
+                new Vector3( hw, -hh, 0f),
+                new Vector3( hw,  hh, 0f),
+                new Vector3(-hw,  hh, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0f, 0f), new Vector2(1f, 0f),
+                new Vector2(1f, 1f), new Vector2(0f, 1f),
+            };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            // ── 物体 ──────────────────────────────────────────────────────
+            GameObject go = new GameObject("TwinProjectorScreenQuad");
+            go.transform.SetParent(parent, false);
+            go.transform.position = b.center + normal * 0.02f;
+            go.transform.rotation = rot;
+            go.transform.localScale = Vector3.one;
 
             MeshFilter mf = go.AddComponent<MeshFilter>();
             mf.sharedMesh = mesh;
 
-            // ── 材质：独立新建，双面渲染 ──────────────────────────────────
             Shader sh = Shader.Find("Standard");
             if (sh == null)
             {
@@ -2383,97 +2358,20 @@ namespace SchoolTwin.Present
             mat.SetColor(EmissionId, Color.black);          // 关机全黑
             if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.black);
             if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0f);
-            // **双面渲染**：幕布网格朝向未必对着观众，单面剔除会导致"只看到一部分"。
-            // 幕布很薄，双面没有副作用。
             if (mat.HasProperty("_Cull"))
-                mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);   // 双面
 
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
-            // ⚠️ 必须用 sharedMaterials 数组，不能用 sharedMaterial。
-            // 幕布网格如果是多 submesh（幕布面 + 边框 + 卷轴之类），
-            // 只设 sharedMaterial 的话**只有第一个 submesh 有材质**，其余不渲染 ——
-            // 表现就是"画面残缺、只显示一部分"（2026-10-27 踩过）。
-            Material[] mats = new Material[Mathf.Max(1, mesh.subMeshCount)];
-            for (int i = 0; i < mats.Length; i++) mats[i] = mat;
-            mr.sharedMaterials = mats;
+            mr.sharedMaterial = mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             mr.receiveShadows = false;
 
-            Debug.Log("[TwinPresent] 幕布视频面片：复制网格「" + srcMf.sharedMesh.name + "」" +
-                      mesh.vertexCount + " 顶点 / " + mesh.subMeshCount + " 个 submesh / " +
-                      "UV 已归一化 / 比例 " + aspect.ToString("0.000") +
-                      "（包围盒 " + w.ToString("0.00") + "×" + h.ToString("0.00") + "m）/ 双面渲染");
+            Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
+                      "m（比例 " + aspect.ToString("0.000") + "），中心 (" +
+                      b.center.x.ToString("0.00") + ", " + b.center.y.ToString("0.00") + ", " +
+                      b.center.z.ToString("0.00") + ")，法线 (" + normal.x.ToString("0.00") + ", " +
+                      normal.y.ToString("0.00") + ", " + normal.z.ToString("0.00") + ")");
             return go;
-        }
-
-        /// <summary>
-        /// 从多 submesh 网格里挑出**面积最大**的那一块，生成只含它的新网格（含对应 UV）。
-        ///
-        /// 幕布预制体常有卷轴筒、上横杆、侧边框等配件，各自是独立 submesh。
-        /// 整份复制会把视频铺到所有配件上，看起来"比例不对、画面残缺"。
-        /// 面积最大的那块才是幕布主面。
-        ///
-        /// 实现：按三角形三条边算面积（不需要索引重映射 —— 直接把选中 submesh 的
-        /// 三个索引当作新网格的三个连续顶点，重新组装顶点/UV/法线/切线）。
-        /// </summary>
-        private static Mesh ExtractLargestSubMesh(Mesh src, Vector2[] normalizedUv)
-        {
-            if (src.subMeshCount <= 1) return src;
-
-            Vector3[] verts = src.vertices;
-            Vector3[] norms = src.normals;
-            Vector4[] tans = src.tangents;
-            int bestSub = 0;
-            float bestArea = -1f;
-            int bestCount = 0;
-
-            for (int s = 0; s < src.subMeshCount; s++)
-            {
-                int[] tri = src.GetTriangles(s);
-                float area = 0f;
-                for (int i = 0; i + 2 < tri.Length; i += 3)
-                {
-                    Vector3 a = verts[tri[i]];
-                    Vector3 b = verts[tri[i + 1]];
-                    Vector3 c = verts[tri[i + 2]];
-                    area += Vector3.Cross(b - a, c - a).magnitude * 0.5f;
-                }
-                if (area > bestArea) { bestArea = area; bestSub = s; bestCount = tri.Length; }
-            }
-
-            int[] best = src.GetTriangles(bestSub);
-            if (best == null || best.Length == 0) return src;   // 取不到就整份用
-
-            Mesh outMesh = new Mesh();
-            outMesh.name = src.name + "_Main";
-
-            Vector3[] nv = new Vector3[best.Length];
-            Vector2[] nuv = new Vector2[best.Length];
-            Vector3[] nn = (norms != null && norms.Length == verts.Length) ? new Vector3[best.Length] : null;
-            Vector4[] nt = (tans != null && tans.Length == verts.Length) ? new Vector4[best.Length] : null;
-            int[] tris = new int[best.Length];
-
-            for (int i = 0; i < best.Length; i++)
-            {
-                int vi = best[i];
-                nv[i] = verts[vi];
-                nuv[i] = normalizedUv != null && vi < normalizedUv.Length ? normalizedUv[vi] : Vector2.zero;
-                if (nn != null) nn[i] = norms[vi];
-                if (nt != null) nt[i] = tans[vi];
-                tris[i] = i;
-            }
-
-            outMesh.vertices = nv;
-            outMesh.uv = nuv;
-            if (nn != null) outMesh.normals = nn;
-            if (nt != null) outMesh.tangents = nt;
-            outMesh.triangles = tris;
-            outMesh.RecalculateBounds();
-
-            Debug.Log("[TwinPresent] 幕布网格有 " + src.subMeshCount + " 个 submesh，" +
-                      "取面积最大的第 " + bestSub + " 个（面积 " + bestArea.ToString("0.000") +
-                      " m²，" + (bestCount / 3) + " 个三角面）");
-            return outMesh;
         }
 
         /// <summary>
