@@ -9,8 +9,9 @@
 #
 # 槽位：
 #   boot      开机动画（主脑 + 18 台 + 幕布共用）
-#   ppt       「打开PPT」
+#   ppt       「打开PPT」（旧版视频，现在 PPT 用图片了，保留兼容）
 #   lesson    「视频播放」
+#   shutdown  关机动画（点关机时先播，播完才真正断电）
 #
 # 例：
 #   ./tools/p26_import.sh ~/Downloads/豆包视频.mp4 boot
@@ -27,7 +28,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-OUT_DIR="$PROJECT_DIR/Assets/StreamingAssets/PC/master"
+# 素材根目录。注意是 `PC/` 而不是 `PC/master/` ——
+# 目标参数里已经带了 `master/` / `videos/` 这些子目录
+OUT_DIR="$PROJECT_DIR/Assets/StreamingAssets/PC"
 # 备份放在 StreamingAssets **外面** —— 那里的所有文件都会被打进包体
 BACKUP_DIR="$PROJECT_DIR/video/_backup"
 
@@ -36,10 +39,17 @@ H=1200
 CRF=18
 FPS=30
 usage() {
-    echo "用法: $0 <源视频> <槽位>"
+    echo "用法: $0 <源视频> <目标>"
     echo ""
-    echo "槽位: boot | ppt | lesson"
-    echo "例:   $0 ~/Downloads/豆包.mp4 boot"
+    echo "目标可以是简写槽位："
+    echo "  boot        → master/boot.mp4      开机动画"
+    echo "  shutdown    → master/shutdown.mp4  关机动画"
+    echo "  ppt         → master/ppt.mp4       （旧版，PPT 已改用图片）"
+    echo "  lesson      → videos/01_lesson.mp4"
+    echo ""
+    echo "也可以直接写相对 PC/ 的路径："
+    echo "  ./tools/p26_import.sh 新视频.mp4 videos/02_新内容.mp4"
+    echo "  ./tools/p26_import.sh 关机.mp4   master/shutdown.mp4"
     exit 1
 }
 
@@ -48,9 +58,14 @@ usage() {
 IN="$1"
 SLOT="$2"
 
+# 简写槽位 → 实际相对路径；带 `/` 的按路径处理
 case "$SLOT" in
-    boot|ppt|lesson) ;;
-    *) echo "✘ 槽位只能是 boot / ppt / lesson"; usage ;;
+    boot)     REL="master/boot.mp4" ;;
+    shutdown) REL="master/shutdown.mp4" ;;
+    ppt)      REL="master/ppt.mp4" ;;
+    lesson)   REL="videos/01_lesson.mp4" ;;
+    */*)      REL="$SLOT" ;;
+    *) echo "✘ 不认识的目标：$SLOT（既不是槽位也不像路径）"; usage ;;
 esac
 
 if [ ! -f "$IN" ]; then
@@ -58,12 +73,12 @@ if [ ! -f "$IN" ]; then
     exit 1
 fi
 
-OUT="$OUT_DIR/${SLOT}.mp4"
-mkdir -p "$OUT_DIR"
+OUT="$OUT_DIR/$REL"
+mkdir -p "$(dirname "$OUT")"
 
 echo "════════════════════════════════════════════════"
 echo " 源文件: $IN"
-echo " 槽位  : $SLOT  →  $OUT"
+echo " 目标  : $REL"
 echo "════════════════════════════════════════════════"
 
 # ── 1. 源规格 ────────────────────────────────────────────────────────
@@ -196,8 +211,9 @@ echo "[4/5] 备份并替换"
 if [ -f "$OUT" ]; then
     mkdir -p "$BACKUP_DIR"
     STAMP=$(date +%Y%m%d_%H%M%S)
-    cp "$OUT" "$BACKUP_DIR/${SLOT}_${STAMP}.mp4"
-    echo "      旧文件 → _backup/${SLOT}_${STAMP}.mp4"
+    BASENAME=$(basename "$REL" .mp4)
+    cp "$OUT" "$BACKUP_DIR/${BASENAME}_${STAMP}.mp4"
+    echo "      旧文件 → _backup/${BASENAME}_${STAMP}.mp4"
 else
     echo "      槽位原来是空的，无需备份"
 fi
@@ -225,4 +241,4 @@ echo ""
 echo "完成: $OUT  ($SIZE)"
 echo ""
 echo "回 Unity 会自动重新导入，然后 Play 即可。"
-echo "如果 Console 报「找不到视频」，检查文件名是不是 ${SLOT}.mp4"
+echo "如果 Console 报「找不到视频」，检查路径是不是 $REL"

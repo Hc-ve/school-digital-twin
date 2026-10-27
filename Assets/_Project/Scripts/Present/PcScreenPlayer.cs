@@ -428,6 +428,35 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>
+        /// 是否已经播到结尾。
+        ///
+        /// 【为什么不用 `!isPlaying`】刚 `Play()` 还没起来时 `isPlaying` 也是 false，
+        /// 会误判成"播完了"。必须同时看 `frame` 到了末尾。
+        /// 关机动画靠这个判断"什么时候可以真正断电"。
+        /// </summary>
+        public bool IsFinished
+        {
+            get
+            {
+                if (_player == null || !HasVideo) return true;
+                if (!_player.isPrepared) return false;
+                long count = (long)_player.frameCount;
+                if (count <= 0) return false;
+                return _player.frame >= count - 1;
+            }
+        }
+
+        /// <summary>视频总时长（秒）。未就绪时返回 0。</summary>
+        public float Duration
+        {
+            get
+            {
+                if (_player == null || !HasVideo || !_player.isPrepared) return 0f;
+                return (float)_player.length;
+            }
+        }
+
+        /// <summary>
         /// 【P26】把播放器停掉但不改自发光（进 PPT 模式时用）。
         /// `SetOn(false)` 会把 `_on` 置 false 并清黑，退出 PPT 后要重新开机流程，
         /// 这里只停画面，回来直接 `Play()` 就行。

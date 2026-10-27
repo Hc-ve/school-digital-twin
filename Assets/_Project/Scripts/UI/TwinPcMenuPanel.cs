@@ -160,17 +160,22 @@ namespace SchoolTwin.UI
             // 这时面板切回关机态，如果只有「开机/联动/投影」，用户就没有入口把剩下的关掉了
             // —— 2026-10-27 用户实测踩到这个："怎么全部关机"。
             //
-            // 【3 = PPT 模式 / 4 = 视频模式】播放模式下只留「翻页/切换/暂停/退出」，
-            // 把「全部关机」「关闭主脑」这些破坏性按钮藏起来 —— 用户要求。
-            // 课堂上正在放 PPT，误触「全部关机」是很尴尬的。
+            // 【3 = PPT 模式 / 4 = 视频模式 / 5 = 关机中】播放模式下只留
+            // 「翻页/切换/暂停/退出」，把「全部关机」「关闭主脑」这些破坏性按钮藏起来
+            // —— 用户要求。课堂上正在放 PPT，误触「全部关机」是很尴尬的。
             int state;
             TwinDevicePresenter pres = TwinDevicePresenter.Instance;
-            TwinDevicePresenter.PcPlayMode mode = pres != null
-                ? pres.PlayMode : TwinDevicePresenter.PcPlayMode.None;
 
-            if (mode == TwinDevicePresenter.PcPlayMode.Ppt) state = 3;
-            else if (mode == TwinDevicePresenter.PcPlayMode.Video) state = 4;
-            else state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
+            if (pres != null && pres.IsShuttingDown) state = 5;
+            else
+            {
+                TwinDevicePresenter.PcPlayMode mode = pres != null
+                    ? pres.PlayMode : TwinDevicePresenter.PcPlayMode.None;
+
+                if (mode == TwinDevicePresenter.PcPlayMode.Ppt) state = 3;
+                else if (mode == TwinDevicePresenter.PcPlayMode.Video) state = 4;
+                else state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
+            }
 
             if (state != _shownState) Rebuild(state);
 
@@ -275,11 +280,16 @@ namespace SchoolTwin.UI
                 AddButton(paused ? "继续" : "暂停", OnToggleVideoPause);
                 AddButton("退出视频", OnExitPlayMode);
             }
+            else if (state == 5)
+            {
+                // 关机动画播放中 —— 只留一个提示，点不动任何东西
+                AddButton("正在关机…", () => { });
+            }
             else
             {
                 AddButton("打开PPT", OnEnterPptMode);
                 AddButton("视频播放", OnEnterVideoMode);
-                AddButton("关闭主脑", () => Send(MasterId, 0f, "关闭主脑"));
+                AddButton("关闭主脑", OnShutdownMaster);
                 AddButton("全部关机", OnShutdownAll);
             }
         }
@@ -332,14 +342,41 @@ namespace SchoolTwin.UI
 
         /// <summary>
         /// 全部关机：主脑 + 机房 18 台 + 投影仪。
-        /// 三个点位**同时**下发 —— 它们 twinId 不同，`_inFlight` 是按点位隔离的，不会互相拒。
-        /// 投影仪关掉时幕布、聚光灯、光柱都由 `SyncProjector` 一起收掉。
+        ///
+        /// 【先播关机动画再断电】真实电脑点关机不是瞬间黑屏。
+        /// `BeginShutdown` 会先播 `shutdown.mp4`，播完才回调这里真正下发断电命令。
+        /// 动画期间面板显示「正在关机…」，避免重复点击。
         /// </summary>
         private void OnShutdownAll()
         {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null)
+            {
+                p.BeginShutdown(() =>
+                {
+                    Send(MasterId, 0f, "全部关机（主脑）");
+                    Send(RoomId, 0f, "全部关机（机房）");
+                    Send(ProjectorId, 0f, "全部关机（投影）");
+                });
+                return;
+            }
+
+            // 没有表现层（极端情况）→ 直接断电，不能因为播不了动画就关不掉
             Send(MasterId, 0f, "全部关机（主脑）");
             Send(RoomId, 0f, "全部关机（机房）");
             Send(ProjectorId, 0f, "全部关机（投影）");
+        }
+
+        /// <summary>只关主脑（机房 18 台和投影保持原样）。同样先播关机动画。</summary>
+        private void OnShutdownMaster()
+        {
+            TwinDevicePresenter p = TwinDevicePresenter.Instance;
+            if (p != null)
+            {
+                p.BeginShutdown(() => Send(MasterId, 0f, "关闭主脑"));
+                return;
+            }
+            Send(MasterId, 0f, "关闭主脑");
         }
 
         /// <summary>

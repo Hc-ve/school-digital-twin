@@ -2308,6 +2308,82 @@ namespace SchoolTwin.Present
             }
         }
 
+        /// <summary>
+        /// 【P26】关机动画路径（相对 `PC/`）。留空 = 关机直接断电，不播动画。
+        /// </summary>
+        [Tooltip("关机动画（相对 StreamingAssets/PC/）。点关机时先播这段，播完才真正断电")]
+        [SerializeField] private string _shutdownVideo = PcMediaLibrary.Shutdown;
+
+        [Tooltip("关机动画最多等多久（秒）。防止视频解码失败时卡住关不掉机")]
+        [Range(1f, 15f)]
+        [SerializeField] private float _shutdownTimeout = 8f;
+
+        /// <summary>当前是否在关机动画中（面板据此显示"正在关机…"）。</summary>
+        public bool IsShuttingDown { get { return _shutdownRoutine != null; } }
+
+        private Coroutine _shutdownRoutine;
+
+        /// <summary>
+        /// 【P26】按真实逻辑关机：**先播关机动画，播完再断电**。
+        ///
+        /// 真实电脑点关机不是瞬间黑屏，而是走一段"正在关机"。
+        /// 直接 `SetPower(0)` 会让画面"啪"地消失，很跳。
+        ///
+        /// 实现要点：
+        ///  - 主脑和幕布**同时**播关机动画（观众看到的是同一段）
+        ///  - 等主脑播完（`IsFinished`）再多等 0.4 秒，让最后一帧留一下
+        ///  - **超时保护**：`_shutdownTimeout` 秒还没播完就强制关 ——
+        ///    素材缺失/解码失败时不能把关机卡住，那是最糟的故障
+        /// </summary>
+        public void BeginShutdown(System.Action onComplete)
+        {
+            if (_shutdownRoutine != null) return;   // 已经在关，忽略重复点击
+            _shutdownRoutine = StartCoroutine(ShutdownRoutine(onComplete));
+        }
+
+        private System.Collections.IEnumerator ShutdownRoutine(System.Action onComplete)
+        {
+            bool hasVideo = !string.IsNullOrEmpty(_shutdownVideo)
+                            && PcMediaLibrary.Exists(_shutdownVideo);
+
+            if (!hasVideo)
+            {
+                Debug.Log("[P26] 没有关机动画（" + _shutdownVideo + "），直接断电。");
+                _shutdownRoutine = null;
+                if (onComplete != null) onComplete();
+                yield break;
+            }
+
+            // 退出播放模式（PPT/视频）—— 关机动画要能盖住画面
+            _playMode = PcPlayMode.None;
+            if (_slideShow != null) _slideShow.Hide();
+
+            PcScreenPlayer mp = MasterPlayer();
+            PcScreenPlayer pp = ProjectorPlayer();
+
+            if (mp != null) mp.PlayFile(_shutdownVideo);
+            if (pp != null) pp.PlayFile(_shutdownVideo);
+
+            Debug.Log("[P26] 关机动画开始：" + _shutdownVideo);
+
+            // 等播完（或超时）
+            float t = 0f;
+            while (t < _shutdownTimeout)
+            {
+                bool done = mp == null || mp.IsFinished;
+                if (done && t > 0.5f) break;       // 至少等 0.5 秒，避免"刚播就判完"
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            // 最后一帧留一下，不然画面消失得太突然
+            yield return new WaitForSecondsRealtime(0.4f);
+
+            Debug.Log("[P26] 关机动画结束（" + t.ToString("0.0") + "s），断电");
+            _shutdownRoutine = null;
+            if (onComplete != null) onComplete();
+        }
+
         /// <summary>取主脑的播放器（换片/暂停都通过它）。</summary>
         private PcScreenPlayer MasterPlayer()
         {
