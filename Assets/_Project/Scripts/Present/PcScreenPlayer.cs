@@ -286,11 +286,22 @@ namespace SchoolTwin.Present
             if (TargetMaterial == null) mat = "材质null";
             else
             {
-                Texture em = TargetMaterial.HasProperty("_EmissionMap")
-                    ? TargetMaterial.GetTexture("_EmissionMap") : null;
+                // 显示器用 `_EmissionMap`（Standard），幕布用 `_MainTex`（ScreenOnModel）。
+                // 两个都查一遍，否则幕布那行永远显示 "emissionMap=null"，看着像没接上。
+                Texture tex = null;
+                string texProp = "?";
+                if (TargetMaterial.HasProperty("_EmissionMap"))
+                {
+                    tex = TargetMaterial.GetTexture("_EmissionMap"); texProp = "_EmissionMap";
+                }
+                else if (TargetMaterial.HasProperty("_MainTex"))
+                {
+                    tex = TargetMaterial.GetTexture("_MainTex"); texProp = "_MainTex";
+                }
+
                 Color ec = TargetMaterial.HasProperty(EmissionId)
                     ? TargetMaterial.GetColor(EmissionId) : Color.clear;
-                mat = "emissionMap=" + (em == null ? "null" : em.name) +
+                mat = texProp + "=" + (tex == null ? "null" : tex.name) +
                       " emissionColor=" + ec.r.ToString("0.00") + "," + ec.g.ToString("0.00") +
                       "," + ec.b.ToString("0.00");
             }

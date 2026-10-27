@@ -1846,8 +1846,13 @@ namespace SchoolTwin.Present
 
         private Texture2D _screenMask;
 
-        /// <summary>【P26】上一次看到的主脑开关状态（投影跟随用）。</summary>
-        private bool _lastMasterOn;
+        /// <summary>
+        /// 【P26】上一次看到的主脑开关状态（投影跟随用）。
+        /// 初值故意给 `true`：主脑默认是关的，这样**第一次检查一定会触发同步**，
+        /// 把"投影仪开着但主脑没开"的初始状态纠正过来。
+        /// 如果初值给 `false`，而主脑也是关的，就永远不触发、幕布会停在旧画面。
+        /// </summary>
+        private bool _lastMasterOn = true;
         /// <summary>【P26】下次检查主脑状态的时间。</summary>
         private float _nextMasterSync;
 
