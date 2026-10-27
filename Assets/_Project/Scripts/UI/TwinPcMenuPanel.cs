@@ -341,7 +341,7 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// 全部关机：主脑 + 机房 18 台 + 投影仪。
+        /// 全部关机：主脑 + 机房 18 台 + 投影仪，**三处一起播关机动画**。
         ///
         /// 【先播关机动画再断电】真实电脑点关机不是瞬间黑屏。
         /// `BeginShutdown` 会先播 `shutdown.mp4`，播完才回调这里真正下发断电命令。
@@ -357,7 +357,7 @@ namespace SchoolTwin.UI
                     Send(MasterId, 0f, "全部关机（主脑）");
                     Send(RoomId, 0f, "全部关机（机房）");
                     Send(ProjectorId, 0f, "全部关机（投影）");
-                });
+                }, true);          // includeRoom = true
                 return;
             }
 
@@ -367,13 +367,18 @@ namespace SchoolTwin.UI
             Send(ProjectorId, 0f, "全部关机（投影）");
         }
 
-        /// <summary>只关主脑（机房 18 台和投影保持原样）。同样先播关机动画。</summary>
+        /// <summary>
+        /// 只关主脑（机房 18 台和投影保持原样）。
+        ///
+        /// 【includeRoom = false】机房还开着，跟着播关机动画会很怪 ——
+        /// 机组没关却先演一遍"正在关机"再亮回来，不符合现实逻辑。
+        /// </summary>
         private void OnShutdownMaster()
         {
             TwinDevicePresenter p = TwinDevicePresenter.Instance;
             if (p != null)
             {
-                p.BeginShutdown(() => Send(MasterId, 0f, "关闭主脑"));
+                p.BeginShutdown(() => Send(MasterId, 0f, "关闭主脑"), false);
                 return;
             }
             Send(MasterId, 0f, "关闭主脑");
@@ -391,24 +396,46 @@ namespace SchoolTwin.UI
         /// <summary>
         /// 进入 PPT 模式：面板切成「上一页 / 下一页 / 退出」。
         /// 失败（没素材）就什么都不做，留在原面板 —— 比切到一个空模式好。
+        ///
+        /// 【顺带开投影仪】PPT 就是要投到幕布上看的。
+        /// 但「投影」按钮只在**全关状态**才有 —— 主脑一开，面板就没有开投影仪的入口了。
+        /// 2026-10-27 用户实测："播放PPT的效果出现在主脑上"，
+        /// 真相是幕布根本没开、也没地方开。
         /// </summary>
         private void OnEnterPptMode()
         {
             TwinDevicePresenter p = TwinDevicePresenter.Instance;
             if (p == null) { Debug.LogWarning("[P26] 找不到表现层"); return; }
 
+            EnsureProjectorOn();
+
             if (!p.EnterPptMode()) return;
             ForceRebuild();
         }
 
-        /// <summary>进入视频模式：面板切成「切换 / 暂停 / 退出」。</summary>
+        /// <summary>进入视频模式：面板切成「切换 / 暂停 / 退出」。同样顺带开投影仪。</summary>
         private void OnEnterVideoMode()
         {
             TwinDevicePresenter p = TwinDevicePresenter.Instance;
             if (p == null) { Debug.LogWarning("[P26] 找不到表现层"); return; }
 
+            EnsureProjectorOn();
+
             if (!p.EnterVideoMode()) return;
             ForceRebuild();
+        }
+
+        /// <summary>
+        /// 投影仪没开就开它。已经开着就什么都不做。
+        ///
+        /// 【为什么只开不关】退出 PPT 后不自动关投影仪 ——
+        /// 用户可能只是切到视频、或者翻回来看别的，
+        /// 每次都开关会让幕布反复亮灭，而且投影仪真实关机有灯泡冷却时间。
+        /// </summary>
+        private void EnsureProjectorOn()
+        {
+            if (IsOn(ProjectorId)) return;
+            Send(ProjectorId, 1f, "演示（自动开投影）");
         }
 
         private void OnPrevSlide()

@@ -139,6 +139,61 @@ namespace SchoolTwin.Present
             _compositeMat.SetColor("_Tint", Color.white);
         }
 
+        /// <summary>
+        /// 【P26】追加一个贴图目标，并立刻把当前页贴上去。
+        ///
+        /// 【为什么需要】投影仪是**最后才创建材质**的：
+        /// 点「打开PPT」会顺带开投影仪，但 `BuildProjector` 要等命令下发、
+        /// 0.1~0.3 秒后才跑完。进 PPT 模式那一刻幕布材质还不存在，
+        /// 结果 PPT 只贴在主脑上、幕布黑的。
+        /// 这里让 Presenter 每 0.2 秒扫一次，材质一出现就补上。
+        /// </summary>
+        public void AddTarget(Material m)
+        {
+            if (m == null) return;
+
+            // 去重
+            for (int i = 0; i < _targets.Length; i++)
+                if (_targets[i] == m) return;
+
+            Material[] grown = new Material[_targets.Length + 1];
+            Array.Copy(_targets, grown, _targets.Length);
+            grown[_targets.Length] = m;
+            _targets = grown;
+
+            // 如果正在显示，立刻补贴当前页
+            if (_visible && _current != null) ApplyToTargets(_current);
+        }
+
+        /// <summary>
+        /// 【P26】替换整个贴图目标列表。
+        ///
+        /// 【为什么需要】投影仪/显示器关掉再开时，`BuildProjector` / `BuildScreen`
+        /// 会**重新 new 一份材质**，旧材质被销毁。如果还往旧材质上贴图，
+        /// 屏幕不会有任何反应。
+        /// 每次进 PPT 模式都用当前存活的材质重建一次列表。
+        /// </summary>
+        public void SetTargets(Material[] targets)
+        {
+            _targets = targets ?? new Material[0];
+
+            // 释放旧的合成资源，按新的目标重新判断要不要合成
+            bool need = false;
+            for (int i = 0; i < _targets.Length; i++)
+            {
+                if (_targets[i] != null && _targets[i].HasProperty("_EmissionMap"))
+                {
+                    need = true;
+                    break;
+                }
+            }
+
+            if (need && _atlasRT == null) BuildComposite();
+            _needComposite = need && _atlasRT != null && _compositeMat != null;
+
+            if (_visible && _current != null) ApplyToTargets(_current);
+        }
+
         /// <summary>显示指定页。返回 false 表示这张图读不出来。</summary>
         public bool Show(int index)
         {

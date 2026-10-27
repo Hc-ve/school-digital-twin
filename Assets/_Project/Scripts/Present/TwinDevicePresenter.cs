@@ -394,6 +394,9 @@ namespace SchoolTwin.Present
             // 【P26】投影跟随主脑（内部自带 0.15s 节流）
             TickProjectorFollowMaster();
 
+            // 【P26】PPT 模式下补挂贴图目标（投影仪晚于 PPT 就绪时用）
+            TickPptAttach();
+
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + Mathf.Max(0.02f, _pollInterval);
 
@@ -2405,18 +2408,19 @@ namespace SchoolTwin.Present
         /// 直接 `SetPower(0)` 会让画面"啪"地消失，很跳。
         ///
         /// 实现要点：
-        ///  - 主脑和幕布**同时**播关机动画（观众看到的是同一段）
-        ///  - 等主脑播完（`IsFinished`）再多等 0.4 秒，让最后一帧留一下
+        ///  - `includeRoom` 决定机房 18 台要不要一起播 ——
+        ///    「全部关机」要，「只关主脑」不要（机房还开着，跟着播关机动画很怪）
+        ///  - 等**所有**参与的播放器都播完（`IsFinished`），再多等 0.4 秒留最后一帧
         ///  - **超时保护**：`_shutdownTimeout` 秒还没播完就强制关 ——
         ///    素材缺失/解码失败时不能把关机卡住，那是最糟的故障
         /// </summary>
-        public void BeginShutdown(System.Action onComplete)
+        public void BeginShutdown(System.Action onComplete, bool includeRoom)
         {
             if (_shutdownRoutine != null) return;   // 已经在关，忽略重复点击
-            _shutdownRoutine = StartCoroutine(ShutdownRoutine(onComplete));
+            _shutdownRoutine = StartCoroutine(ShutdownRoutine(onComplete, includeRoom));
         }
 
-        private System.Collections.IEnumerator ShutdownRoutine(System.Action onComplete)
+        private System.Collections.IEnumerator ShutdownRoutine(System.Action onComplete, bool includeRoom)
         {
             bool hasVideo = !string.IsNullOrEmpty(_shutdownVideo)
                             && PcMediaLibrary.Exists(_shutdownVideo);
@@ -2435,17 +2439,34 @@ namespace SchoolTwin.Present
 
             PcScreenPlayer mp = MasterPlayer();
             PcScreenPlayer pp = ProjectorPlayer();
+            PcScreenPlayer rp = includeRoom ? RoomPlayer() : null;
+
+            // 【机房必须先合并材质】18 台在"逐个亮"完成后会合并回共享材质；
+            // 但如果在点亮途中就点关机，它们还各用一份 `Units` 材质，
+            // 而播放器只操作共享的 `Material` —— 那样 18 台不会显示关机动画。
+            // 合并之后 18 台都指向 `Material`，一次 `PlayFile` 全部生效。
+            if (rp != null)
+            {
+                ScreenVisual rv;
+                if (_screens.TryGetValue("ClassComputer/PC/Room_01", out rv) && rv != null)
+                    MergeUnits(rv);
+            }
 
             if (mp != null) mp.PlayFile(_shutdownVideo);
             if (pp != null) pp.PlayFile(_shutdownVideo);
+            if (rp != null) rp.PlayFile(_shutdownVideo);
 
             Debug.Log("[P26] 关机动画开始：" + _shutdownVideo);
 
-            // 等播完（或超时）
+            // 等**所有**参与的播放器都播完（或超时）
+            //
+            // 【为什么不能只等主脑】主脑和机房是各自 `Prepare()` 的，
+            // 就绪时间可能差几百毫秒。只等主脑会在机房动画放到一半时断电 ——
+            // 表现就是"子电脑的关机动画没播完/根本没播"。
             float t = 0f;
             while (t < _shutdownTimeout)
             {
-                bool done = mp == null || mp.IsFinished;
+                bool done = IsNullOrFinished(mp) && IsNullOrFinished(pp) && IsNullOrFinished(rp);
                 if (done && t > 0.5f) break;       // 至少等 0.5 秒，避免"刚播就判完"
                 t += Time.unscaledDeltaTime;
                 yield return null;
@@ -2454,9 +2475,16 @@ namespace SchoolTwin.Present
             // 最后一帧留一下，不然画面消失得太突然
             yield return new WaitForSecondsRealtime(0.4f);
 
-            Debug.Log("[P26] 关机动画结束（" + t.ToString("0.0") + "s），断电");
+            Debug.Log("[P26] 关机动画结束（" + t.ToString("0.0") + "s，" +
+                      (includeRoom ? "含机房 18 台" : "仅主脑+投影") + "），断电");
             _shutdownRoutine = null;
             if (onComplete != null) onComplete();
+        }
+
+        /// <summary>播放器为 null 视为"已完成"（没这个设备就不该等它）。</summary>
+        private static bool IsNullOrFinished(PcScreenPlayer p)
+        {
+            return p == null || p.IsFinished;
         }
 
         /// <summary>取主脑的播放器（换片/暂停都通过它）。</summary>
@@ -2477,38 +2505,38 @@ namespace SchoolTwin.Present
             return null;
         }
 
+        /// <summary>取机房 18 台的播放器（它们共用一份材质，所以只有一个播放器）。</summary>
+        private PcScreenPlayer RoomPlayer()
+        {
+            ScreenVisual sv;
+            if (_screens.TryGetValue("ClassComputer/PC/Room_01", out sv) && sv != null)
+                return sv.Player;
+            return null;
+        }
+
         /// <summary>
         /// 进入 PPT 模式：停视频，显示第一页（或上次那一页）。
         /// 返回 false 表示没有 PPT 素材。
         /// </summary>
         public bool EnterPptMode()
         {
+            // 屏幕矩形在显示器图集里的 UV —— PPT 合成要用同一套，否则遮罩对不上
+            Vector2 uvMin, uvMax;
+            ScreenUvRect(out uvMin, out uvMax);
+
+            // 【每次都重新收集材质】投影仪/显示器关掉再开时材质会被重新 new，
+            // 旧的已销毁。沿用旧列表会往死对象上贴图，屏幕毫无反应。
+            List<Material> mats = CollectPptTargets();
+
             if (_slideShow == null)
             {
-                // 材质：主脑屏幕 + 幕布。两个都贴同一张图（课堂上幕布是主视野）
-                List<Material> mats = new List<Material>(2);
-
-                ScreenVisual sv;
-                if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
-                {
-                    if (sv.Material != null) mats.Add(sv.Material);
-                    if (sv.Units != null) mats.AddRange(sv.Units);
-                }
-
-                ProjectorVisual pv;
-                if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null
-                    && pv.ScreenMaterial != null)
-                {
-                    mats.Add(pv.ScreenMaterial);
-                }
-
-                // 屏幕矩形在显示器图集里的 UV —— PPT 合成要用同一套，否则遮罩对不上
-                Vector2 uvMin, uvMax;
-                ScreenUvRect(out uvMin, out uvMax);
-
                 _slideShow = PcSlideShow.Create(PcMediaLibrary.GetSlides(), mats.ToArray(),
                                                 _slideEmission, uvMin, uvMax,
                                                 _masterVideoAtlasSize);
+            }
+            else
+            {
+                _slideShow.SetTargets(mats.ToArray());
             }
 
             if (!_slideShow.HasSlides)
@@ -2532,9 +2560,59 @@ namespace SchoolTwin.Present
             else _slideShow.Show(_slideShow.Index);
 
             Debug.Log("[P26] 进入 PPT 模式：" + _slideShow.Count + " 页，当前第 " +
-                      SlideNumber + " 页");
+                      SlideNumber + " 页，贴图目标 " + mats.Count + " 个");
             return true;
         }
+
+        /// <summary>
+        /// 收集 PPT 要贴图的材质：主脑屏幕 + 幕布。
+        /// 投影仪还没建好（没开机）时只返回主脑那份，之后由 `TickPptAttach` 补上。
+        /// </summary>
+        private List<Material> CollectPptTargets()
+        {
+            List<Material> mats = new List<Material>(4);
+
+            ScreenVisual sv;
+            if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
+            {
+                if (sv.Material != null) mats.Add(sv.Material);
+                if (sv.Units != null)
+                {
+                    for (int i = 0; i < sv.Units.Length; i++)
+                        if (sv.Units[i] != null) mats.Add(sv.Units[i]);
+                }
+            }
+
+            ProjectorVisual pv;
+            if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null
+                && pv.ScreenMaterial != null)
+            {
+                mats.Add(pv.ScreenMaterial);
+            }
+
+            return mats;
+        }
+
+        /// <summary>
+        /// 【P26】PPT 模式下补挂贴图目标。
+        ///
+        /// 点「打开PPT」会顺带开投影仪，但 `BuildProjector` 要等命令下发、
+        /// 0.1~0.3 秒后才跑完。进 PPT 那一刻幕布材质还不存在，
+        /// 不补的话幕布会一直是黑的。
+        /// 每 0.2 秒扫一次，材质一出现就补上。
+        /// </summary>
+        private void TickPptAttach()
+        {
+            if (_playMode != PcPlayMode.Ppt || _slideShow == null) return;
+            if (Time.unscaledTime < _nextPptAttach) return;
+            _nextPptAttach = Time.unscaledTime + 0.2f;
+
+            List<Material> mats = CollectPptTargets();
+            for (int i = 0; i < mats.Count; i++) _slideShow.AddTarget(mats[i]);
+        }
+
+        /// <summary>下次补挂贴图的时间点。</summary>
+        private float _nextPptAttach;
 
         /// <summary>下一页。返回 false 表示没在 PPT 模式或没有素材。</summary>
         public bool NextSlide()
