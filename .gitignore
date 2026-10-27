@@ -88,3 +88,6 @@ crashlytics-build.properties
 
 # P26 素材备份（不该进仓库，也不该进包体）
 video/_backup/
+
+# P26 素材源文件（转码后的成品在 Assets/StreamingAssets/PC/master/）
+video/*.mp4
