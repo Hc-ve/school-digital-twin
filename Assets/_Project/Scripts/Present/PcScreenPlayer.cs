@@ -58,6 +58,14 @@ namespace SchoolTwin.Present
         private const int VideoH = 576;
 
         /// <summary>
+        /// `_EmissionColor` 的属性 ID。
+        /// 【为什么要自己定义】`TwinDevicePresenter` 里那个 `EmissionId` 是 **private**，
+        /// 本文件访问不到（2026-10-27 CS0103 踩过）。`Shader.PropertyToID` 的结果是缓存的，
+        /// 重复定义一份没有额外开销。
+        /// </summary>
+        private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
+
+        /// <summary>
         /// 创建一块屏的播放器。
         /// </summary>
         /// <param name="name">物体名，方便在 Hierarchy 里认。</param>

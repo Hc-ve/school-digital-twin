@@ -2329,7 +2329,9 @@ namespace SchoolTwin.Present
             mr.receiveShadows = false;
 
             Debug.Log("[TwinPresent] 幕布视频面片：" + w.ToString("0.00") + "×" + h.ToString("0.00") +
-                      "m，位置 " + V3(pos) + "，朝向投影仪 " + V3(dir));
+                      "m，位置 (" + pos.x.ToString("0.00") + ", " + pos.y.ToString("0.00") + ", " +
+                      pos.z.ToString("0.00") + ")，朝向投影仪 (" + dir.x.ToString("0.00") + ", " +
+                      dir.y.ToString("0.00") + ", " + dir.z.ToString("0.00") + ")");
             return go;
         }
 
