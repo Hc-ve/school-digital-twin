@@ -56,7 +56,12 @@ namespace SchoolTwin.Interaction
         {
             if (Input.GetMouseButtonDown(0)) Pick();
 
-            if (_clearSelectionOnEsc && Input.GetKeyDown(KeyCode.Escape)) Select(null);
+            // 【P28】Esc 先给 UI（抽屉逐层退），UI 不要才轮到"清选中"
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (SchoolTwin.UI.TwinUIState.HandleEscape()) return;
+                if (_clearSelectionOnEsc) Select(null);
+            }
         }
 
         private void Pick()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -40,7 +40,7 @@ namespace SchoolTwin.UI
     public class TwinControlPanel : MonoBehaviour
     {
         [Header("开关")]
-        [SerializeField] private KeyCode _toggleKey = KeyCode.G;
+        [SerializeField] private KeyCode _toggleKey = KeyCode.None;   // P28：并入总控抽屉，快捷键停用
 
         [Header("刷新")]
         [Tooltip("状态刷新间隔（秒）。0.2 与告警区的节奏一致")]
@@ -378,7 +378,7 @@ namespace SchoolTwin.UI
             _hint = TwinUIFactory.Label(_panel, "Hint", Mathf.Max(8, Mathf.RoundToInt(FsSub * s)),
                 TextAnchor.UpperRight, TwinStatusPalette.TextMuted);
             _hint.raycastTarget = false;
-            _hint.text = _toggleKey + " 键开关";
+            _hint.text = "已并入右侧总控面板";
 
             Image closeImg = TwinUIFactory.Block(_panel, "Close", TwinStatusPalette.Track, true);
             _closeBg = closeImg.rectTransform;
@@ -1241,7 +1241,7 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(_toggleKey)) Toggle();
+            if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) Toggle();
             if (!_visible || _panel == null) return;
 
             float now = Time.unscaledTime;
@@ -1306,7 +1306,7 @@ namespace SchoolTwin.UI
                 int controllable = CountBatchTargets();
                 Debug.Log("[TwinPanel] 总控面板就绪：" + _roomList.Count + " 个房间 / " +
                           _devs.Count + " 台设备（当前筛选）/ " + total + " 个点位 / " +
-                          controllable + " 台可控 · 按 " + _toggleKey + " 开关");
+                          controllable + " 台可控 · 已并入右侧总控面板");
             }
 
             _sb.Length = 0;

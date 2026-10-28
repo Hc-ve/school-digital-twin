@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -38,7 +38,7 @@ namespace SchoolTwin.UI
     public class TwinPointListPanel : MonoBehaviour
     {
         [Header("开关")]
-        [SerializeField] private KeyCode _toggleKey = KeyCode.T;
+        [SerializeField] private KeyCode _toggleKey = KeyCode.None;   // P28：并入总控抽屉，快捷键停用
 
         // ---------------- 版式常量（未缩放，全部 × _scale）----------------
         private const float BaseWidth = 380f;
@@ -282,7 +282,7 @@ namespace SchoolTwin.UI
             _hint = TwinUIFactory.Label(_panel, "Hint", Mathf.Max(8, Mathf.RoundToInt(FsSub * s)),
                 TextAnchor.UpperRight, TwinStatusPalette.TextMuted);
             _hint.raycastTarget = false;
-            _hint.text = _toggleKey + " 键开关";
+            _hint.text = "已并入右侧总控面板";
 
             Image closeImg = TwinUIFactory.Block(_panel, "Close", TwinStatusPalette.Track, true);
             _closeBg = closeImg.rectTransform;
@@ -732,7 +732,7 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(_toggleKey)) Toggle();
+            if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) Toggle();
             if (!_visible || _panel == null) return;
 
             float now = Time.unscaledTime;

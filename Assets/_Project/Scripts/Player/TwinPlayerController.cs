@@ -85,10 +85,17 @@ namespace SchoolTwin.Player
         {
             if (!_ready) return;
 
-            Vector2 input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+            // 【P28】UI 面板打开时清掉移动输入。
+            // ⚠️ 只清"输入"，**不能整个 return** —— 下面还有重力/贴地逻辑，
+            // 直接 return 会让人停在半空（第一版就这么踩过）。
+            Vector2 input = Vector2.zero;
+            if (!SchoolTwin.UI.TwinUIState.BlocksMovement)
+                input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
             if (input.sqrMagnitude > 1f) input.Normalize();
 
-            bool running = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            // 跑：面板打开时也按不动（否则站着也能改速度，动画会跳）
+            bool running = !SchoolTwin.UI.TwinUIState.BlocksMovement &&
+                           (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
             float targetSpeed = (running ? _runSpeed : _walkSpeed) * Mathf.Clamp01(input.magnitude);
 
             // 相机相对方向：按 W 永远是「往屏幕里走」，不管相机怎么转

@@ -352,7 +352,9 @@ namespace SchoolTwin.UI
             // 单条目：E = 直接执行（老玩家"走近按 E"的手感不变）。
             // 多条目：E = 执行当前选中项。
             // 「正在关机…」这类 Enabled=false 的条目不响应。
-            if (Input.GetKeyDown(KeyCode.E) && Time.unscaledTime >= _nextUse)
+            // 【P28】模态打开时 E 归模态（确认/取消），不执行交互
+            if (Input.GetKeyDown(KeyCode.E) && Time.unscaledTime >= _nextUse
+                && !TwinUIState.BlocksHotkeys)
             {
                 Item it = _items[_selectedIndex];
                 if (it.Enabled && it.OnClick != null)

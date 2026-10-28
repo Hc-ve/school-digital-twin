@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using SchoolTwin.Core;
@@ -32,7 +32,7 @@ namespace SchoolTwin.UI
     public class TwinAlarmHistoryPanel : MonoBehaviour
     {
         [Header("开关")]
-        [SerializeField] private KeyCode _toggleKey = KeyCode.H;
+        [SerializeField] private KeyCode _toggleKey = KeyCode.None;   // P28：并入总控抽屉，快捷键停用
 
         [Header("容量")]
         [Tooltip("最多显示几条记录（窗口拉高也不会超过这个数）")]
@@ -228,7 +228,7 @@ namespace SchoolTwin.UI
             _hint = TwinUIFactory.Label(_panel, "Hint", Mathf.Max(8, Mathf.RoundToInt(FsSub * s)),
                 TextAnchor.UpperRight, TwinStatusPalette.TextMuted);
             _hint.raycastTarget = false;
-            _hint.text = _toggleKey + " 键开关";
+            _hint.text = "已并入右侧总控面板";
 
             // 关闭按钮
             Image closeImg = TwinUIFactory.Block(_panel, "Close", TwinStatusPalette.Track, true);
@@ -464,7 +464,7 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(_toggleKey)) Toggle();
+            if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) Toggle();
             if (!_visible) return;
 
             float now = Time.unscaledTime;

@@ -151,7 +151,9 @@ namespace SchoolTwin.Interaction
             // 【P27】交互菜单打开时滚轮归菜单（上下切换选中项），自由相机不推进。
             // 自由相机模式下面板本身不弹（驱动器里有 _freeCam.enabled 检查），
             // 这里是双保险 —— 比如菜单淡出动画还没放完的瞬间。
+            // 【P28】总控抽屉打开时同理
             if (SchoolTwin.UI.TwinInteractMenu.IsBlocking) return;
+            if (SchoolTwin.UI.TwinUIState.BlocksScroll) return;
 
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) < 0.0001f) return;

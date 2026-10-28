@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -673,6 +673,13 @@ namespace SchoolTwin.UI
 
         private void Awake()
         {
+            // 【P28】详情卡并入总控抽屉，快捷键停用。
+            // ⚠️ 必须在 Awake 里**硬写**，不能只改字段默认值 ——
+            // Unity 用场景序列化值覆盖脚本默认值，这个组件已挂在场景里，
+            // 改 `= KeyCode.F4` 那行对实例完全无效（BaseCardWidth 踩过同样的坑）。
+            // 回退时删这一行即可。
+            _toggleKey = KeyCode.None;
+
             _uiRoot = EnsureCanvas();
             EnsureEventSystem();
 
@@ -825,7 +832,7 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(_toggleKey)) SetVisible(!_visible);
+            if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) SetVisible(!_visible);
             if (!_visible) return;
 
             // 点了任意点位（哪怕还是同一个）→ 把被 × 关掉的卡片叫回来
