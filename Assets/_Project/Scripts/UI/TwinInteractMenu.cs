@@ -228,7 +228,8 @@ namespace SchoolTwin.UI
             _visible = true;
             _alphaTarget = 1f;
             IsBlocking = true;
-            TwinPlayerFade.SetFaded(true);   // 面板期间角色半透明（异环同款）
+            // 角色降显不在这里做 —— 交给 LateUpdate 按"面板矩形 vs 角色屏幕包围盒"
+            // 是否相交决定（见 TwinPlayerFade.Update）。面板没压住人就别淡。
         }
 
         /// <summary>
@@ -279,12 +280,14 @@ namespace SchoolTwin.UI
                 _visible = false;
                 _alphaTarget = 0f;
                 IsBlocking = false;
-                TwinPlayerFade.SetFaded(false);   // 内部有 0.25s 延迟，防边界抖动闪烁
             }
 
             _shownThisFrame = false;
 
-            TwinPlayerFade.Tick();                // 处理延迟恢复
+            // ── 角色降显：只在面板**真的压在角色身上**时才淡 ──
+            // 第一版是"面板一出现就淡"，用户实测"一靠近门就隐身"——
+            // 面板在屏幕右侧、角色在中间，根本没重叠。现在按屏幕矩形相交判断。
+            TwinPlayerFade.Update(_visible, GetScreenRect());
 
             TickFade();
 
@@ -292,6 +295,24 @@ namespace SchoolTwin.UI
 
             HandleInput();
         }
+
+        /// <summary>
+        /// 面板在屏幕上的像素矩形（左下原点，与 Input.mousePosition 同一坐标系）。
+        /// Overlay Canvas 的 world corners 就是屏幕像素，不需要转换。
+        /// </summary>
+        private Rect GetScreenRect()
+        {
+            if (_root == null) return new Rect(0f, 0f, 0f, 0f);
+
+            _cornerBuf[0] = Vector3.zero;
+            _root.GetWorldCorners(_cornerBuf);      // 0=左下 1=左上 2=右上 3=右下
+            return Rect.MinMaxRect(
+                Mathf.Min(_cornerBuf[0].x, _cornerBuf[2].x), Mathf.Min(_cornerBuf[0].y, _cornerBuf[2].y),
+                Mathf.Max(_cornerBuf[0].x, _cornerBuf[2].x), Mathf.Max(_cornerBuf[0].y, _cornerBuf[2].y));
+        }
+
+        /// <summary>GetWorldCorners 的复用缓冲（每帧 new Vector3[4] 会持续产生 GC）。</summary>
+        private readonly Vector3[] _cornerBuf = new Vector3[4];
 
         // ================================================================ 输入
 
@@ -380,6 +401,12 @@ namespace SchoolTwin.UI
             _root.anchorMin = _root.anchorMax = _anchor;
             _root.pivot = new Vector2(0f, 1f);
             _root.anchoredPosition = Vector2.zero;
+
+            // 根节点必须有真实尺寸 —— 否则 `GetWorldCorners` 返回的是个零面积矩形，
+            // 角色降显的"矩形相交"判断永远为 false（面板压在角色身上也不淡）。
+            // 高度 = 条目数 × (行高 + 间距)，行本身是绝对定位的子节点。
+            int n = Mathf.Max(1, _items.Count);
+            _root.sizeDelta = new Vector2(BtnW, n * (BtnH + BtnGap));
         }
 
         /// <summary>条目数变了（或首次显示）→ 重建所有行。</summary>
