@@ -105,8 +105,11 @@ namespace SchoolTwin.Player
         {
             if (_player == null)
             {
+                // ⚠️ 本类是 static class，不能直接调 FindObjectOfType ——
+                // 它是 UnityEngine.Object 的静态成员，而 static class 不继承 Object。
+                // 走全限定名 Object.FindObjectOfType 明确调用基类静态方法。
                 SchoolTwin.Player.TwinPlayerController pc =
-                    FindObjectOfType<SchoolTwin.Player.TwinPlayerController>();
+                    UnityEngine.Object.FindObjectOfType<SchoolTwin.Player.TwinPlayerController>();
                 if (pc == null) return false;
                 _player = pc.transform;
             }

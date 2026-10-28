@@ -451,7 +451,6 @@ namespace SchoolTwin.UI
         private void ApplyRowIcon(Row r, Item it)
         {
             string glyph = null;
-            bool circle = true;
             Color circleColor = IconIdle;
 
             switch (it.Icon)
