@@ -61,7 +61,9 @@ namespace SchoolTwin.Player
         {
             if (faded)
             {
-                if (_faded && _restoreAt < 0f) return;   // 已经淡着且没有待恢复
+                // `_orig.Count > 0` 是必要条件：没克隆成功过（比如第一次调时
+                // 角色还没生成）就不能算"已经淡着"，否则会永久早退、再也淡不了。
+                if (_faded && _restoreAt < 0f && _orig.Count > 0) return;
                 _faded = true;
                 _restoreAt = -1f;                        // 取消待恢复
                 if (_orig.Count == 0) ApplyFade();       // 还没克隆过才真正动手
