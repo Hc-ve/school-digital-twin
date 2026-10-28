@@ -36,21 +36,52 @@ namespace SchoolTwin.Player
         private static Transform _player;
         private static Renderer[] _renderers;
 
-        /// <summary>renderer → 淡显前的材质实例数组（恢复时还原并销毁）。</summary>
-        private static readonly Dictionary<Renderer, Material[]> _saved =
+        /// <summary>renderer → **原始**材质数组（来自资产，恢复时赋回去）。</summary>
+        private static readonly Dictionary<Renderer, Material[]> _orig =
             new Dictionary<Renderer, Material[]>(8);
 
+        /// <summary>renderer → 运行时克隆出来的材质实例（恢复时销毁）。</summary>
+        private static readonly Dictionary<Renderer, Material[]> _clones =
+            new Dictionary<Renderer, Material[]>(8);
+
+        /// <summary>恢复的延迟时间点（秒）。防止面板在范围边界反复开关时材质抖动。</summary>
+        private static float _restoreAt = -1f;
+        private const float RestoreDelay = 0.25f;
+
         /// <summary>
-        /// 面板激活 = true（角色半透明）；面板关闭 = false（恢复）。
+        /// 面板激活 = true（角色半透明）；面板关闭 = false（延迟恢复）。
         /// 可重入：重复传同一个值是空操作。
+        ///
+        /// 【为什么要延迟恢复】角色站在交互范围边界上时，面板会逐帧显示/隐藏，
+        /// 每帧克隆+销毁材质 → 角色闪烁（2026-10-28 用户报"材质开始闪烁"）。
+        /// 关面板后等 0.25s 再恢复，抖动窗口内反复开关就一直是半透明，视觉稳定。
+        /// 真正的恢复由 `Tick()` 执行（菜单 LateUpdate 每帧调）。
         /// </summary>
         public static void SetFaded(bool faded)
         {
-            if (_faded == faded) return;
-            _faded = faded;
+            if (faded)
+            {
+                if (_faded && _restoreAt < 0f) return;   // 已经淡着且没有待恢复
+                _faded = true;
+                _restoreAt = -1f;                        // 取消待恢复
+                if (_orig.Count == 0) ApplyFade();       // 还没克隆过才真正动手
+            }
+            else
+            {
+                if (!_faded) return;
+                if (_restoreAt < 0f) _restoreAt = Time.unscaledTime + RestoreDelay;
+            }
+        }
 
-            if (faded) ApplyFade();
-            else Restore();
+        /// <summary>由外部每帧调用，处理"延迟恢复"。</summary>
+        public static void Tick()
+        {
+            if (!_faded || _restoreAt < 0f) return;
+            if (Time.unscaledTime < _restoreAt) return;
+
+            _restoreAt = -1f;
+            _faded = false;
+            Restore();
         }
 
         // ---------------------------------------------------------------- 实现
@@ -59,15 +90,27 @@ namespace SchoolTwin.Player
         {
             if (!CollectRenderers()) return;
 
+            // CollectRenderers 可能刚 ResetCache 过，这里重新确认状态
+            _faded = true;
+            _restoreAt = -1f;
+
             foreach (Renderer r in _renderers)
             {
                 if (r == null) continue;
+                if (_orig.ContainsKey(r)) continue;      // 已经克隆过，别重复
 
-                // `r.materials` 返回的是**实例副本**（Unity 自动克隆），
-                // 改它不会碰磁盘资产。原 sharedMaterials 备份不用存 ——
-                // 恢复时直接把实例 Destroy 掉，Unity 会自动回落到 shared。
-                Material[] inst = r.materials;
-                _saved[r] = inst;
+                // ⚠️ 顺序很重要：**先**存原始 sharedMaterials，**再**取 materials。
+                //
+                // `r.materials` 会给渲染器装上克隆体，之后就再也拿不回原始引用了
+                // （`r.sharedMaterials` 返回的已经是克隆体）。2026-10-28 用户报
+                // "角色变紫"就是栽在这 —— 恢复时把克隆体赋回去又 Destroy 掉，
+                // 渲染器握着已销毁材质 → 品红。
+                Material[] origin = r.sharedMaterials;
+                Material[] inst = r.materials;           // 克隆体（改它不碰资产）
+                if (inst == null || inst.Length == 0) continue;
+
+                _orig[r] = origin;
+                _clones[r] = inst;
 
                 foreach (Material m in inst)
                     MakeTransparent(m, FadedAlpha);
@@ -76,24 +119,28 @@ namespace SchoolTwin.Player
 
         private static void Restore()
         {
-            foreach (KeyValuePair<Renderer, Material[]> kv in _saved)
+            foreach (KeyValuePair<Renderer, Material[]> kv in _orig)
             {
                 Renderer r = kv.Key;
-                Material[] inst = kv.Value;
+                if (r == null) continue;                 // 角色可能已被销毁
 
-                // 角色可能在这期间被换装/销毁（理论上不会，防御一下）
-                if (r == null) continue;
+                Material[] origin = kv.Value;
+                Material[] inst;
+                _clones.TryGetValue(r, out inst);
 
-                // 把实例上的 alpha 改回去再销毁？不需要 —— 直接清空实例数组，
-                // Unity 找不到实例材质时自动用 sharedMaterials 渲染。
-                r.materials = r.sharedMaterials;
+                // 先把**原始**材质装回去，再销毁克隆体 —— 顺序反了就是品红。
+                if (origin != null && origin.Length > 0) r.sharedMaterials = origin;
 
+                // 克隆体一律销毁：`r.materials` 产生的实例和原始资产永远不是同一个对象，
+                // 不需要比对，直接销毁即可（否则每次开关都泄漏一批材质）。
                 if (inst != null)
+                {
                     for (int i = 0; i < inst.Length; i++)
-                        if (inst[i] != null)
-                            UnityEngine.Object.Destroy(inst[i]);
+                        if (inst[i] != null) UnityEngine.Object.Destroy(inst[i]);
+                }
             }
-            _saved.Clear();
+            _orig.Clear();
+            _clones.Clear();
         }
 
         /// <summary>
@@ -105,6 +152,11 @@ namespace SchoolTwin.Player
         {
             if (_player == null)
             {
+                // 角色没了（换场景 / 重开 Play）→ 缓存全清，否则字典里留着
+                // 上一轮已销毁的 Renderer，会让 `_orig.Count == 0` 判false，
+                // 结果永远不再克隆材质（"关了 Domain Reload 时踩到的坑"）。
+                ResetCache();
+
                 // ⚠️ 本类是 static class，不能直接调 FindObjectOfType ——
                 // 它是 UnityEngine.Object 的静态成员，而 static class 不继承 Object。
                 // 走全限定名 Object.FindObjectOfType 明确调用基类静态方法。
@@ -122,6 +174,16 @@ namespace SchoolTwin.Player
                 if (_renderers.Length == 0) return false;
             }
             return true;
+        }
+
+        private static void ResetCache()
+        {
+            _orig.Clear();
+            _clones.Clear();
+            _renderers = null;
+            // 注意：不要在这里改 `_faded` —— 本方法是从 CollectRenderers 里调的，
+            // 而 CollectRenderers 又在 ApplyFade 的调用链上；把标志清掉会导致
+            // "刚淡上就被判成没淡"，之后 SetFaded(false) 直接早退、材质永远透明。
         }
 
         /// <summary>

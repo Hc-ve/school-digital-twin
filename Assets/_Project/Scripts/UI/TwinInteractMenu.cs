@@ -167,6 +167,7 @@ namespace SchoolTwin.UI
         private bool _visible;              // 本帧是否应该显示
         private bool _shownThisFrame;       // 同帧互斥标记
         private int _lastFrame;             // 上次 Show 的 Time.frameCount
+        private float _lastRejectLog;       // 互斥日志节流
         private Vector2 _anchor = new Vector2(0.26f, 0.62f);
         private readonly List<Item> _items = new List<Item>(8);
         private int _selectedIndex;
@@ -193,11 +194,17 @@ namespace SchoolTwin.UI
             if (items == null || items.Count == 0) { Hide(); return; }
 
             // ── 同帧互斥 ──
-            // 后来的驱动器只打一条 log。真实场景里这不该发生（门灯和主脑互斥
-            // 靠各自的扫描逻辑），发生说明驱动器逻辑有洞，log 方便定位。
+            // 两个驱动器同帧都想显示时，先到先得。
+            // 【为什么只警告不报错】站在主脑和门中间时两个都在范围内，
+            // 这是**正常的**（不是 bug），只是面板一次只能显示一组。
+            // 日志做节流，否则每帧刷一条把 Console 冲爆。
             if (_shownThisFrame && _lastFrame == Time.frameCount)
             {
-                Debug.LogWarning("[P27] 同一帧有第二个驱动器试图 Show 交互菜单，已拒绝（先到先得）");
+                if (Time.unscaledTime - _lastRejectLog > 2f)
+                {
+                    _lastRejectLog = Time.unscaledTime;
+                    Debug.Log("[P27] 两个驱动器同时在范围内，面板显示先到的那一组（正常，非错误）");
+                }
                 return;
             }
             _shownThisFrame = true;
@@ -224,14 +231,27 @@ namespace SchoolTwin.UI
             TwinPlayerFade.SetFaded(true);   // 面板期间角色半透明（异环同款）
         }
 
-        /// <summary>隐藏面板。驱动器每帧在"不可用时"调用。</summary>
+        /// <summary>
+        /// 请求隐藏面板。
+        ///
+        /// ── 为什么只是"请求"而不是立即收起 ──────────────────────────────
+        /// 面板有**两个驱动器**（主脑 TwinPcMenuDriver、门灯 TwinInteractPrompt），
+        /// 各自在自己的 Update 里调 Show / Hide，而 Unity **不保证**两者的执行顺序。
+        ///
+        /// 2026-10-28 用户报"大部分交互按钮丢失"就是栽在这：
+        /// ```
+        /// TwinInteractPrompt.Update  → 门在范围内 → Show(单按钮)   面板显示
+        /// TwinPcMenuDriver.Update    → 主脑不在范围 → Hide()       面板被关掉
+        /// ```
+        /// 一帧之内自己人打自己人，最后谁跑在后面谁说了算 —— 表现为按钮闪烁/丢失。
+        ///
+        /// 所以 Hide 只表示"我这边不需要面板了"，真正的裁决放在 LateUpdate：
+        /// **本帧只要有任何一个驱动器 Show 过，面板就显示**；全都没有才收起。
+        /// 这样多驱动器天然共存，驱动器之间也不需要互相知道对方存在。
+        /// </summary>
         public void Hide()
         {
-            if (!_visible && _alphaTarget <= 0f) return;
-            _visible = false;
-            _alphaTarget = 0f;
-            IsBlocking = false;
-            TwinPlayerFade.SetFaded(false);
+            // 故意留空：见上面的说明。真正的收起在 LateUpdate 里按"本帧有没有 Show"裁决。
         }
 
         // ================================================================ 生命周期
@@ -248,22 +268,23 @@ namespace SchoolTwin.UI
 
         private void LateUpdate()
         {
-            // 同帧互斥标记每帧清一次（放在 LateUpdate 保证 Update 阶段的
-            // 所有驱动器都已经跑完 Show/Hide）。
-            // 顺便检测"孤儿显示"：驱动器必须**每帧**调 Show 或 Hide（Update 里
-            // 二选一），如果这一帧两者都没发生（比如驱动器被禁用/销毁），
-            // _visible 还挂着就成了没人管的僵尸面板 —— 这里兜底收起。
-            if (_lastFrame != Time.frameCount)
+            // ── 可见性裁决 ──
+            // 驱动器必须在 Update 里**每帧**调一次 Show 或 Hide（二选一）。
+            // 本帧有 Show → 显示；一个 Show 都没有 → 收起（Hide 调用者/驱动器被销毁
+            // 都属于这一类）。这样两个驱动器交替 Update 也不会互相覆盖。
+            bool shownThisFrame = (_lastFrame == Time.frameCount);
+
+            if (!shownThisFrame && _visible)
             {
-                if (_visible)
-                {
-                    _visible = false;
-                    _alphaTarget = 0f;
-                    IsBlocking = false;
-                    TwinPlayerFade.SetFaded(false);
-                }
+                _visible = false;
+                _alphaTarget = 0f;
+                IsBlocking = false;
+                TwinPlayerFade.SetFaded(false);   // 内部有 0.25s 延迟，防边界抖动闪烁
             }
+
             _shownThisFrame = false;
+
+            TwinPlayerFade.Tick();                // 处理延迟恢复
 
             TickFade();
 
@@ -478,14 +499,25 @@ namespace SchoolTwin.UI
             }
 
             r.IconCircle.color = circleColor;
+
+            // 【为什么全部要判"变了才写"】这些方法每帧都会被 RefreshRows 调一次。
+            // UGUI 的 Text.text / Graphic.color 是**无条件标脏**的 —— 每帧赋值会让
+            // Canvas 每帧重建，轻则掉帧，重则因为重建时序出现闪烁。
             bool showBars = it.Icon == IconKind.Pause;
-            if (r.IconPauseA != null) r.IconPauseA.SetActive(showBars);
-            if (r.IconPauseB != null) r.IconPauseB.SetActive(showBars);
+            if (r.IconPauseA != null && r.IconPauseA.activeSelf != showBars)
+                r.IconPauseA.SetActive(showBars);
+            if (r.IconPauseB != null && r.IconPauseB.activeSelf != showBars)
+                r.IconPauseB.SetActive(showBars);
 
             if (r.IconText != null)
             {
-                r.IconText.text = glyph ?? "";
-                r.IconText.gameObject.SetActive(!showBars);
+                string want = glyph ?? "";
+                if (!string.Equals(r.IconText.text, want, StringComparison.Ordinal))
+                    r.IconText.text = want;
+
+                bool textVisible = !showBars;
+                if (r.IconText.gameObject.activeSelf != textVisible)
+                    r.IconText.gameObject.SetActive(textVisible);
             }
         }
 
