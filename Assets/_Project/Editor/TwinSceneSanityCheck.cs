@@ -30,7 +30,7 @@ namespace SchoolTwin.EditorTools
             "ProjectorScreen01Old",
         };
 
-        [MenuItem("Tools/P26/① 场景显示体检", false, 100)]
+        [MenuItem("P26 主脑/③ 场景显示体检", false, 100)]
         public static void RunCheck()
         {
             Scene sc = SceneManager.GetActiveScene();
@@ -142,7 +142,7 @@ namespace SchoolTwin.EditorTools
             Debug.Log(sb.ToString());
         }
 
-        [MenuItem("Tools/P26/② 还原幕布材质到预制体默认值", false, 101)]
+        [MenuItem("P26 主脑/④ 还原幕布材质到预制体默认值", false, 101)]
         public static void RevertScreenMaterials()
         {
             // 【为什么不用 PrefabUtility.RevertObjectProperties】
@@ -215,7 +215,7 @@ namespace SchoolTwin.EditorTools
         /// 那就得反过来查：这间教室本来有没有那面墙、是不是被关掉了。
         /// 直接看 Hierarchy 要一层层展开，这里一次打全。
         /// </summary>
-        [MenuItem("Tools/P26/③ 列出教室/机房节点下的对象", false, 102)]
+        [MenuItem("P26 主脑/⑤ 列出教室/机房节点下的对象", false, 102)]
         public static void ListRoomHierarchy()
         {
             StringBuilder sb = new StringBuilder();

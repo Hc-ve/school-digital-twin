@@ -39,7 +39,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public static class TwinP18Expand
     {
-        private const string MenuRoot = "P18 补点位/";
+        private const string MenuRoot = "归档/P18 补点位/";
         internal const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
         private const string CatalogPath = "Assets/_Project/ScriptableObjects/TwinCatalog_Mock.asset";
 

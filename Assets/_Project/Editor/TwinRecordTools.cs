@@ -30,7 +30,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public static class TwinRecordTools
     {
-        private const string MenuRoot = "P1 孪生框架/";
+        private const string MenuRoot = "归档/P1 孪生框架/";
 
         // ================================================================ ⑫ 打开录像文件夹
 

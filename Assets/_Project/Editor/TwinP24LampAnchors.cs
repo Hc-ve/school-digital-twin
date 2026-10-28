@@ -51,7 +51,7 @@ namespace SchoolTwin.EditorTools
                 { "SportRoom3",  "体育器材室3 主照明" },
             };
 
-        [MenuItem("P24 灯锚点/① 给缺失房间补灯锚点", false, 10)]
+        [MenuItem("归档/P24 灯锚点/① 给缺失房间补灯锚点", false, 10)]
         public static void RunMenu()
         {
             if (EditorApplication.isPlaying) { Refuse(); return; }

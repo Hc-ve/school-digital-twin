@@ -61,7 +61,7 @@ namespace SchoolTwin.EditorTools
         /// 结果报 MissingReferenceException、灯没多出来、**而且场景文件被改坏了**。
         /// 一个做完就不该再点的工具，不能长得像待办事项。
         /// </summary>
-        [MenuItem("P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑪ 给三间房补灯具（每间 2 盏）", false, 23)]
+        [MenuItem("归档/P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑪ 给三间房补灯具（每间 2 盏）", false, 23)]
         public static void ApplyFromMenu()
         {
             string message;
@@ -77,7 +77,7 @@ namespace SchoolTwin.EditorTools
         }
 
         /// <summary>只读检查：三间房的灯到底在不在、锚点接没接上。不碰场景，随便点。</summary>
-        [MenuItem("P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑫ 检查三间房灯具（只读，安全）", false, 24)]
+        [MenuItem("归档/P1 孪生框架/⚠ 一次性迁移（已执行过，无需再点）/⑫ 检查三间房灯具（只读，安全）", false, 24)]
         public static void InspectFromMenu()
         {
             int missing;

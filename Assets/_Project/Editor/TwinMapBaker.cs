@@ -61,7 +61,7 @@ namespace SchoolTwin.EditorTools
             public float YBottom, YTop;
         }
 
-        [MenuItem("P21 地图/① 烘焙三张底图（室外 / 1F / 2F）", false, 10)]
+        [MenuItem("归档/P21 地图/① 烘焙三张底图（室外 / 1F / 2F）", false, 10)]
         public static void BakeMenu()
         {
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)

@@ -26,7 +26,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ① 生成 Mock 闭环
 
-        [MenuItem("P1 孪生框架/① 生成 Mock 闭环（当前场景）", false, 10)]
+        [MenuItem("归档/P1 孪生框架/① 生成 Mock 闭环（当前场景）", false, 10)]
         public static void CreateMockLoop()
         {
             if (EditorApplication.isPlaying)
@@ -330,7 +330,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ② 为选中物体添加锚点
 
-        [MenuItem("P1 孪生框架/② 为选中物体添加孪生锚点", false, 11)]
+        [MenuItem("归档/P1 孪生框架/② 为选中物体添加孪生锚点", false, 11)]
         public static void AddAnchorToSelection()
         {
             GameObject[] selected = Selection.gameObjects;
@@ -392,7 +392,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ③ 列出场景内点位
 
-        [MenuItem("P1 孪生框架/③ 列出场景内孪生点位", false, 12)]
+        [MenuItem("归档/P1 孪生框架/③ 列出场景内孪生点位", false, 12)]
         public static void ListSceneAnchors()
         {
             TwinAnchor[] anchors = Object.FindObjectsOfType<TwinAnchor>(true);
@@ -428,7 +428,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ④ 打开点位目录
 
-        [MenuItem("P1 孪生框架/④ 打开 / 创建点位目录资产", false, 13)]
+        [MenuItem("归档/P1 孪生框架/④ 打开 / 创建点位目录资产", false, 13)]
         public static void OpenCatalog()
         {
             TwinCatalog catalog = LoadOrCreateCatalog();
@@ -439,7 +439,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ⑤ 校验点位目录
 
-        [MenuItem("P1 孪生框架/⑤ 校验点位目录与场景一致性", false, 14)]
+        [MenuItem("归档/P1 孪生框架/⑤ 校验点位目录与场景一致性", false, 14)]
         public static void ValidateCatalog()
         {
             TwinCatalog catalog = AssetDatabase.LoadAssetAtPath<TwinCatalog>(CatalogPath);
@@ -514,7 +514,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ⑥ 生成 UGUI 信息面板
 
-        [MenuItem("P1 孪生框架/⑥ 生成 UGUI 信息面板（当前场景）", false, 15)]
+        [MenuItem("归档/P1 孪生框架/⑥ 生成 UGUI 信息面板（当前场景）", false, 15)]
         public static void CreateInfoPanel()
         {
             if (EditorApplication.isPlaying)
@@ -580,7 +580,7 @@ namespace SchoolTwin.EditorTools
         /// 结果就是该点位永远收不到数据、状态永远停在「未知」。
         /// 这正是 P1-B 场景里实际出现过的问题。
         /// </summary>
-        [MenuItem("P1 孪生框架/⑦ 修正 TwinId 首尾空白（当前场景）", false, 16)]
+        [MenuItem("归档/P1 孪生框架/⑦ 修正 TwinId 首尾空白（当前场景）", false, 16)]
         public static void TrimTwinIds()
         {
             TwinAnchor[] anchors = Object.FindObjectsOfType<TwinAnchor>(true);

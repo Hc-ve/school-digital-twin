@@ -53,7 +53,7 @@ namespace SchoolTwin.EditorTools
         /// <summary>开关中心离墙面留的缝（米）。方块厚 4cm，留 3cm 差不多齐平</summary>
         private const float WallGap = 0.03f;
 
-        [MenuItem("P23 交互/① 生成灯开关方块（会存盘）", false, 10)]
+        [MenuItem("归档/P23 交互/① 生成灯开关方块（会存盘）", false, 10)]
         public static void GenerateMenu()
         {
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
@@ -343,7 +343,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ 诊断
 
-        [MenuItem("P23 交互/② 导出教室门朝向（诊断）", false, 20)]
+        [MenuItem("归档/P23 交互/② 导出教室门朝向（诊断）", false, 20)]
         public static void DumpDoorsMenu()
         {
             string s = DumpDoors();

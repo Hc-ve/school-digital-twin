@@ -36,7 +36,7 @@ namespace SchoolTwin.EditorTools
     {
         private const string CatalogPath = "Assets/_Project/ScriptableObjects/TwinCatalog_Mock.asset";
 
-        [MenuItem("P24 灯锚点/② 同步点位目录（补缺失）", false, 20)]
+        [MenuItem("归档/P24 灯锚点/② 同步点位目录（补缺失）", false, 20)]
         public static void SyncMenu()
         {
             if (EditorApplication.isPlaying)
@@ -50,7 +50,7 @@ namespace SchoolTwin.EditorTools
             EditorUtility.DisplayDialog("P24 同步点位目录", report, "好");
         }
 
-        [MenuItem("P24 灯锚点/③ 只检查（不改文件）", false, 21)]
+        [MenuItem("归档/P24 灯锚点/③ 只检查（不改文件）", false, 21)]
         public static void CheckMenu()
         {
             string report = Sync(true);

@@ -26,7 +26,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public class TwinReplaceScaffoldWindow : EditorWindow
     {
-        private const string MenuPath = "P1 孪生框架/⑨ 用模型或标记牌替换辅助方块";
+        private const string MenuPath = "归档/P1 孪生框架/⑨ 用模型或标记牌替换辅助方块";
 
         private TwinCatalog _catalog;
         private Vector2 _scroll;

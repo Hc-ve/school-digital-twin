@@ -39,7 +39,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ① 导入设置
 
-        [MenuItem("P22 角色/① 设置导入参数（Humanoid + 重导入）", false, 10)]
+        [MenuItem("归档/P22 角色/① 设置导入参数（Humanoid + 重导入）", false, 10)]
         public static void FixImportsMenu()
         {
             if (EditorApplication.isPlaying) { Refuse(); return; }
@@ -117,7 +117,7 @@ namespace SchoolTwin.EditorTools
 
         // ================================================================ ② 生成角色
 
-        [MenuItem("P22 角色/② 生成角色到场景（含动画控制器）", false, 11)]
+        [MenuItem("归档/P22 角色/② 生成角色到场景（含动画控制器）", false, 11)]
         public static void BuildMenu()
         {
             if (EditorApplication.isPlaying) { Refuse(); return; }

@@ -63,7 +63,7 @@ namespace SchoolTwin.EditorTools
         private const float MarkerLift = 0f;
 
         /// <summary>菜单入口（用户在编辑器里也能点，效果与批处理一致）。</summary>
-        [MenuItem("P1 孪生框架/⑩ 一键放置 2-1 班设备", false, 22)]
+        [MenuItem("归档/P1 孪生框架/⑩ 一键放置 2-1 班设备", false, 22)]
         public static void ApplyFromMenu()
         {
             Apply();

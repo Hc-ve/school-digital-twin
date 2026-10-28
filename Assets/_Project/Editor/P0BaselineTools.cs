@@ -24,7 +24,7 @@ namespace School.DigitalTwin.EditorTools
     /// </summary>
     public static class P0BaselineTools
     {
-        private const string MenuRoot = "P0 基线治理/";
+        private const string MenuRoot = "归档/P0 基线治理/";
 
         [MenuItem(MenuRoot + "① 扫描缺失引用（只读）", false, 10)]
         public static void ScanMissingReferences()

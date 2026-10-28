@@ -48,7 +48,7 @@ namespace SchoolTwin.EditorTools
         /// 如果看下来觉得"拉长的门比原来还丑"，点这个就能一键回到原样，不用重开场景。
         /// 原始值来自预制体 `DoorDouble02.prefab` 的 `DoorDouble`（id 455620）。
         /// </summary>
-        [MenuItem("P19 勘察/③ 还原礼堂双开门门轴（撤销 ②）", false, 22)]
+        [MenuItem("归档/P19 勘察/③ 还原礼堂双开门门轴（撤销 ②）", false, 22)]
         public static void RevertMenu()
         {
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
@@ -91,7 +91,7 @@ namespace SchoolTwin.EditorTools
             EditorUtility.DisplayDialog("P19 已还原", msg, "好");
         }
 
-        [MenuItem("P19 勘察/② 修正礼堂双开门门轴（一次性，会存盘）", false, 21)]
+        [MenuItem("归档/P19 勘察/② 修正礼堂双开门门轴（一次性，会存盘）", false, 21)]
         public static void RunMenu()
         {
             // Play 模式下 SaveScene() 会把播放中的状态写进资产（99 号清单第 14 条）

@@ -36,7 +36,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public static class TwinStressGen
     {
-        private const string MenuRoot = "P1 孪生框架/";
+        private const string MenuRoot = "归档/P1 孪生框架/";
         private const string CatalogFolder = "Assets/_Project/ScriptableObjects";
         private const string StressRootName = "[StressPoints]";
         private const string OriginalCatalogName = "TwinCatalog_Mock";

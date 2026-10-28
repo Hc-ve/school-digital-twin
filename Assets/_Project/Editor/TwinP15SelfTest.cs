@@ -300,7 +300,7 @@ namespace SchoolTwin.EditorTools
 
         // ---------------------------------------------------------------- 打印
 
-        [MenuItem("P15 电力回路 / 跑一遍自检（编辑器内）")]
+        [MenuItem("归档/P15 电力回路/跑一遍自检（编辑器内）")]
         private static void RunFromMenu()
         {
             Run();

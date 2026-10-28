@@ -27,7 +27,7 @@ namespace SchoolTwin.EditorTools
     {
         private const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
 
-        [MenuItem("P19 勘察/导出设备清单（只读）", false, 10)]
+        [MenuItem("归档/P19 勘察/导出设备清单（只读）", false, 10)]
         public static void RunMenu()
         {
             string report = Run();

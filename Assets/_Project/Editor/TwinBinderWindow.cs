@@ -28,7 +28,7 @@ namespace SchoolTwin.EditorTools
     /// </summary>
     public class TwinBinderWindow : EditorWindow
     {
-        private const string MenuPath = "P1 孪生框架/⑧ 把点位绑定到真实物体";
+        private const string MenuPath = "归档/P1 孪生框架/⑧ 把点位绑定到真实物体";
 
         private TwinCatalog _catalog;
         private Vector2 _scroll;

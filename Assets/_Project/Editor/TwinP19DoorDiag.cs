@@ -33,7 +33,7 @@ namespace SchoolTwin.EditorTools
         private const string ScenePath =
             "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
 
-        [MenuItem("P19 勘察/门叶诊断（只读，Play 模式下也能点）", false, 20)]
+        [MenuItem("归档/P19 勘察/门叶诊断（只读，Play 模式下也能点）", false, 20)]
         public static void RunMenu()
         {
             string text = Dump();
@@ -50,7 +50,7 @@ namespace SchoolTwin.EditorTools
         /// 用户点上去卡片写「未选中点位」，就是因为那个物件上根本没有锚点。
         /// 靠名字猜不准，得把全部候选和它们的坐标列出来。
         /// </summary>
-        [MenuItem("P19 勘察/门物件扫描（含未绑定的，只读）", false, 23)]
+        [MenuItem("归档/P19 勘察/门物件扫描（含未绑定的，只读）", false, 23)]
         public static void ScanMenu()
         {
             string text = Scan();

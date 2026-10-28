@@ -47,7 +47,7 @@ namespace SchoolTwin.EditorTools
                 { "SportGate/Door/Entrance_01", "Door02Wood1" },
             };
 
-        [MenuItem("P20 修正/③ 清除门的静态合批标记（否则转了看不见，会存盘）", false, 12)]
+        [MenuItem("归档/P20 修正/③ 清除门的静态合批标记（否则转了看不见，会存盘）", false, 12)]
         public static void ClearDoorBatchingMenu()
         {
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
@@ -121,7 +121,7 @@ namespace SchoolTwin.EditorTools
             return sb.ToString();
         }
 
-        [MenuItem("P20 修正/① 预演：检查重复锚点与挂错的锚点（只读）", false, 10)]
+        [MenuItem("归档/P20 修正/① 预演：检查重复锚点与挂错的锚点（只读）", false, 10)]
         public static void PlanMenu()
         {
             string text = Plan();
@@ -130,7 +130,7 @@ namespace SchoolTwin.EditorTools
                 "结果已打印到 Console，并写入工程根目录 p20_fix_plan.txt。", "好");
         }
 
-        [MenuItem("P20 修正/② 执行：清理重复锚点 + 挪正体育馆入口锚点（会存盘）", false, 11)]
+        [MenuItem("归档/P20 修正/② 执行：清理重复锚点 + 挪正体育馆入口锚点（会存盘）", false, 11)]
         public static void ApplyMenu()
         {
             if (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode)
