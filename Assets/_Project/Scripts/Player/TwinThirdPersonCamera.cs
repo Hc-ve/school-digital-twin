@@ -120,8 +120,9 @@ namespace SchoolTwin.Player
             }
 
             // 滚轮调距离（鼠标在 UI 上时不要抢 —— 小地图也要用滚轮）
+            // 【P27】交互菜单打开时滚轮归菜单（上下切换选中项），缩放暂停
             float scroll = Input.GetAxis("Mouse ScrollWheel");
-            if (Mathf.Abs(scroll) > 0.001f && !IsPointerOverUI())
+            if (Mathf.Abs(scroll) > 0.001f && !IsPointerOverUI() && !SchoolTwin.UI.TwinInteractMenu.IsBlocking)
             {
                 _distance = Mathf.Clamp(_distance - scroll * _zoomStep, _minDistance, _maxDistance);
             }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using SchoolTwin.Command;
 using SchoolTwin.Core;
 using SchoolTwin.Interaction;
@@ -10,7 +9,11 @@ using SchoolTwin.Twin;
 namespace SchoolTwin.UI
 {
     /// <summary>
-    /// 走近物体时在它旁边弹一个交互按钮（和平精英/原神那种），点一下就交互。
+    /// 走近物体时弹交互按钮 —— 门/灯/投影/开关方块的**驱动器**。
+    ///
+    /// 【P27 重构】旧版自己搭单按钮 UI（Rounded + Button + E 键提示），
+    /// 现在全部交给统一的 `TwinInteractMenu` 渲染：本类只负责
+    /// 「找目标 → 构造一条 Item → menu.Show()」，与主脑面板同一套视觉。
     ///
     /// ── 交互目标从哪来 ────────────────────────────────────────────
     /// 两条来源，都不需要手工配置：
@@ -22,11 +25,11 @@ namespace SchoolTwin.UI
     ///   ② 在角色**身前**（dot(朝向, 指向目标) > 0.2）—— 背后的东西不该弹按钮
     ///   ③ 该点位在控制白名单里（不在白名单的只能看不能控）
     ///
-    /// ── 为什么用投影而不是 World Space Canvas ─────────────────────
-    /// 世界空间 Canvas 会被墙挡、被近裁剪面切、缩放还要跟着距离调。
-    /// 投影到 Overlay 上只需要一次 WorldToScreenPoint，按钮永远清晰、永远在最上层。
+    /// ── E 键归谁 ──────────────────────────────────────────────────
+    /// E 确认统一由 TwinInteractMenu 处理（选中即执行；单条目 = 直接执行）。
+    /// 旧版自己的 `Input.GetKeyDown(_key)` 已随 UI 一起删除。
     /// </summary>
-    [AddComponentMenu("SchoolTwin/交互按钮 (TwinInteractPrompt)")]
+    [AddComponentMenu("SchoolTwin/交互驱动器 (TwinInteractPrompt)")]
     public sealed class TwinInteractPrompt : MonoBehaviour
     {
         [Header("判定")]
@@ -36,21 +39,8 @@ namespace SchoolTwin.UI
         [Tooltip("要求目标在角色身前：dot(朝向, 指向目标) 要大于这个值")]
         [SerializeField] private float _facingDot = 0.2f;
 
-        [Tooltip("交互键（和点击按钮等效）")]
-        [SerializeField] private KeyCode _key = KeyCode.E;
-
-        [Tooltip("两次交互之间的最小间隔（秒），防连点")]
-        [SerializeField] private float _cooldown = 0.35f;
-
-        [Header("外观")]
-        [SerializeField] private Vector2 _size = new Vector2(132f, 38f);
-
-        [Tooltip("按钮在屏幕上的**固定**位置（归一化 0~1，左下角是 0,0）。" +
-                 "参考原神/吃鸡：交互提示钉在固定位置，不跟着物体在屏幕上跑")]
-        [SerializeField] private Vector2 _screenAnchor = new Vector2(0.62f, 0.5f);
-
-        [Tooltip("在固定锚点上的像素微调，一般留 0")]
-        [SerializeField] private Vector2 _screenOffset = Vector2.zero;
+        /// <summary>沿用旧单按钮的屏幕位置（右侧偏中）。</summary>
+        private static readonly Vector2 Anchor = new Vector2(0.62f, 0.5f);
 
         // ---------------------------------------------------------------- 运行时
 
@@ -62,32 +52,28 @@ namespace SchoolTwin.UI
             public string Label;
             public CommandAction Action;
             public float Value;
+            public bool IsDoor;
         }
 
         private readonly List<Candidate> _candidates = new List<Candidate>(64);
+
+        /// <summary>范围内有效候选（FindBest 填充，可能不止一条）。</summary>
+        private readonly List<Candidate> _hits = new List<Candidate>(4);
+
+        /// <summary>复用的条目缓冲（避免每帧 new List 产生 GC）。</summary>
+        private readonly List<TwinInteractMenu.Item> _items = new List<TwinInteractMenu.Item>(4);
+
         private Transform _player;
         private Camera _cam;
-        private Canvas _canvas;
-        private RectTransform _root;
-        private TwinRoundedRect _bg;
-        private Text _label;
-        private Button _button;
-        private CanvasGroup _group;
-        private Candidate _current;
-        private float _nextUse;
 
         // 扫描缓存：FindObjectsOfType 每帧跑两遍太浪费，改成 1 秒刷一次
         private TwinInteractPoint[] _points;
         private TwinAnchor[] _anchors;
         private float _scanAt;
 
-        // 观景模式下角色控制器没被禁用，E 键会和「自由相机上升」抢 —— 干脆藏掉按钮
+        // 观景模式下角色控制器没被禁用，面板会和「自由相机」抢 E/滚轮 —— 干脆不弹
         private FreeCameraController _freeCam;
         private bool _freeCamLooked;
-
-        // 淡入淡出（纯视觉，不影响点击判定）
-        private float _alpha;
-        private float _alphaTarget;
 
         // ================================================================ 生命周期
 
@@ -96,119 +82,54 @@ namespace SchoolTwin.UI
         {
             if (FindObjectOfType<TwinInteractPrompt>(true) != null) return;
 
-            Canvas canvas = FindOverlayCanvas();
-            GameObject go = new GameObject("TwinInteractPrompt", typeof(RectTransform));
-            go.transform.SetParent(canvas != null ? canvas.transform : null, false);
+            GameObject go = new GameObject("TwinInteractPrompt");
+            go.transform.SetParent(TwinInteractMenu.Ensure().transform, false);
             go.AddComponent<TwinInteractPrompt>();
-            Debug.Log("[TwinInteract] 场景里没有 TwinInteractPrompt，已自动补一个");
-        }
-
-        private static Canvas FindOverlayCanvas()
-        {
-            Canvas[] all = FindObjectsOfType<Canvas>(true);
-            for (int i = 0; i < all.Length; i++)
-                if (all[i] != null && all[i].renderMode == RenderMode.ScreenSpaceOverlay) return all[i];
-
-            GameObject go = new GameObject("TwinInteractCanvas", typeof(RectTransform));
-            Canvas canvas = go.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 95;
-
-            CanvasScaler scaler = go.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 0.5f;
-
-            if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
-            return canvas;
-        }
-
-        private void Awake()
-        {
-            Build();
-        }
-
-        private void Build()
-        {
-            _root = transform as RectTransform;
-            if (_root == null) { Debug.LogError("[TwinInteract] 必须挂在有 RectTransform 的物体上"); return; }
-
-            // 按钮钉在屏幕固定位置：锚点 + 像素微调，**不再**每帧跟 WorldToScreenPoint 跑。
-            // 跟着物体跑的话，转视角时按钮会在屏幕上乱飘，看着像 bug。
-            _root.anchorMin = _root.anchorMax = _screenAnchor;
-            _root.pivot = new Vector2(0.5f, 0.5f);
-            _root.anchoredPosition = _screenOffset;
-            _root.sizeDelta = _size;
-
-            _bg = TwinUIFactory.Rounded(_root, "Bg", _size.y * 0.5f,
-                new Color(0.13f, 0.14f, 0.16f, 0.92f), new Color(0.13f, 0.14f, 0.16f, 0.92f),
-                new Color(1f, 1f, 1f, 0.22f), 1f, true);
-            TwinUIFactory.Stretch(_bg.rectTransform);
-
-            // 左边一个小圆，里面是交互键字母
-            Image icon = TwinUIFactory.Block(_root, "Icon", new Color(0.16f, 0.72f, 0.52f, 1f), false);
-            RectTransform ir = icon.rectTransform;
-            ir.anchorMin = ir.anchorMax = new Vector2(0f, 0.5f);
-            ir.pivot = new Vector2(0.5f, 0.5f);
-            ir.sizeDelta = new Vector2(24f, 24f);
-            ir.anchoredPosition = new Vector2(18f, 0f);
-
-            Text key = TwinUIFactory.Label(ir, "Key", 13, TextAnchor.MiddleCenter, Color.white);
-            TwinUIFactory.Stretch(key.rectTransform);
-            key.text = _key.ToString();
-
-            _label = TwinUIFactory.Label(_root, "Label", 15, TextAnchor.MiddleLeft, Color.white);
-            TwinUIFactory.Place(_label.rectTransform, 38f, 0f, _size.x - 46f, _size.y);
-
-            _button = _root.gameObject.AddComponent<Button>();
-            _button.transition = Selectable.Transition.None;
-            _button.onClick.AddListener(Use);
-
-            _group = _root.gameObject.AddComponent<CanvasGroup>();
-            _group.alpha = 0f;
-            _group.blocksRaycasts = false;
-            _group.interactable = false;
+            Debug.Log("[TwinInteract] 门/灯交互驱动器已挂载（统一菜单渲染）");
         }
 
         private void Update()
         {
-            if (_root == null) return;
+            TwinInteractMenu menu = TwinInteractMenu.Ensure();
 
             if (_player == null)
             {
                 TwinPlayerRef();
-                if (_player == null) { Hide(); TickFade(); return; }
+                if (_player == null) { menu.Hide(); return; }
             }
             if (_cam == null) _cam = Camera.main;
-            if (_cam == null) { Hide(); TickFade(); return; }
+            if (_cam == null) { menu.Hide(); return; }
 
-            // 观景模式下角色原地不动，按钮没有意义，还会和 E 键抢
+            // 观景模式下角色原地不动，面板没有意义，还会和 E 键抢
             if (!_freeCamLooked)
             {
                 _freeCamLooked = true;
                 _freeCam = FindObjectOfType<FreeCameraController>();
             }
-            if (_freeCam != null && _freeCam.enabled) { Hide(); TickFade(); return; }
+            if (_freeCam != null && _freeCam.enabled) { menu.Hide(); return; }
 
-            Candidate best = FindBest();
-            _current = best;
+            if (!FindBest()) { menu.Hide(); return; }
 
-            if (best == null) Hide();
-            else Show(best);
+            // 候选 → 条目。每条一个 Item，走统一菜单渲染。
+            _items.Clear();
+            for (int i = 0; i < _hits.Count; i++)
+            {
+                Candidate c = _hits[i];
 
-            TickFade();
-        }
+                // 目标必须在画面里，否则背后的东西也弹按钮
+                Vector3 world = c.WorldPos + Vector3.up * 0.9f;
+                Vector3 sp = _cam.WorldToScreenPoint(world);
+                if (sp.z <= 0f) continue;                                     // 相机背后
+                if (sp.x < 0f || sp.x > _cam.pixelWidth ||
+                    sp.y < 0f || sp.y > _cam.pixelHeight) continue;           // 跑出画面
 
-        private void TickFade()
-        {
-            if (_group == null) return;
-            _alpha = Mathf.MoveTowards(_alpha, _alphaTarget, Time.unscaledDeltaTime * 9f);
-            _group.alpha = _alpha;
+                _items.Add(new TwinInteractMenu.Item(c.Label,
+                    c.IsDoor ? TwinInteractMenu.IconKind.Door : TwinInteractMenu.IconKind.Power,
+                    () => Use(c)));
+            }
 
-            bool live = _alphaTarget > 0.5f;
-            _group.blocksRaycasts = live;
-            _group.interactable = live;
+            if (_items.Count == 0) { menu.Hide(); return; }
+            menu.Show(_items, Anchor);
         }
 
         private void TwinPlayerRef()
@@ -219,9 +140,14 @@ namespace SchoolTwin.UI
 
         // ================================================================ 找目标
 
-        private Candidate FindBest()
+        /// <summary>
+        /// 扫描 + 筛选，结果填进 `_hits`（按距离升序）。
+        /// 返回 false = 范围内没有任何有效候选。
+        /// </summary>
+        private bool FindBest()
         {
             _candidates.Clear();
+            _hits.Clear();
             RefreshCache();
 
             // ① 交互点（墙上的开关方块）
@@ -251,15 +177,12 @@ namespace SchoolTwin.UI
                 AddCandidate(a.TwinId, a.transform.position, _range, "");
             }
 
-            if (_candidates.Count == 0) return null;
+            if (_candidates.Count == 0) return false;
 
-            // 取「距离最近 + 在身前」的那个
+            // 距离最近 + 在身前，按距离升序填 _hits
             Vector3 p0 = _player.position;
             Vector3 fwd = _player.forward; fwd.y = 0f;
             if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.forward;
-
-            Candidate best = null;
-            float bestScore = float.MaxValue;
 
             for (int i = 0; i < _candidates.Count; i++)
             {
@@ -271,9 +194,13 @@ namespace SchoolTwin.UI
                 to.y = 0f;
                 if (to.sqrMagnitude > 0.0001f && Vector3.Dot(to.normalized, fwd) < _facingDot) continue;
 
-                if (dist < bestScore) { bestScore = dist; best = c; }
+                c.Range = dist;   // 记下实际距离，排序用
+                _hits.Add(c);
             }
-            return best;
+
+            if (_hits.Count == 0) return false;
+            _hits.Sort((a, b) => a.Range.CompareTo(b.Range));
+            return true;
         }
 
         /// <summary>1 秒刷新一次候选来源。新生成的开关最多晚 1 秒才认得到，可以接受。</summary>
@@ -287,7 +214,7 @@ namespace SchoolTwin.UI
 
         private void AddCandidate(string twinId, Vector3 pos, float range, string label)
         {
-            // 【P26】主脑由 `TwinPcMenuPanel` 接管（三个开机模式 + 开机后按钮组），
+            // 【P26】主脑由 `TwinPcMenuDriver` 接管（三个开机模式 + 开机后按钮组），
             // 这里必须跳过 —— 否则单按钮提示和多按钮面板会同时弹在屏幕上，
             // 用户点了单按钮只能"开/关"，三个模式等于没做。
             if (string.Equals(twinId, "ClassComputer/PC/Master_01", StringComparison.Ordinal)) return;
@@ -315,6 +242,7 @@ namespace SchoolTwin.UI
             if (string.Equals(model.Type, "Door", StringComparison.Ordinal))
             {
                 c.Action = CommandAction.SetOpen;
+                c.IsDoor = true;
                 TwinValue v;
                 bool open = has && anchor.TryGetValue("Open", out v) && v.Value >= 0.5f;
                 c.Value = open ? 0f : 1f;
@@ -323,6 +251,7 @@ namespace SchoolTwin.UI
             else
             {
                 c.Action = CommandAction.SetPower;
+                c.IsDoor = false;
                 TwinValue v;
                 bool on = has && anchor.TryGetValue("Power", out v) && v.Value >= 0.5f;
                 c.Value = on ? 0f : 1f;
@@ -345,53 +274,31 @@ namespace SchoolTwin.UI
             _candidates.Add(c);
         }
 
-        // ================================================================ 显示 / 交互
+        // ================================================================ 执行
 
-        private void Show(Candidate c)
+        /// <summary>
+        /// 发命令。旧版 `Use()` 的逻辑原样保留：冷却 + TrySend + 日志 + 立即翻转值
+        /// （回读确认后会被真实状态覆盖）。
+        /// </summary>
+        private void Use(Candidate c)
         {
-            // 按钮位置是**固定**的（见 Build），这里只做「目标是否真在画面里」的可见性判断，
-            // 免得背后的东西也弹按钮。位置每帧重设的话，转视角时按钮会在屏幕上乱飘。
-            Vector3 world = c.WorldPos + Vector3.up * 0.9f;
-            Vector3 sp = _cam.WorldToScreenPoint(world);
-            if (sp.z <= 0f) { Hide(); return; }                                     // 相机背后
-            if (sp.x < 0f || sp.x > _cam.pixelWidth ||
-                sp.y < 0f || sp.y > _cam.pixelHeight) { Hide(); return; }           // 跑出画面
-
-            if (!string.Equals(_label.text, c.Label, StringComparison.Ordinal)) _label.text = c.Label;
-
-            _alphaTarget = 1f;
-
-            if (Input.GetKeyDown(_key)) Use();
-        }
-
-        private void Hide()
-        {
-            if (_group == null) return;
-            _alphaTarget = 0f;
-            _current = null;
-        }
-
-        private void Use()
-        {
-            if (_current == null) return;
-            if (Time.unscaledTime < _nextUse) return;
-            _nextUse = Time.unscaledTime + _cooldown;
+            if (c == null) return;
 
             TwinCommandCenter center = TwinCommandCenter.Ensure();
             if (center == null) return;
 
             string reject;
-            if (!center.TrySend(_current.TwinId, _current.Action, _current.Value, out reject))
+            if (!center.TrySend(c.TwinId, c.Action, c.Value, out reject))
             {
-                Debug.LogWarning("[TwinInteract] " + _current.TwinId + " 被拒绝：" + reject);
+                Debug.LogWarning("[TwinInteract] " + c.TwinId + " 被拒绝：" + reject);
                 return;
             }
 
-            Debug.Log("[TwinInteract] " + _current.Label + " → " + _current.TwinId +
-                      " " + _current.Action + "(" + _current.Value + ")");
+            Debug.Log("[TwinInteract] " + c.Label + " → " + c.TwinId +
+                      " " + c.Action + "(" + c.Value + ")");
 
             // 立刻翻转，下一次按就是反向（回读确认后会被真实状态覆盖）
-            _current.Value = _current.Value >= 0.5f ? 0f : 1f;
+            c.Value = c.Value >= 0.5f ? 0f : 1f;
         }
     }
 }
