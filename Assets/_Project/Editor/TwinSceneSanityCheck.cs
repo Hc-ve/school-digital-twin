@@ -62,6 +62,7 @@ namespace SchoolTwin.EditorTools
             List<string> badShader = new List<string>();
             List<string> screenShader = new List<string>();
             List<string> huge = new List<string>();
+            List<string> disabled = new List<string>();
 
             foreach (Renderer rd in all)
             {
@@ -110,10 +111,19 @@ namespace SchoolTwin.EditorTools
                 Vector3 s = rd.bounds.size;
                 if (s.x > 30f || s.y > 30f || s.z > 30f)
                     huge.Add(path + "  bounds=" + s.ToString("F1"));
+
+                // 【关键】被关掉 / 隐藏的 Renderer。
+                // 材质完好、shader 完好，但整个物体不画 —— 表现就是"那块地方是空的"。
+                // 之前只查材质，会漏掉这一类（用户报"墙壁像材质丢了、点不到"，多半是它）。
+                if (!rd.enabled)
+                    disabled.Add(path + "  （Renderer.enabled = false）");
+                else if (!rd.gameObject.activeInHierarchy)
+                    disabled.Add(path + "  （GameObject 未激活）");
             }
 
             Append(sb, "★ 真正断裂的材质（槽为空）", noMat);
             Append(sb, "★ shader 丢失", badShader);
+            Append(sb, "★ 被关掉/隐藏的 Renderer（画面上等于「那块是空的」）", disabled);
             Append(sb, "使用 P26 幕布着色器的 Renderer", screenShader);
             Append(sb, "包围盒 > 30m 的巨大物体", huge);
 
@@ -198,8 +208,68 @@ namespace SchoolTwin.EditorTools
             }
         }
 
-        static void Append(StringBuilder sb, string title, List<string> items)
+        /// <summary>
+        /// 打印机房/教室节点下的直接子对象 + 世界包围盒。
+        ///
+        /// 【为什么需要】用户点那块黑的点不到任何东西，说明那里真的没有几何。
+        /// 那就得反过来查：这间教室本来有没有那面墙、是不是被关掉了。
+        /// 直接看 Hierarchy 要一层层展开，这里一次打全。
+        /// </summary>
+        [MenuItem("Tools/P26/③ 列出教室/机房节点下的对象", false, 102)]
+        public static void ListRoomHierarchy()
         {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("================ 教室/机房节点清单 ================");
+
+            Transform[] all = Object.FindObjectsOfType<Transform>(true);
+            List<Transform> rooms = new List<Transform>();
+            foreach (Transform t in all)
+                if (t.name.StartsWith("Class", System.StringComparison.Ordinal) &&
+                    t.parent != null)
+                    rooms.Add(t);
+
+            sb.AppendLine("匹配到 " + rooms.Count + " 个 'Class*' 节点");
+            foreach (Transform room in rooms)
+            {
+                if (room.name.IndexOf("Computer", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                    room.name.IndexOf("Teachers", System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                sb.AppendLine();
+                sb.AppendLine("▣ " + PathOf(room) + "   active=" + room.gameObject.activeSelf);
+
+                // 世界包围盒（把该节点下所有 Renderer 合起来）
+                Bounds b = new Bounds(room.position, Vector3.zero);
+                bool first = true;
+                int rendCount = 0;
+                foreach (Renderer rd in room.GetComponentsInChildren<Renderer>(true))
+                {
+                    rendCount++;
+                    if (first) { b = rd.bounds; first = false; }
+                    else b.Encapsulate(rd.bounds);
+                }
+                sb.AppendLine("   Renderer " + rendCount + " 个，世界包围盒 center=" +
+                              b.center.ToString("F2") + " size=" + b.size.ToString("F2"));
+
+                // 直接子对象（墙、地板、灯通常在这一层）
+                sb.AppendLine("   直接子对象 " + room.childCount + " 个：");
+                for (int i = 0; i < room.childCount && i < 60; i++)
+                {
+                    Transform c = room.GetChild(i);
+                    Renderer cr = c.GetComponent<Renderer>();
+                    string mark = "";
+                    if (cr == null) mark = "  (无 Renderer)";
+                    else if (!cr.enabled) mark = "  ★ Renderer 已关闭";
+                    else if (!c.gameObject.activeInHierarchy) mark = "  ★ 未激活";
+                    sb.AppendLine("     - " + c.name + mark);
+                }
+            }
+
+            sb.AppendLine("=================================================");
+            Debug.Log(sb.ToString());
+        }
+
+        static void Append(StringBuilder sb, string title, List<string> items)        {
             sb.AppendLine();
             sb.AppendLine("---- " + title + "：" + items.Count + " 个 ----");
             for (int i = 0; i < items.Count && i < 40; i++) sb.AppendLine("  " + items[i]);
