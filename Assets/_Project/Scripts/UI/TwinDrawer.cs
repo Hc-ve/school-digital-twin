@@ -225,19 +225,39 @@ namespace SchoolTwin.UI
             lr.sizeDelta = new Vector2(0f, 1f);
             lr.anchoredPosition = Vector2.zero;
 
-            string[] names = { "数据源", "录制", "帮助", "设置" };
+            // 工具行：第 3 个是"旧面板"——**迁移期的临时入口**。
+            // 旧面板的快捷键（F4/G/T/H）在 P1 已停用，但新模块页要到 P2~P4 才陆续接上，
+            // 这段时间如果完全打不开旧总控，用户就没法控设备、没法演示。
+            // 所以留一个口子：功能照旧，入口收敛到抽屉里。P6 删掉这个按钮。
+            string[] names = { "数据源", "录制", "旧面板", "帮助" };
             const float btnW = 72f;
-            float totalW = names.Length * btnW;
             float x = 0f;   // 左侧起排，右对齐留白 —— 抽屉宽度会变，用左对齐更稳
 
             for (int i = 0; i < names.Length; i++)
             {
                 string n = names[i];
+                Action act;
+                if (string.Equals(n, "旧面板", StringComparison.Ordinal)) act = ToggleLegacyPanel;
+                else act = () => TwinToast.Show(n + "：P2 接入");
+
                 TwinButton b = TwinButton.Create(row, n, TwinButtonStyle.Ghost, btnW, 36f,
-                    () => TwinToast.Show(n + "：P2 接入"), "Tool_" + n);
+                    act, "Tool_" + n);
                 TwinUIFactory.Place(b.Rect, x + 8f, 10f, btnW, 36f);
                 x += btnW;
             }
+        }
+
+        /// <summary>迁移期临时入口：直接开旧的总控面板（不经过它自己的快捷键）。</summary>
+        private void ToggleLegacyPanel()
+        {
+            TwinControlPanel legacy = FindObjectOfType<TwinControlPanel>(true);
+            if (legacy == null)
+            {
+                TwinToast.Show("旧总控面板未创建（TwinDetailPanel 未初始化）");
+                return;
+            }
+            legacy.Toggle();
+            TwinToast.Show("旧面板是迁移期临时入口，P6 移除");
         }
 
         // ================================================================ 首页
