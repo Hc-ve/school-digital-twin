@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,89 +8,106 @@ using SchoolTwin.Twin;
 namespace SchoolTwin.UI
 {
     /// <summary>
-    /// 【P28】抽屉首页（L1）：顶部三张概览卡 + 4×3 模块图标格。
+    /// 【P28】L1 总控面板（收纳面板第一层）。
     ///
-    /// ── 为什么首页不做"仪表盘" ──────────────────────────────────────
-    /// 调研结论：总控只放**入口**，细节在二级（渐进披露）。
-    /// 首页如果堆满图表，用户还是得先"找入口"，等于把原来的问题换个位置。
-    /// 这里只留三个数字（设备/在线/告警），让人一眼知道"系统是否正常"，
-    /// 然后点图标进模块。
+    /// ── 2026-10-29 修正：这一层只放"入口"，不放 5 个模块 ──────────────
+    /// 第一版把「数据监测/设备管理/电力管理/告警中心/数据统计」直接平铺在这一层，
+    /// 等于把中间那层"校园管理系统"跳过了 —— 不符合用户原始诉求：
+    /// ```
+    /// 点总控钮 → 总控面板 → 点「校园管理系统」→ 管理系统面板（内含 5 个模块）
+    /// ```
+    /// 现在这一层只有两个格子：校园管理系统（主入口）+ 天气系统（预留）。
+    /// 5 个模块在 `TwinSystemPage` 里以左侧 Tab 的形式展开。
     ///
-    /// ── 模块清单 ────────────────────────────────────────────────────
-    /// 5 个已实现模块 + 1 个天气预留位（灰显）。
-    /// 天气要和时间系统绑在一起做（用户 2026-10-28 明确要求），
-    /// 所以这里只留位置和说明，不实现内容。
+    /// ── 为什么上面还留三张概览卡 ────────────────────────────────────
+    /// 调研结论「总控只放入口」说的是**功能入口**，不是"什么信息都不给"。
+    /// 三个数字（设备/在线/告警）回答的是"现在系统正不正常"，
+    /// 不用进任何页面就能看到，这是总控面板该有的价值。
     /// </summary>
     public sealed class TwinHomePage : TwinPageBase
     {
-        public override string Title { get { return "校园总控"; } }
+        public override string Title { get { return "总控面板"; } }
         public override string Subtitle { get { return "1号教学楼 · 室内 + 室外路灯"; } }
+
+        /// <summary>点「校园管理系统」时回调（抽屉负责 Push 二级页）。</summary>
+        public Action OnOpenSystem;
 
         private TwinModuleGrid _grid;
         private Text _statDevice;
         private Text _statOnline;
         private Text _statAlarm;
         private float _nextRefresh;
+        private bool _built;
 
         public TwinModuleGrid Grid { get { return _grid; } }
 
-        // ---- 模块 key → 中文名（抽屉弹提示、P2 起路由都用它）----
-        private static readonly Dictionary<string, string> Names = new Dictionary<string, string>
-        {
-            { "monitor", "数据监测" },
-            { "device",  "设备管理" },
-            { "power",   "电力管理" },
-            { "alarm",   "告警中心" },
-            { "stats",   "数据统计" },
-            { "weather", "天气系统" },
-        };
-
-        public static string NameOf(string key)
-        {
-            string n;
-            return Names.TryGetValue(key, out n) ? n : key;
-        }
-
         // ---------------------------------------------------------------- 构建
 
-        public void BuildModules(Action<string> onPick)
+        /// <summary>
+        /// 在 `OnShow` 里构建，**不要**在 Push 之前构建。
+        ///
+        /// 上一版的 bug 就是这么来的：`BuildModules()` 在 `_stack.Push()` 之前调，
+        /// 而拉伸是在 Push 里做的 —— 那一刻页面还是 RectTransform 的默认尺寸，
+        /// 任何"读父节点宽度算居中"的逻辑都会算错（图标整组跑到抽屉外面）。
+        /// 现在网格虽然已改成固定尺寸布局、不再量父节点，
+        /// 但这个"构建时机"的约束仍然保留：OnShow 才是页面真正就位的时刻。
+        /// </summary>
+        public override void OnShow()
+        {
+            if (!_built)
+            {
+                _built = true;
+                BuildContent();
+            }
+            Refresh();
+            _nextRefresh = Time.unscaledTime + 0.5f;
+        }
+
+        private void BuildContent()
         {
             RectTransform root = transform as RectTransform;
             if (root == null) return;
 
             BuildStatRow(root);
 
-            // 网格容器：从概览卡下方开始，占满剩余高度
+            // 网格：固定尺寸，从概览卡下方 24 起排
             GameObject go = new GameObject("GridArea", typeof(RectTransform));
             go.transform.SetParent(root, false);
             RectTransform area = go.transform as RectTransform;
-            area.anchorMin = new Vector2(0f, 0f);
-            area.anchorMax = new Vector2(1f, 1f);
-            area.pivot = new Vector2(0f, 1f);
-            area.offsetMin = new Vector2(0f, 0f);
-            area.offsetMax = new Vector2(0f, -96f);   // 让开顶部三张卡
+            area.anchorMin = new Vector2(0.5f, 1f);
+            area.anchorMax = new Vector2(0.5f, 1f);
+            area.pivot = new Vector2(0.5f, 1f);
+            area.sizeDelta = TwinModuleGrid.GridSize;
+            area.anchoredPosition = new Vector2(0f, -104f);
 
             _grid = TwinModuleGrid.Create(area);
-            _grid.Picked = onPick;
-
-            // 注意：`Add` 的 onPick 传 null —— 回调统一走 `Picked`，
-            // 否则 TwinModuleGrid 会先调条目回调再调 Picked，一次点击触发两次。
-            _grid.Add("monitor", "数据监测", "监", true, null)
-                 .Add("device", "设备管理", "设", true, null)
-                 .Add("power", "电力管理", "电", true, null)
-                 .Add("alarm", "告警中心", "警", true, null)
-                 .Add("stats", "数据统计", "图", true, null)
+            _grid.Picked = OnGridPicked;
+            _grid.Add("system", "校园管理系统", "管", true, null)
                  // 天气：等时间系统一起做（用户 2026-10-28 要求），这里只留位
                  .Add("weather", "天气系统", "天", false, null);
-
             _grid.Build();
+        }
+
+        private void OnGridPicked(string key)
+        {
+            if (string.Equals(key, "system", StringComparison.Ordinal))
+            {
+                Action a = OnOpenSystem;
+                if (a != null) a();
+                return;
+            }
+            if (string.Equals(key, "weather", StringComparison.Ordinal))
+            {
+                TwinToast.Show("天气系统要和「时间系统」一起做，本轮只留入口");
+            }
         }
 
         private void BuildStatRow(RectTransform root)
         {
-            _statDevice = BuildStatCard(root, 12f, "设备总数", "—", TwinTheme.TextPrimary);
-            _statOnline = BuildStatCard(root, 140f, "在线", "—", TwinTheme.StatusNormal);
-            _statAlarm = BuildStatCard(root, 268f, "告警", "—", TwinTheme.StatusAlarm);
+            // 3 × 116 + 2 × 20 + 2 × 16 = 420，左右留边一致（原来 12/140/268 右边会空 36）
+            _statDevice = BuildStatCard(root, 16f, "设备总数", "—", TwinTheme.TextPrimary);
+            _statOnline = BuildStatCard(root, 152f, "在线", "—", TwinTheme.StatusNormal);
+            _statAlarm = BuildStatCard(root, 288f, "告警", "—", TwinTheme.StatusAlarm);
         }
 
         /// <summary>一张概览卡：标题 11 + 数字 22。返回数字的 Text 供刷新。</summary>
@@ -115,14 +132,9 @@ namespace SchoolTwin.UI
 
         // ---------------------------------------------------------------- 刷新
 
-        public override void OnShow()
-        {
-            Refresh();
-            _nextRefresh = Time.unscaledTime + 0.5f;
-        }
-
         private void Update()
         {
+            if (!_built) return;
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.5f;
             Refresh();

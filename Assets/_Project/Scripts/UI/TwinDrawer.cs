@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -49,7 +49,6 @@ namespace SchoolTwin.UI
         private RectTransform _root;        // 抽屉本体（右缘锚定）
         private RectTransform _content;     // 页栈容器
         private TwinPageStack _stack;
-        private TwinModuleGrid _homeGrid;
 
         private Text _title;
         private Text _subtitle;
@@ -138,11 +137,34 @@ namespace SchoolTwin.UI
 
         private void BuildShell()
         {
-            // 抽屉底：只有左侧圆角（右侧贴边）
+            // 抽屉底：上下渐变（上深下更深），只有左侧圆角（右侧贴边）。
+            // 纯单色会显得像"贴了一张纸"，一点纵向渐变就有"浮在场景上"的层次。
             TwinRoundedRect bg = TwinUIFactory.Rounded(_root, "Bg", TwinTheme.R16,
-                TwinTheme.ScrimBase, TwinTheme.ScrimBase,
+                new Color(0.055f, 0.070f, 0.098f, 0.985f),
+                new Color(0.035f, 0.045f, 0.065f, 0.99f),
                 TwinTheme.WithAlpha(TwinTheme.Accent, 0.22f), 1f, true);
             TwinUIFactory.Stretch(bg.rectTransform);
+
+            // 左侧 2 单位主色竖边：面板从屏幕边缘"长出来"的暗示，
+            // 也是深色面板和深色场景之间的唯一分界线（不加的话边界会糊在一起）。
+            Image edge = TwinUIFactory.Block(_root, "AccentEdge",
+                TwinTheme.WithAlpha(TwinTheme.Accent, 0.38f), false);
+            RectTransform er = edge.rectTransform;
+            er.anchorMin = new Vector2(0f, 0f);
+            er.anchorMax = new Vector2(0f, 1f);
+            er.pivot = new Vector2(0f, 0.5f);
+            er.sizeDelta = new Vector2(2f, 0f);
+            er.anchoredPosition = Vector2.zero;
+
+            // 顶部一条极淡的高光（面板顶边受光的感觉）
+            Image top = TwinUIFactory.Block(_root, "TopGlow",
+                new Color(1f, 1f, 1f, 0.06f), false);
+            RectTransform tr = top.rectTransform;
+            tr.anchorMin = new Vector2(0f, 1f);
+            tr.anchorMax = new Vector2(1f, 1f);
+            tr.pivot = new Vector2(0.5f, 1f);
+            tr.sizeDelta = new Vector2(0f, 1f);
+            tr.anchoredPosition = Vector2.zero;
         }
 
         private void BuildHeader()
@@ -261,7 +283,7 @@ namespace SchoolTwin.UI
             TwinToast.Show("旧面板是迁移期临时入口，P6 移除");
         }
 
-        // ================================================================ 首页
+        // ================================================================ 页面
 
         private void BuildHomePage()
         {
@@ -269,15 +291,37 @@ namespace SchoolTwin.UI
             go.transform.SetParent(_content, false);
 
             TwinHomePage page = go.AddComponent<TwinHomePage>();
-            page.BuildModules((key) =>
-            {
-                // P1 只做骨架：点模块先给提示，P2 起逐个换成真实页面
-                TwinToast.Show("「" + TwinHomePage.NameOf(key) + "」将在 P2~P5 接入");
-            });
+            page.OnOpenSystem = OpenSystemPage;
 
-            _homeGrid = page.Grid;
             _homePage = page;
+            _stack.Push(page);   // Push 里会 Stretch；页面内容在 OnShow 才构建
+        }
+
+        /// <summary>L1 → L2：打开「校园管理系统」面板。</summary>
+        private void OpenSystemPage()
+        {
+            TwinSystemPage page = GetComponentInChildren<TwinSystemPage>(true);
+            if (page == null)
+            {
+                GameObject go = new GameObject("SystemPage", typeof(RectTransform));
+                go.transform.SetParent(_content, false);
+                page = go.AddComponent<TwinSystemPage>();
+                page.OnModulePicked = (key) => TwinToast.Show("「" + ModuleName(key) + "」在 P2~P5 接入");
+            }
             _stack.Push(page);
+        }
+
+        private static string ModuleName(string key)
+        {
+            switch (key)
+            {
+                case "monitor": return "数据监测";
+                case "device": return "设备管理";
+                case "power": return "电力管理";
+                case "alarm": return "告警中心";
+                case "stats": return "数据统计";
+                default: return key;
+            }
         }
 
         // ================================================================ 开 / 关
@@ -296,8 +340,12 @@ namespace SchoolTwin.UI
             _widthTarget = WidthHome;
 
             TwinUIState.Set(TwinUILayer.Drawer);
-            if (_trigger != null) _trigger.SetOpen(true);
             RefreshSummary(true);
+
+            // 触发钮和抽屉右上角的关闭键位置重叠（都在右上角），
+            // 抽屉打开时把钮收起来 —— 关闭由抽屉自己的 × 和 Esc 负责。
+            // 《异环》也是面板展开后入口图标被面板盖住。
+            if (_trigger != null) _trigger.gameObject.SetActive(false);
         }
 
         public void Close()
@@ -307,23 +355,21 @@ namespace SchoolTwin.UI
             _slideTarget = 0f;
 
             // 关抽屉 = 清栈回首页（下次打开从首页开始，不会停在上次的深层页）
-            if (_stack != null) _stack.Clear();
-            if (_homeGrid != null) _stack.Push(FindHomePage());
+            if (_stack != null)
+            {
+                _stack.Clear();
+                if (_homePage != null) _stack.Push(_homePage);
+            }
 
             TwinUIState.Reset();
-            if (_trigger != null) _trigger.SetOpen(false);
+            if (_trigger != null)
+            {
+                _trigger.gameObject.SetActive(true);
+                _trigger.SetOpen(false);
+            }
         }
 
         private TwinPageBase _homePage;
-        private TwinPageBase FindHomePage()
-        {
-            if (_homePage == null)
-            {
-                TwinHomePage p = _content.GetComponentInChildren<TwinHomePage>(true);
-                if (p != null) _homePage = p;
-            }
-            return _homePage;
-        }
 
         private void OnBackClicked()
         {

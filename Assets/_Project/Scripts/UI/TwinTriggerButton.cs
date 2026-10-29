@@ -6,26 +6,29 @@ using UnityEngine.UI;
 namespace SchoolTwin.UI
 {
     /// <summary>
-    /// 【P28】右缘触发钮：抽屉的唯一入口，兼告警角标。
+    /// 【P28】总控入口钮 —— 屏幕**右上角**的图标钮，点击呼出收纳面板。
     ///
-    /// ── 为什么贴在屏幕右缘、垂直居中 ────────────────────────────────
-    /// 参考《异环》的手机式面板是从右侧呼出的，触发钮在右缘符合心理模型。
-    /// 垂直居中而不是右上角：右上角要留给告警/小地图，且居中在 16:9 下离手最近。
+    /// ── 2026-10-29 改版：从"右缘竖条"改成"右上角图标钮" ──────────────
+    /// 第一版做成了贴右缘、竖排三字「总控台」的长条。用户对照《异环》指出不对：
+    /// 异环的功能入口是**右上角一排中等尺寸的图标**（纯图标、无文字、手机 App 图标质感），
+    /// 点击才弹出收纳面板。这里改成同款：
+    ///   · 48×48 圆角方块（radius 12，和图标格里的图标同一套圆角）
+    ///   · 只放一个汉字，不带文字标签
+    ///   · 右上角留 16 边距，和屏幕边缘保持呼吸
+    ///   · 告警角标挂在钮的右上角
     ///
-    /// ── 为什么悬停要往外伸 8 单位 ──────────────────────────────────
-    /// 贴边元素如果完全静止，玩家会觉得"点不动"。伸出一点点是最便宜的"可交互"暗示，
-    /// 比改颜色更直观（而且不会和"选中"的青蓝混淆）。
+    /// ── 为什么不用图标字体/图片 ────────────────────────────────────
+    /// 项目零美术资源，汉字「控」一眼能懂，且和面板里其他图标的做法一致。
     ///
     /// ── 为什么角标是"数量"而不是红点 ───────────────────────────────
-    /// 调研案例 2/5 的经验：运维需要知道"有几条"，不是"有没有"。
-    /// 只有 1 个红点的话，2 条告警和 20 条告警看起来一样。
+    /// 运维需要知道"有几条"，不是"有没有" —— 2 条和 20 条看起来不该一样。
     /// </summary>
     public sealed class TwinTriggerButton : MonoBehaviour,
         IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
     {
-        private const float Width = 44f;
-        private const float Height = 132f;
-        private const float HoverExtend = 8f;
+        private const float Size = 48f;
+        private const float MarginRight = 16f;
+        private const float MarginTop = 16f;
 
         private RectTransform _root;
         private TwinRoundedRect _bg;
@@ -34,7 +37,7 @@ namespace SchoolTwin.UI
         private RectTransform _badge;
 
         private bool _hover;
-        private float _extend;          // 当前外伸量（0 ~ HoverExtend）
+        private bool _open;
         private int _alarmCount = -1;
 
         private Action _onClick;
@@ -56,37 +59,35 @@ namespace SchoolTwin.UI
         {
             _root = transform as RectTransform;
 
-            // 贴右缘：anchor 右上，pivot 右中，x = 0 表示紧贴边
-            _root.anchorMin = new Vector2(1f, 0.5f);
-            _root.anchorMax = new Vector2(1f, 0.5f);
-            _root.pivot = new Vector2(1f, 0.5f);
-            _root.sizeDelta = new Vector2(Width, Height);
-            _root.anchoredPosition = Vector2.zero;
+            // 右上角：anchor 右上 + pivot 右上，向右上各留 16
+            _root.anchorMin = new Vector2(1f, 1f);
+            _root.anchorMax = new Vector2(1f, 1f);
+            _root.pivot = new Vector2(1f, 1f);
+            _root.sizeDelta = new Vector2(Size, Size);
+            _root.anchoredPosition = new Vector2(-MarginRight, -MarginTop);
 
-            // 只有左侧圆角看起来像"从边上长出来的"
             _bg = TwinUIFactory.Rounded(_root, "Bg", TwinTheme.R12,
-                TwinTheme.PanelTop, TwinTheme.PanelBottom, TwinTheme.Border, 1f, true);
+                TwinTheme.WithAlpha(TwinTheme.Accent, 0.18f),
+                TwinTheme.WithAlpha(TwinTheme.Accent, 0.10f),
+                TwinTheme.WithAlpha(TwinTheme.Accent, 0.55f), 1f, true);
             TwinUIFactory.Stretch(_bg.rectTransform);
 
-            // 竖排三字："总控台"
-            _glyph = TwinUIFactory.Label(_root, "Glyph", TwinTheme.FsBodyStrong,
-                TextAnchor.MiddleCenter, TwinTheme.TextSecondary);
+            _glyph = TwinUIFactory.Label(_root, "Glyph", 22,
+                TextAnchor.MiddleCenter, TwinTheme.Accent);
             TwinUIFactory.Stretch(_glyph.rectTransform);
-            _glyph.text = "总\n控\n台";
-            _glyph.lineSpacing = 1.15f;
+            _glyph.text = "控";
 
-            // 告警角标：左上角的小圆 + 数字
-            TwinRoundedRect badgeBg = TwinUIFactory.Rounded(_root, "Badge", 9f,
+            // 告警角标：挂在钮的右上角（一半在钮外，视觉上"挂"在角上）
+            TwinRoundedRect badgeBg = TwinUIFactory.Rounded(_root, "Badge", 8f,
                 TwinTheme.StatusAlarm, TwinTheme.StatusAlarm,
-                TwinTheme.WithAlpha(Color.white, 0.8f), 1f, false);
+                TwinTheme.WithAlpha(Color.white, 0.85f), 1f, false);
             _badge = badgeBg.rectTransform;
-            _badge.anchorMin = _badge.anchorMax = new Vector2(0f, 1f);
+            _badge.anchorMin = _badge.anchorMax = new Vector2(1f, 1f);
             _badge.pivot = new Vector2(0.5f, 0.5f);
             _badge.sizeDelta = new Vector2(18f, 18f);
-            _badge.anchoredPosition = new Vector2(6f, -10f);
+            _badge.anchoredPosition = new Vector2(2f, 2f);
 
-            _badgeText = TwinUIFactory.Label(_badge, "N", TwinTheme.FsCaption,
-                TextAnchor.MiddleCenter, Color.white);
+            _badgeText = TwinUIFactory.Label(_badge, "N", 10, TextAnchor.MiddleCenter, Color.white);
             TwinUIFactory.Stretch(_badgeText.rectTransform);
 
             badgeBg.gameObject.SetActive(false);
@@ -94,7 +95,6 @@ namespace SchoolTwin.UI
 
         // ---------------------------------------------------------------- 对外
 
-        /// <summary>更新告警角标。0 或负数 = 隐藏。</summary>
         public void SetAlarmCount(int count)
         {
             if (count == _alarmCount) return;
@@ -108,47 +108,53 @@ namespace SchoolTwin.UI
             {
                 string t = count > 99 ? "99+" : count.ToString();
                 if (!string.Equals(_badgeText.text, t, StringComparison.Ordinal)) _badgeText.text = t;
-                // 两位数要宽一点，不然挤
                 if (_badge != null) _badge.sizeDelta = new Vector2(count > 9 ? 24f : 18f, 18f);
             }
         }
 
-        /// <summary>抽屉打开时按钮变"收起"语义（视觉上高亮）。</summary>
+        /// <summary>面板打开时钮变成"收起"语义（实心高亮）。</summary>
         public void SetOpen(bool open)
         {
-            if (_bg == null) return;
-            if (open)
-            {
-                _bg.SetFill(TwinTheme.AccentDim);
-                _bg.SetBorder(TwinTheme.AccentLine, 1f);
-                if (_glyph != null) _glyph.color = TwinTheme.Accent;
-            }
-            else
-            {
-                _bg.SetFill(TwinTheme.PanelTop, TwinTheme.PanelBottom);
-                _bg.SetBorder(TwinTheme.Border, 1f);
-                if (_glyph != null) _glyph.color = TwinTheme.TextSecondary;
-            }
+            if (_open == open) return;
+            _open = open;
+            ApplyVisual();
         }
 
-        // ---------------------------------------------------------------- 悬停外伸
+        // ---------------------------------------------------------------- 视觉
 
-        private void Update()
+        private void ApplyVisual()
         {
-            float target = _hover ? HoverExtend : 0f;
-            if (Mathf.Abs(_extend - target) < 0.05f) return;
+            if (_bg == null) return;
 
-            // 120ms 内走完，用 unscaledDeltaTime（暂停时也要能点）
-            _extend = Mathf.MoveTowards(_extend, target,
-                HoverExtend * Time.unscaledDeltaTime / TwinTheme.Fast);
+            if (_open)
+            {
+                // 打开态：实心青蓝，一眼看出"再点一次会收起"
+                _bg.SetFill(TwinTheme.Accent, Color.Lerp(TwinTheme.Accent, Color.black, 0.25f));
+                _bg.SetBorder(TwinTheme.WithAlpha(Color.white, 0.55f), 1f);
+                if (_glyph != null) _glyph.color = new Color(0.04f, 0.08f, 0.12f, 1f);
+                return;
+            }
 
-            // 贴右缘：pivot 在右边，x 往左为负 → 外伸 = 往左挪
-            if (_root != null) _root.anchoredPosition = new Vector2(-_extend, 0f);
+            float boost = _hover ? 0.10f : 0f;
+            _bg.SetFill(TwinTheme.WithAlpha(TwinTheme.Accent, 0.18f + boost),
+                        TwinTheme.WithAlpha(TwinTheme.Accent, 0.10f + boost));
+            _bg.SetBorder(TwinTheme.WithAlpha(TwinTheme.Accent, _hover ? 0.85f : 0.55f), 1f);
+            if (_glyph != null) _glyph.color = TwinTheme.Accent;
         }
 
-        public void OnPointerEnter(PointerEventData eventData) { _hover = true; }
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (_hover) return;
+            _hover = true;
+            ApplyVisual();
+        }
 
-        public void OnPointerExit(PointerEventData eventData) { _hover = false; }
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (!_hover) return;
+            _hover = false;
+            ApplyVisual();
+        }
 
         public void OnPointerClick(PointerEventData eventData)
         {
