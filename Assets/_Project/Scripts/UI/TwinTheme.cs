@@ -21,6 +21,27 @@ namespace SchoolTwin.UI
     /// ── 为什么不直接用 URP/URP 的 Color 属性 ─────────────────────────
     /// 本项目是**内置管线**，全部 UGUI 程序化绘制，颜色就是顶点色，
     /// 不存在材质属性可继承，只能靠统一常量。
+    ///
+    /// ── P29 补充（科技风统一）──────────────────────────────────────
+    /// 新增主色渐变两端（AccentHi/AccentDeep）、发光双层（GlowOuter/GlowInner）、
+    /// 底纹三件套（GridLine/GridMajor/TopHighlight）、描边四件套
+    /// （StrokeHair/StrokeAccent/BarAccent/BarStatus）、呼吸周期 Breathe。
+    /// 描边类 token 是「颜色 + 线宽」的 StrokeStyle 结构体 —— 分开写两个常量
+    /// 迟早会出现「1px 配 AccentLine、2px 配 Border」这种错配。
+    /// 已有的字段名一个都没改，调用点不受影响。
+    ///
+    /// ── 【硬约定】Linear 色彩空间：半透明 token 必须按「屏幕取色」标定 ─────────
+    /// 本工程 `m_ActiveColorSpace = 1`（Linear），UI 混色在线性空间里做，
+    /// 同一个 alpha 上屏后的观感比设计稿上的 sRGB 百分比亮 2~3 倍。实测（1000×720 截图取色）：
+    ///   alpha 0.16 → 屏幕约 102/255；alpha 0.37 → 约 148/255。
+    /// 所以：
+    ///   ① **禁止**把 sRGB 稿上的 alpha 百分比直接抄进代码；
+    ///   ② 所有半透明 token 以「截图取色的亮度差（Δ/255）」标定，不认百分比；
+    ///   ③ 新增半透明 token 必须附一张取色验证截图，写明采样点与 Δ 值；
+    ///   ④ 烘进 8bit 贴图的 token（网格、渐变）实际生效值是 round(alpha×255)/255，
+    ///      相邻两档可能差 5 个 Δ —— 标定时要按「档位」反解，别按小数点连续微调。
+    /// 参考量级（面板底 ≈ 22/255 时的 Δ）：细网格 6~12、主网格 14~22、顶部高光 28~40。
+    /// 这条约定对 P29-2 ~ P29-5 同样有效，别在后几轮又掏出个 0.1 的描边。
     /// </summary>
     public static class TwinTheme
     {
@@ -32,7 +53,13 @@ namespace SchoolTwin.UI
         // ---- 面板（沿用既有，不动）----
         public static readonly Color PanelTop = new Color(0.078f, 0.106f, 0.157f, 0.94f);
         public static readonly Color PanelBottom = new Color(0.055f, 0.075f, 0.114f, 0.96f);
-        public static readonly Color Border = new Color(0.165f, 0.212f, 0.282f, 0.80f);
+
+        /// <summary>
+        /// 结构线 / hairline 1px。P29-2 起改为「白 @0.006」（实测 Δ11.5），
+        /// 不再是设计稿的蓝灰 #2A3648@0.80 —— 后者在线性空间里是一道实打实的亮边。
+        /// 影响面：TwinButton / TwinHomePage / TwinSystemPage 的 1px 描边会一起变淡，这是 P29 的预期。
+        /// </summary>
+        public static readonly Color Border = WithAlpha(Color.white, 0.006f);
 
         // ---- 卡片：比面板亮半档，形成"面板 > 卡片"的层次 ----
         public static readonly Color CardTop = new Color(0.098f, 0.129f, 0.184f, 0.92f);
@@ -40,8 +67,35 @@ namespace SchoolTwin.UI
 
         // ---- 主色：选中 / 高亮 / 进度 / 图表主线 ----
         public static readonly Color Accent = new Color(0.20f, 0.75f, 1.00f, 1f);
-        public static readonly Color AccentDim = new Color(0.20f, 0.75f, 1.00f, 0.16f);
+
+        /// <summary>
+        /// 选中行底 / 选中 Tab 底。P29-2 标定：Accent @0.035（亮度差 Δ18）。
+        /// **不要按 R 通道标** —— 主色 R 分量最低，按 R 口径要 alpha 0.30 才达标，
+        /// 那一档上屏是一整条饱和蓝（见 Docs 附录 A 的色块证据），和"选中行"的语义不符。
+        /// </summary>
+        public static readonly Color AccentDim = WithAlpha(Accent, 0.035f);
+
         public static readonly Color AccentLine = new Color(0.20f, 0.75f, 1.00f, 0.55f);
+
+        /// <summary>主色渐变亮端 #6FDCFF。**只给图标底 / 进度条**，不要当文字色用。</summary>
+        public static readonly Color AccentHi = new Color(0.435f, 0.863f, 1.00f, 1f);
+
+        /// <summary>主色渐变暗端 #1E90FF。与 AccentHi 配对做垂直渐变（只能垂直）。</summary>
+        public static readonly Color AccentDeep = new Color(0.118f, 0.565f, 1.00f, 1f);
+
+        // ---- 三层发光公式（§3.4）：外层柔光 + 内层描边，零 bloom ----
+        /// <summary>发光外层：Accent @0.008（实测 Δ5.6，半径 +3、描边 3px）。再高就成雾，再低就没有"光"。</summary>
+        public static readonly Color GlowOuter = WithAlpha(Accent, 0.008f);
+
+        /// <summary>发光内层：Accent @0.35（实测 Δ75.8，半径不变、描边 1px）。告警呼吸只动这一层。</summary>
+        public static readonly Color GlowInner = WithAlpha(Accent, 0.35f);
+
+        // ---- 入口格（P29-3）----
+        /// <summary>主入口「校园管理系统」低透明底：Accent @0.030，实测 Δ14.8（目标 12–18）。</summary>
+        public static readonly Color EntryFill = WithAlpha(Accent, 0.030f);
+
+        /// <summary>入口图标底（56×56 R14）：Accent @0.050，实测 Δ20.4（目标 18–24）。</summary>
+        public static readonly Color EntryIconFill = WithAlpha(Accent, 0.050f);
 
         // ---- 状态色（与 TwinStatusPalette 同值，那边后续改为转发到这里）----
         public static readonly Color StatusUnknown = new Color(0.35f, 0.38f, 0.45f, 1f);
@@ -54,17 +108,107 @@ namespace SchoolTwin.UI
         /// <summary>告警橙。**只给告警用**，不要拿来当强调色。</summary>
         public static readonly Color Warn = StatusWarning;
 
+        /// <summary>
+        /// 胶囊底：状态色 @0.040（实测 Δ18，绿色基准）。
+        /// 注意红色 StatusAlarm 亮度低，同样 alpha 下 Δ 会比绿色低 ~35%，
+        /// 需要等亮的话由调用方传 `CapsuleFill(status)` 后再单独抬，不要改这里。
+        /// </summary>
+        public static Color CapsuleFill(Color status)
+        {
+            return WithAlpha(status, 0.040f);
+        }
+
+        /// <summary>
+        /// 告警卡描边：StatusAlarm @0.55，实测 Δ≈53（目标 45–60，本轮自定 —— 需求只说"Alarm@标定值"）。
+        /// 呼吸时只动这一层的 canvasRenderer alpha（0.55↔1.0），**不要**每帧调 SetBorder ——
+        /// 那会触发 SetVerticesDirty，一秒 60 次重建网格，正好撞在 §6.2-7 的性能红线上。
+        /// </summary>
+        public static readonly Color AlarmStroke = WithAlpha(StatusAlarm, 0.55f);
+
         // ---- 文字三级 ----
         public static readonly Color TextPrimary = new Color(0.94f, 0.96f, 0.99f, 1f);
         public static readonly Color TextSecondary = new Color(0.62f, 0.69f, 0.79f, 1f);
         public static readonly Color TextMuted = new Color(0.46f, 0.52f, 0.61f, 1f);
 
         // ---- 交互态（白色叠加，任何底色上都能用）----
-        public static readonly Color Divider = new Color(1f, 1f, 1f, 0.10f);
+        // 【P29-2 标定】按亮度差 Δ 反解，不再是设计稿的 sRGB 百分比（实测见附录 A）：
+        //   Divider Δ6.5 / Hover Δ11.5。Pressed / Track / Disabled 本轮没进标定清单，暂留原值。
+        public static readonly Color Divider = WithAlpha(Color.white, 0.005f);
         public static readonly Color Track = new Color(1f, 1f, 1f, 0.09f);
-        public static readonly Color Hover = new Color(1f, 1f, 1f, 0.08f);
+        public static readonly Color Hover = WithAlpha(Color.white, 0.006f);
         public static readonly Color Pressed = new Color(1f, 1f, 1f, 0.14f);
         public static readonly Color Disabled = new Color(1f, 1f, 1f, 0.04f);
+
+        // ---- 面板底纹（§6.2-1）：24 单位细网格 + 120 单位主网格 ----
+        // 【按屏幕取色标定，不是抄设计稿百分比】见类注释的硬约定。
+        // 三个值的验收区间（Δ = 采样点亮度 − 面板底色亮度，面板底取面板上下两点均值 22.6/255）：
+        //   细网格 6~12 / 主网格 14~22 / 顶部高光 28~40 —— 实测 7.5 / 16.0 / 32.1，全部落在区间内。
+        // 注意：网格线是烘进 8bit 贴图的，实际生效值是 round(alpha×255)/255，
+        // 所以 0.004 与 0.006 会分别落到 1/255 与 2/255 两档（Δ7.5 与 Δ12.7），别以为能连续微调。
+        /// <summary>细网格线：白 @0.004（烘图后 = 1/255，实测 Δ7.5/255）。由 TwinPaint.GridSprite 烘进贴图。</summary>
+        public static readonly Color GridLine = WithAlpha(Color.white, 0.004f);
+
+        /// <summary>主网格线：白 @0.012（烘图后 = 3/255，实测 Δ16.0/255）。每 120 单位一条。</summary>
+        public static readonly Color GridMajor = WithAlpha(Color.white, 0.012f);
+
+        /// <summary>面板顶部 1px 高光：白 @0.028（顶点色，不量化；实测 Δ28~32/255）。</summary>
+        public static readonly Color TopHighlight = WithAlpha(Color.white, 0.028f);
+
+        /// <summary>
+        /// 图表内部网格线（横向 1px），顶点色。**图表专用**，和面板底纹 GridLine 分家：
+        /// GridLine 只服务 TwinPaint.GridSprite 烘的那张贴图，画在图表里会跟卡片底纹打架。
+        /// 数值按 Δ11.5 标定 —— 需求里写的 0.09 实测 Δ≈64，比卡片描边还亮，会盖过折线。
+        /// </summary>
+        public static readonly Color ChartGrid = WithAlpha(Color.white, 0.006f);
+
+        /// <summary>
+        /// 实时动态的竖线（时间轴主干）。实测 Δ11.5（目标 10–14）。
+        /// 比 Divider（Δ6.5）实一档：Divider 是"分隔"，这条是"时间轴"，得看得出是一条线。
+        /// </summary>
+        public static readonly Color TimelineSpine = WithAlpha(Color.white, 0.006f);
+
+        // ================================================================ 描边 / 色条（§3.3）
+
+        /// <summary>
+        /// 「颜色 + 线宽」成对出现，避免调用方自己拼 1f/2f/3f 又拼错色。
+        /// 用 `TwinTheme.StrokeHair.Color` / `.Width` 取值。
+        /// </summary>
+        public readonly struct StrokeStyle
+        {
+            public readonly Color Color;
+            public readonly float Width;
+
+            public StrokeStyle(Color color, float width)
+            {
+                Color = color;
+                Width = Mathf.Max(0f, width);
+            }
+
+            /// <summary>给 Image / TwinRoundedRect 用的一行取值：`SetBorder(s.Color, s.Width)`。</summary>
+            public void ApplyTo(TwinRoundedRect target)
+            {
+                if (target == null) return;
+                target.SetBorder(Color, Width);
+            }
+        }
+
+        /// <summary>结构线：1px Border。所有卡片 / 行的默认描边。</summary>
+        public static readonly StrokeStyle StrokeHair = new StrokeStyle(Border, 1f);
+
+        /// <summary>选中描边：1px Accent@0.55。**只给选中态 / 主入口**。</summary>
+        public static readonly StrokeStyle StrokeAccent = new StrokeStyle(AccentLine, 1f);
+
+        /// <summary>抽屉左缘竖条：2px Accent@0.38。面板唯一的「边界信号」，别处不要复用。</summary>
+        public static readonly StrokeStyle BarAccent = new StrokeStyle(WithAlpha(Accent, 0.38f), 2f);
+
+        /// <summary>状态色条宽度：3px。颜色由调用方按状态传入（`BarStatus(Color)`）。</summary>
+        public const float BarStatusWidth = 3f;
+
+        /// <summary>3px 状态色条。卡片 / KPI / 列表行左侧，颜色 = 该行状态色。</summary>
+        public static StrokeStyle BarStatus(Color statusColor)
+        {
+            return new StrokeStyle(statusColor, BarStatusWidth);
+        }
 
         // ================================================================ 字号（10 档 → 6 档）
 
@@ -74,6 +218,13 @@ namespace SchoolTwin.UI
         public const int FsSubtitle = 17;     // 区块标题、模块名
         public const int FsTitle = 22;        // 页面标题、大数值
         public const int FsDisplay = 28;      // 首页 KPI 数字
+
+        /// <summary>
+        /// 9 号：时间线副文案 / 时间戳（文档 §4.1 写 9.5）。
+        /// 为什么是 9 不是 9.5：UGUI 的 legacy `Text.fontSize` 是 **int**，9.5 根本表达不出来；
+        /// 换 TMP 才能用小数。这是 6 档之外的唯一例外，只给"时间戳/两行小字"用。
+        /// </summary>
+        public const int FsMicro = 9;
 
         // ================================================================ 圆角（3 套 → 4 token）
 
@@ -102,6 +253,9 @@ namespace SchoolTwin.UI
         /// <summary>抽屉滑入 / 滑出。</summary>
         public const float DrawerIn = 0.24f;
         public const float DrawerOut = 0.18f;
+
+        /// <summary>告警呼吸周期（秒）：alpha 0.55↔1.0，sin 驱动，**只动描边层**。</summary>
+        public const float Breathe = 2.0f;
 
         // ================================================================ 缓动
 

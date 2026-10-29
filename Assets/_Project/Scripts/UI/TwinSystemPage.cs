@@ -2,65 +2,95 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using SchoolTwin.Core;
+using SchoolTwin.Twin;
 
 namespace SchoolTwin.UI
 {
     /// <summary>
-    /// 【P28】L2 校园管理系统面板 —— 5 个功能模块在这里展开。
+    /// 【P29-4】L2 校园管理系统：左轨 168 + 右区 440。
     ///
-    /// ── 为什么用"左侧 Tab + 右侧内容"而不是再来一层图标格 ──────────────
-    /// 用户原话是"管理系统分为多个功能模块**展开**设计"。
-    /// "展开"意味着在同一块面板里切换，不是再点一次图标进第三层。
-    /// 调研也支持这个选择：Siemens Desigo CC / EcoStruxure 都是
-    /// "左侧导航树 + 右侧工作区"，运维要的是"一眼看到模块全貌 + 快速横向切换"。
+    /// ── 结构（§4.2）────────────────────────────────────────────────
+    /// ```
+    /// ┌──────────┬────────────────────────────────────┐
+    /// │ 数据监测▌ │ 模块头 17 + 说明 11                 │
+    /// │ 设备管理  │ [KPI 216×88][KPI 216×88]           │  右区 x=184 宽 440
+    /// │ 电力管理  │ [KPI 216×88][KPI 216×88]           │
+    /// │ 告警中心  │ [楼层健康 440×88]                   │
+    /// │ 数据统计  │ [异常 Top3 3×40 gap 6]              │
+    /// └──────────┴────────────────────────────────────┘
+    ///   左轨 168（Tab 152×44，gap 4）
+    /// ```
     ///
-    /// 图标格适合"入口少、每次只进一个"的场景（L1 总控就是这样）；
-    /// 一旦进入"同一个系统的多个功能"，Tab 才是对的 —— 切换成本从 2 次点击降到 1 次。
+    /// ── 选中态为什么必须"三件套"──────────────────────────────────
+    /// `AccentDim` 现在是 Δ18 的极淡蓝（P29-2 标定的），单靠底色**看不出选中** ——
+    /// 在深色面板上那点蓝跟"稍微亮一点"没区别。所以：
+    ///   ① AccentDim 底 ② 左缘 3px 主色竖条 ③ 文字 TextPrimary
+    /// 三个一起上才成立，少一个就会有人问"我现在在哪个模块"。
     ///
-    /// ── 为什么内容区现在是占位 ──────────────────────────────────────
-    /// 5 个模块的页面在 P2~P5 逐个实现。这里先搭好壳：
-    /// Tab 能切、标题描述都对、内容区有明确的"待接入"提示，
-    /// 保证 P1 结束时用户能看到完整的信息架构，而不是 5 个空白页。
+    /// ── 只有「数据监测」有内容 ────────────────────────────────────
+    /// 其余四页走 `TwinEmptyState`，说明里写清 P3/P4/P5 接入 + 接入后显示什么。
     /// </summary>
     public sealed class TwinSystemPage : TwinPageBase
     {
         public override string Title { get { return "校园管理系统"; } }
-        public override string Subtitle { get { return "5 个功能模块 · 数据 / 设备 / 电力 / 告警 / 统计"; } }
+        public override string Subtitle { get { return "1号教学楼 · 5 个模块"; } }
 
-        private const float TabW = 132f;
-        private const float TabH = 52f;
-        private const float TabGap = 6f;
-        private const float Pad = 12f;
+        public Action<string> OnModulePicked;
 
-        private sealed class Module
+        // ---- 左轨 ----
+        private const float RailX = 8f;
+        private const float TabW = 152f;
+        private const float TabH = 44f;
+        private const float TabGap = 4f;
+
+        // ---- 右区 ----
+        private const float RightX = 184f;
+        private const float RightW = 440f;
+        private const float CardW = 216f;
+        private const float CardH = 88f;
+
+        private sealed class ModuleDef
         {
             public string Key;
             public string Name;
             public string Glyph;
             public string Desc;
+            public string Phase;      // 空状态里写的接入批次
+            public string AfterText;  // 接入后这里显示什么
         }
 
-        private static readonly Module[] Modules =
+        private static readonly ModuleDef[] Modules =
         {
-            new Module { Key = "monitor", Name = "数据监测", Glyph = "监",
+            new ModuleDef { Key = "monitor", Name = "数据监测", Glyph = "监",
                 Desc = "全场景设备实时数据：综合概览 + 单设备详情（用电量 / 功率 / 温度…）" },
-            new Module { Key = "device",  Name = "设备管理", Glyph = "设",
-                Desc = "设备台账与开关控制，按「场景-位置-类型-序号」统一编号，确保无遗漏" },
-            new Module { Key = "power",   Name = "电力管理", Glyph = "电",
-                Desc = "分级停电：整层批量分合闸 / 单个场景（如机房）独立停电" },
-            new Module { Key = "alarm",   Name = "告警中心", Glyph = "警",
-                Desc = "异常精准定位 + 单台设备全链路追溯（通知 / 报文 / 日志）" },
-            new Module { Key = "stats",   Name = "数据统计", Glyph = "图",
-                Desc = "全量设备数据转可视化大屏统计：趋势 / 占比 / 排行" },
+            new ModuleDef { Key = "device", Name = "设备管理", Glyph = "设",
+                Desc = "设备台账与开关控制，按「场景-位置-类型-序号」统一编号",
+                Phase = "P3", AfterText = "接入后这里显示全部设备的台账与开关控制" },
+            new ModuleDef { Key = "power", Name = "电力管理", Glyph = "电",
+                Desc = "分级停电：整层批量分合闸 / 单个场景（如机房）独立停电",
+                Phase = "P4", AfterText = "接入后这里显示分级回路与批量分合闸" },
+            new ModuleDef { Key = "alarm", Name = "告警中心", Glyph = "警",
+                Desc = "异常精准定位 + 单台设备全链路追溯（通知 / 报文 / 日志）",
+                Phase = "P4", AfterText = "接入后这里显示告警列表与单设备追溯" },
+            new ModuleDef { Key = "stats", Name = "数据统计", Glyph = "图",
+                Desc = "全量设备数据转可视化：趋势 / 占比 / 排行",
+                Phase = "P5", AfterText = "接入后这里显示用电趋势与楼层排行" },
         };
 
-        private readonly List<TwinButton> _tabs = new List<TwinButton>(Modules.Length);
-        private RectTransform _contentHost;
+        private readonly RectTransform[] _tabs = new RectTransform[5];
+        private readonly TwinRoundedRect[] _tabBg = new TwinRoundedRect[5];
+        private readonly Image[] _tabBar = new Image[5];
+        private readonly Text[] _tabLabel = new Text[5];
+        private readonly RectTransform[] _pages = new RectTransform[5];
+
+        private TwinMetricCard _kpiPower;
+        private TwinMetricCard _kpiEnergy;
+        private TwinMetricCard _kpiOnline;
+        private TwinMetricCard _kpiAlarm;
+
         private int _selected = -1;
         private bool _built;
-
-        /// <summary>切到某个模块（P2 起在这里换成真实页面）。</summary>
-        public Action<string> OnModulePicked;
 
         // ---------------------------------------------------------------- 构建
 
@@ -68,132 +98,281 @@ namespace SchoolTwin.UI
         {
             if (_built) return;
             _built = true;
-            BuildContent();
-            Select(0);
-        }
 
-        private void BuildContent()
-        {
             RectTransform root = transform as RectTransform;
             if (root == null) return;
 
-            // ---- 左：Tab 列 ----
-            GameObject tabGo = new GameObject("Tabs", typeof(RectTransform));
-            tabGo.transform.SetParent(root, false);
-            RectTransform tabs = tabGo.transform as RectTransform;
-            tabs.anchorMin = new Vector2(0f, 1f);
-            tabs.anchorMax = new Vector2(0f, 1f);
-            tabs.pivot = new Vector2(0f, 1f);
-            tabs.sizeDelta = new Vector2(TabW, 0f);
-            tabs.anchoredPosition = new Vector2(Pad, -Pad);
+            BuildTabs(root);
+            Select(0);
+        }
 
+        private void BuildTabs(RectTransform root)
+        {
             for (int i = 0; i < Modules.Length; i++)
             {
                 int index = i;
-                Module m = Modules[i];
+                ModuleDef m = Modules[i];
 
-                TwinButton tab = TwinButton.Create(tabs, m.Name, TwinButtonStyle.Row,
-                    TabW, TabH, () => Select(index), "Tab_" + m.Key);
-                TwinUIFactory.Place(tab.Rect, 0f, i * (TabH + TabGap), TabW, TabH);
+                GameObject go = TwinUIFactory.Node("Tab_" + m.Key, root);
+                RectTransform rt = (RectTransform)go.transform;
+                TwinUIFactory.Place(rt, RailX, 8f + i * (TabH + TabGap), TabW, TabH);
+                _tabs[i] = rt;
 
-                // Tab 里加一个小图标（行变体默认只有文字，这里补一个）
-                RectTransform icon = TwinIconGlyph.Create(tab.Rect, m.Glyph, 24f,
-                    TwinTheme.WithAlpha(TwinTheme.Accent, 0.14f), TwinTheme.Accent, "Icon");
-                icon.anchorMin = icon.anchorMax = new Vector2(0f, 0.5f);
-                icon.pivot = new Vector2(0f, 0.5f);
-                icon.anchoredPosition = new Vector2(10f, 0f);
+                // 选中底：AccentDim（Δ18，极淡）—— 三件套之一，单独用看不出来
+                TwinRoundedRect bg = TwinUIFactory.Rounded(rt, "Bg", TwinTheme.R8,
+                    Color.clear, Color.clear, Color.clear, 0f, true);
+                TwinUIFactory.Stretch(bg.rectTransform);
+                _tabBg[i] = bg;
 
-                // 文字右移，给图标让位。
-                // ⚠️ 必须按名字找：图标里的汉字也是 Text，
-                // `GetComponentInChildren<Text>` 一旦顺序变了就会抓成图标的字。
-                Transform labelTf = tab.Rect.Find("Label");
-                Text label = labelTf != null ? labelTf.GetComponent<Text>() : null;
-                if (label != null)
-                {
-                    label.alignment = TextAnchor.MiddleLeft;
-                    TwinUIFactory.Place(label.rectTransform, 42f, 0f, TabW - 50f, TabH);
-                }
+                Button btn = go.AddComponent<Button>();
+                btn.targetGraphic = bg;
+                btn.transition = Selectable.Transition.None;
+                btn.onClick.AddListener(() => Select(index));
 
-                _tabs.Add(tab);
+                // 三件套之二：左缘 3px 主色竖条（y+8 .. y+36，高 28）
+                Image bar = TwinUIFactory.Block(rt, "Bar", TwinTheme.Accent, false);
+                TwinUIFactory.Place(bar.rectTransform, 0f, 8f, TwinTheme.BarStatusWidth, 28f);
+                bar.gameObject.SetActive(false);
+                _tabBar[i] = bar;
+
+                // 图标 20×20 R6
+                TwinRoundedRect icon = TwinUIFactory.Rounded(rt, "Icon", 6f,
+                    TwinTheme.EntryIconFill, TwinTheme.EntryIconFill, Color.clear, 0f, false);
+                TwinUIFactory.Place(icon.rectTransform, 12f, 12f, 20f, 20f);
+
+                Text g = TwinUIFactory.Label(icon.rectTransform, "Glyph", TwinTheme.FsMicro,
+                    TextAnchor.MiddleCenter, TwinTheme.Accent);
+                TwinUIFactory.Stretch(g.rectTransform);
+                g.text = m.Glyph;
+                g.raycastTarget = false;
+
+                // 三件套之三：文字（选中 TextPrimary / 未选 TextSecondary）
+                Text label = TwinUIFactory.Label(rt, "Label", TwinTheme.FsBody,
+                    TextAnchor.MiddleLeft, TwinTheme.TextSecondary);
+                TwinUIFactory.Place(label.rectTransform, 40f, 0f, TabW - 44f, TabH);
+                label.text = m.Name;
+                label.raycastTarget = false;
+                _tabLabel[i] = label;
             }
-
-            // ---- 右：内容区 ----
-            GameObject hostGo = new GameObject("ContentHost", typeof(RectTransform));
-            hostGo.transform.SetParent(root, false);
-            _contentHost = hostGo.transform as RectTransform;
-            _contentHost.anchorMin = new Vector2(0f, 0f);
-            _contentHost.anchorMax = new Vector2(1f, 1f);
-            _contentHost.pivot = new Vector2(0f, 1f);
-            _contentHost.offsetMin = new Vector2(TabW + Pad * 2f, Pad);
-            _contentHost.offsetMax = new Vector2(-Pad, -Pad);
-
-            TwinRoundedRect card = TwinUIFactory.Rounded(_contentHost, "Bg", TwinTheme.R12,
-                TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, 1f, false);
-            TwinUIFactory.Stretch(card.rectTransform);
         }
-
-        // ---------------------------------------------------------------- Tab 切换
 
         private void Select(int index)
         {
             if (index < 0 || index >= Modules.Length) return;
             if (_selected == index) return;
 
-            int old = _selected;
+            if (_selected >= 0 && _selected < _pages.Length && _pages[_selected] != null)
+                _pages[_selected].gameObject.SetActive(false);
+
             _selected = index;
 
-            for (int i = 0; i < _tabs.Count; i++)
-                _tabs[i].SetSelected(i == index);
-
-            RebuildContent(Modules[index]);
-
-            if (old >= 0)
+            for (int i = 0; i < Modules.Length; i++)
             {
-                Action<string> cb = OnModulePicked;
-                if (cb != null) cb(Modules[index].Key);
+                bool on = i == index;
+                // 选中三件套：底 + 竖条 + 字色，一个都不能少
+                _tabBg[i].SetFill(on ? TwinTheme.AccentDim : Color.clear,
+                                  on ? TwinTheme.AccentDim : Color.clear);
+                _tabBar[i].gameObject.SetActive(on);
+                _tabLabel[i].color = on ? TwinTheme.TextPrimary : TwinTheme.TextSecondary;
+            }
+
+            RectTransform page = GetPage(index);
+            if (page != null) page.gameObject.SetActive(true);
+
+            Action<string> cb = OnModulePicked;
+            if (cb != null) cb(Modules[index].Key);
+        }
+
+        private RectTransform GetPage(int index)
+        {
+            if (_pages[index] != null) return _pages[index];
+
+            GameObject go = new GameObject("Page_" + Modules[index].Key, typeof(RectTransform));
+            RectTransform rt = (RectTransform)go.transform;
+            rt.SetParent(transform, false);
+            TwinUIFactory.Stretch(rt);
+            _pages[index] = rt;
+
+            BuildModuleHeader(rt, Modules[index]);
+
+            if (index == 0) BuildMonitor(rt);
+            else BuildEmpty(rt, Modules[index]);
+
+            return rt;
+        }
+
+        private static void BuildModuleHeader(RectTransform root, ModuleDef m)
+        {
+            Text title = TwinUIFactory.Label(root, "ModTitle", TwinTheme.FsSubtitle,
+                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(title.rectTransform, RightX, 10f, RightW, 22f);
+            title.text = m.Name;
+
+            // 说明 10.5 → 11（legacy Text 只吃整数）
+            Text desc = TwinUIFactory.Label(root, "ModDesc", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(desc.rectTransform, RightX, 34f, RightW, 16f);
+            desc.text = m.Desc;
+        }
+
+        private void BuildEmpty(RectTransform root, ModuleDef m)
+        {
+            // 标题写「什么时候」，说明写「有什么」—— 别在两处重复同一句"将在 Px 接入"
+            int step = m.Phase == "P3" ? 1 : (m.Phase == "P4" ? 2 : 3);
+            TwinEmptyState.Create(root, RightX, 96f, RightW, 180f,
+                "该模块将在 " + m.Phase + " 接入", m.AfterText, step, 4);
+        }
+
+        // ---------------------------------------------------------------- 数据监测
+
+        private void BuildMonitor(RectTransform root)
+        {
+            // KPI 2×2：216×88，x=184 / 408，y=52 / 148（页面坐标）
+            _kpiPower = TwinMetricCard.Create(root, "Kpi_Power", RightX, 52f,
+                CardW, CardH, TwinTheme.FsTitle, "总功率", "kW");
+            _kpiEnergy = TwinMetricCard.Create(root, "Kpi_Energy", RightX + CardW + 8f, 52f,
+                CardW, CardH, TwinTheme.FsTitle, "今日用电", "kWh");
+            _kpiOnline = TwinMetricCard.Create(root, "Kpi_Online", RightX, 148f,
+                CardW, CardH, TwinTheme.FsTitle, "在线", "台");
+            _kpiAlarm = TwinMetricCard.Create(root, "Kpi_Alarm", RightX + CardW + 8f, 148f,
+                CardW, CardH, TwinTheme.FsTitle, "告警", "台");
+
+            BuildHealthCard(root);
+            BuildTop3(root);
+
+            RefreshMonitor();
+        }
+
+        /// <summary>楼层健康卡：标题 11 + 三段条（h9）+ 图例 9。</summary>
+        private void BuildHealthCard(RectTransform root)
+        {
+            TwinRoundedRect card = TwinUIFactory.Rounded(root, "HealthCard", TwinTheme.R12,
+                TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(card.rectTransform, RightX, 256f, RightW, CardH);
+
+            Text title = TwinUIFactory.Label(card.rectTransform, "Title", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(title.rectTransform, 16f, 12f, 200f, 16f);
+            title.text = "楼层健康";
+
+            Text pct = TwinUIFactory.Label(card.rectTransform, "Pct", TwinTheme.FsCaption,
+                TextAnchor.UpperRight, TwinTheme.TextSecondary);
+            TwinUIFactory.Place(pct.rectTransform, RightW - 160f, 12f, 144f, 16f);
+            pct.text = "正常 96%";
+
+            // 三段条：h=9，段间 4，圆角 2
+            float[] ratio = { 0.92f, 0.05f, 0.03f };
+            Color[] colors = { TwinTheme.StatusNormal, TwinTheme.StatusWarning, TwinTheme.StatusAlarm };
+            string[] names = { "正常 141", "警告 7", "告警 5" };
+
+            float x = 16f;
+            float barW = RightW - 32f;
+            const float gap = 4f;
+            float used = 0f;
+
+            for (int i = 0; i < 3; i++)
+            {
+                float w = i == 2 ? barW - used : Mathf.Round((barW - gap * 2f) * ratio[i]);
+                used += w + gap;
+
+                TwinRoundedRect seg = TwinUIFactory.Rounded(card.rectTransform, "Seg_" + i, 2f,
+                    colors[i], colors[i], Color.clear, 0f, false);
+                TwinUIFactory.Place(seg.rectTransform, x, 34f, Mathf.Max(2f, w), 9f);
+
+                // 图例：色点 6 + 文案 9
+                TwinRoundedRect dot = TwinUIFactory.Rounded(card.rectTransform, "LegDot_" + i, 3f,
+                    colors[i], colors[i], Color.clear, 0f, false);
+                TwinUIFactory.Place(dot.rectTransform, 16f + i * 96f, 56f, 6f, 6f);
+
+                Text leg = TwinUIFactory.Label(card.rectTransform, "Leg_" + i, TwinTheme.FsMicro,
+                    TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(leg.rectTransform, 26f + i * 96f, 50f, 84f, 16f);
+                leg.text = names[i];
+
+                x += w + gap;
             }
         }
 
-        private void RebuildContent(Module m)
+        /// <summary>异常 Top3：行高 40、gap 6，左 3px 严重度条 + 编号 11 + 指标 9 + 右侧标签 9。</summary>
+        private void BuildTop3(RectTransform root)
         {
-            if (_contentHost == null) return;
+            Text head = TwinUIFactory.Label(root, "AbnTitle", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(head.rectTransform, RightX, 352f, RightW, 16f);
+            head.text = "异常 Top3";
 
-            // 清掉旧内容（保留背景 Bg）
-            for (int i = _contentHost.childCount - 1; i >= 0; i--)
+            string[][] rows =
             {
-                Transform c = _contentHost.GetChild(i);
-                if (c == null) continue;
-                if (string.Equals(c.name, "Bg", StringComparison.Ordinal)) continue;
-                TwinUIFactory.DestroySafe(c.gameObject);
+                new[] { "B1-001-配电-001", "回路断电 · 已持续 12 分钟", "严重" },
+                new[] { "1F-101-插座-004", "功率 3.2kW / 量程 3.5kW", "警告" },
+                new[] { "3F-302-空调-002", "离线 26 分钟", "离线" },
+            };
+
+            for (int i = 0; i < rows.Length; i++)
+            {
+                float y = 376f + i * (40f + 6f);
+
+                TwinRoundedRect row = TwinUIFactory.Rounded(root, "Abn_" + i, TwinTheme.R8,
+                    Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+                TwinUIFactory.Place(row.rectTransform, RightX, y, RightW, 40f);
+
+                Color sev = i == 0 ? TwinTheme.StatusAlarm
+                          : i == 1 ? TwinTheme.StatusWarning
+                          : TwinTheme.StatusOffline;
+
+                Image bar = TwinUIFactory.Block(row.rectTransform, "Sev", sev, false);
+                TwinUIFactory.Place(bar.rectTransform, 0f, 8f, TwinTheme.BarStatusWidth, 24f);
+
+                Text id = TwinUIFactory.Label(row.rectTransform, "Id", TwinTheme.FsCaption,
+                    TextAnchor.MiddleLeft, TwinTheme.TextPrimary);
+                TwinUIFactory.Place(id.rectTransform, 12f, 0f, 150f, 40f);
+                id.text = rows[i][0];
+
+                Text metric = TwinUIFactory.Label(row.rectTransform, "Metric", TwinTheme.FsMicro,
+                    TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(metric.rectTransform, 168f, 0f, 190f, 40f);
+                metric.text = rows[i][1];
+
+                Text tag = TwinUIFactory.Label(row.rectTransform, "Tag", TwinTheme.FsMicro,
+                    TextAnchor.MiddleRight, sev);
+                TwinUIFactory.Place(tag.rectTransform, RightW - 84f, 0f, 68f, 40f);
+                tag.text = rows[i][2];
+            }
+        }
+
+        private void RefreshMonitor()
+        {
+            TwinRuntime rt = TwinRuntime.Instance;
+            int online = 0, alarm = 0, total = 0;
+            if (rt != null && rt.Registry != null)
+            {
+                IReadOnlyList<TwinAnchor> all = rt.Registry.All;
+                if (all != null)
+                {
+                    for (int i = 0; i < all.Count; i++)
+                    {
+                        TwinAnchor a = all[i];
+                        if (a == null) continue;
+                        total++;
+                        TwinStatus s = a.StatusOfWorst();
+                        if (s == TwinStatus.Alarm || s == TwinStatus.Warning) alarm++;
+                        if (s != TwinStatus.Offline && s != TwinStatus.Stale) online++;
+                    }
+                }
             }
 
-            // 模块名
-            Text title = TwinUIFactory.Label(_contentHost, "ModuleTitle", TwinTheme.FsSubtitle,
-                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
-            TwinUIFactory.Place(title.rectTransform, 16f, 14f, 300f, 24f);
-            title.text = m.Name;
+            if (_kpiOnline != null) _kpiOnline.SetValue(total > 0 ? online.ToString() : "—");
+            if (_kpiAlarm != null)
+            {
+                _kpiAlarm.SetValue(total > 0 ? alarm.ToString() : "—");
+                _kpiAlarm.SetState(alarm > 0 ? TwinMetricCard.CardState.Alarm : TwinMetricCard.CardState.Normal);
+            }
 
-            // 描述
-            Text desc = TwinUIFactory.Label(_contentHost, "ModuleDesc", TwinTheme.FsCaption,
-                TextAnchor.UpperLeft, TwinTheme.TextSecondary);
-            // 左右拉伸而不是固定宽度：抽屉宽度有 420→640 的 200ms 动画，
-            // OnShow 那一刻量到的是 420 的宽度，写死就会永远窄 220。
-            RectTransform dr = desc.rectTransform;
-            dr.anchorMin = new Vector2(0f, 1f);
-            dr.anchorMax = new Vector2(1f, 1f);
-            dr.pivot = new Vector2(0.5f, 1f);
-            dr.sizeDelta = new Vector2(-32f, 34f);
-            dr.anchoredPosition = new Vector2(0f, -42f);
-            desc.horizontalOverflow = HorizontalWrapMode.Wrap;
-            desc.text = m.Desc;
-
-            // 占位提示
-            Text hint = TwinUIFactory.Label(_contentHost, "Hint", TwinTheme.FsBody,
-                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
-            TwinUIFactory.Stretch(hint.rectTransform);
-            hint.rectTransform.offsetMin = new Vector2(0f, 0f);
-            hint.rectTransform.offsetMax = new Vector2(0f, -80f);
-            hint.text = "该模块在 P2~P5 逐个接入\n（当前为信息架构占位）";
+            // 总功率 / 今日用电 需要电力数据源（P3）。现在没有统一聚合口径 ——
+            // 单设备 Power 的量程有的按 W、有的按 kW（灯 0~120W / 插座 0~3.5kW），
+            // 直接求和会得出"1.2 + 42"这种没意义的数，所以宁可显示「—」。
+            if (_kpiPower != null) _kpiPower.SetState(TwinMetricCard.CardState.NoData);
+            if (_kpiEnergy != null) _kpiEnergy.SetState(TwinMetricCard.CardState.NoData);
         }
     }
 }

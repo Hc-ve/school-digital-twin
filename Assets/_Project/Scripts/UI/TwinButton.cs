@@ -166,10 +166,16 @@ namespace SchoolTwin.UI
 
             if (!_interactable)
             {
-                // 禁用：底压暗 + 文字降到 Muted，**不改变形状**
+                // 禁用：底色压到 0.35 + 文字降到 Muted。**描边不跟着压**。
+                //
+                // 【2026-10-29 修正】这里原本是 `WithAlpha(TwinTheme.Border, 0.35f)`。
+                // WithAlpha 是「把 alpha 设成 0.35」，不是「乘 0.35」—— Border 本身已经是
+                // 白 @0.006（Δ11.5），乘上去反而变成白 @0.35（Δ≈90），
+                // 禁用按钮的描边比正常态亮一个数量级，全界面最显眼的就是点不动的按钮。
+                // 现在直接引用 token：禁用态只靠「底变淡 + 字变灰」表达，形状与描边都不动。
                 top = TwinTheme.WithAlpha(TwinTheme.CardTop, 0.35f);
                 bottom = TwinTheme.WithAlpha(TwinTheme.CardBottom, 0.35f);
-                border = TwinTheme.WithAlpha(TwinTheme.Border, 0.35f);
+                border = TwinTheme.Border;
                 textColor = TwinTheme.TextMuted;
             }
             else
