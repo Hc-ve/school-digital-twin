@@ -25,7 +25,7 @@ namespace SchoolTwin.UI
     /// 中间不画任何东西 —— 那是 3D 的可见区（规格 §4.2：3D 始终全屏渲染，不裁相机 viewport）。
     /// 左右栏是**浮在上面的实底卡片**，不是给 3D 让位的容器。
     /// </summary>
-    public class TwinFullLayer : MonoBehaviour
+    public partial class TwinFullLayer : MonoBehaviour
     {
         // ---------------------------------------------------------------- 骨架常量（规格 §3）
 
@@ -100,6 +100,9 @@ namespace SchoolTwin.UI
         // ---- L2 主栏 ----
         private RectTransform _monitorGroup;
         private RectTransform _deviceGroup;
+        private RectTransform _powerGroup;
+        private RectTransform _alarmCenterGroup;
+        private RectTransform _statsGroup;
         private RectTransform _emptyGroup;
 
         private TwinMetricCard _sysPower;
@@ -121,6 +124,7 @@ namespace SchoolTwin.UI
         // ---- L2 设备管理页（六列台账）----
         private const int DevRows = 7;
         private readonly RectTransform[] _devRow = new RectTransform[DevRows];
+        private readonly TwinRoundedRect[] _devRowBg = new TwinRoundedRect[DevRows];
         private readonly Image[] _devBar = new Image[DevRows];
         private readonly Text[] _devId = new Text[DevRows];
         private readonly Text[] _devName = new Text[DevRows];
@@ -136,6 +140,11 @@ namespace SchoolTwin.UI
         private Text _emptyBody;
 
         // ---- L2 辅栏 ----
+        /// <summary>右栏筛选：0=全部楼层 / 1=1F / 2=2F / 3=室外。设备管理与台账共用。</summary>
+        private int _chipFilter;
+        private readonly TwinRoundedRect[] _chipBg = new TwinRoundedRect[4];
+        private readonly Text[] _chipText = new Text[4];
+
         private Text _sumTotal;
         private Text _sumScope;
         private Text _sumMissing;
@@ -538,19 +547,14 @@ namespace SchoolTwin.UI
                 _tabIcon[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
             }
 
-            // 主栏三组互斥：数据监测 / 设备管理 / 空状态。
-            // BuildSystemRail 先于 BuildSystemMain 执行，第一次进来这三组还是 null，判空跳过即可。
+            // 主栏五组互斥（BuildSystemRail 先于 BuildSystemMain，第一次进来还是 null，判空跳过）
             if (_monitorGroup != null) _monitorGroup.gameObject.SetActive(index == 0);
             if (_deviceGroup != null) _deviceGroup.gameObject.SetActive(index == 1);
-            if (_emptyGroup != null) _emptyGroup.gameObject.SetActive(index >= 2);
-
-            if (index >= 2 && _emptyTitle != null)
-            {
-                _emptyTitle.text = TabNames[index];
-                _emptyBody.text = index == 4
-                    ? "数据统计待接入\n无时序存储，用电量只能按功率积分估算。\nP5 接入 1s 均值聚合后显示趋势、占比与排行。"
-                    : "该模块将在 P3 接入\n" + TabNames[index] + " 的明细视图尚在规划中。";
-            }
+            if (_powerGroup != null) _powerGroup.gameObject.SetActive(index == 2);
+            if (_alarmCenterGroup != null) _alarmCenterGroup.gameObject.SetActive(index == 3);
+            if (_statsGroup != null) _statsGroup.gameObject.SetActive(index == 4);
+            // 空状态组保留但不再使用：五页都有真实内容了（P29-6 收口时接的电力/告警/统计）
+            if (_emptyGroup != null) _emptyGroup.gameObject.SetActive(false);
 
             _nextRefresh = 0f;   // 切页立刻刷一次，不等下一个 0.5s
         }
@@ -561,13 +565,22 @@ namespace SchoolTwin.UI
         {
             _monitorGroup = NewGroup("MonitorGroup");
             _deviceGroup = NewGroup("DeviceGroup");
+            _powerGroup = NewGroup("PowerGroup");
+            _alarmCenterGroup = NewGroup("AlarmCenterGroup");
+            _statsGroup = NewGroup("StatsGroup");
             _emptyGroup = NewGroup("EmptyGroup");
 
             BuildMonitorPage();
             BuildDevicePage();
+            BuildPowerPage();
+            BuildAlarmCenterPage();
+            BuildStatsPage();
             BuildEmptyPage();
 
             _deviceGroup.gameObject.SetActive(false);
+            _powerGroup.gameObject.SetActive(false);
+            _alarmCenterGroup.gameObject.SetActive(false);
+            _statsGroup.gameObject.SetActive(false);
             _emptyGroup.gameObject.SetActive(false);
         }
 
@@ -653,9 +666,17 @@ namespace SchoolTwin.UI
                 float y = 172f + i * 40f;
 
                 TwinRoundedRect row = TwinUIFactory.Rounded(_deviceGroup, "FDevRow_" + i, TwinTheme.R8,
-                    Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+                    Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
                 TwinUIFactory.Place(row.rectTransform, x, y, w, 36f);
                 _devRow[i] = row.rectTransform;
+                _devRowBg[i] = row;
+
+                // 整行可点 → 选中该设备并让相机飞过去（复用 TwinDetailPanel.FocusOn）。
+                // 原来"详情 ›"只是一行静态文字，点不动 —— 主理人 play 实测报的"死按钮"。
+                int devIdx = i;
+                Button rowBtn = row.gameObject.AddComponent<Button>();
+                rowBtn.transition = Selectable.Transition.None;
+                rowBtn.onClick.AddListener(delegate { OnDeviceRowClicked(devIdx); });
 
                 Image bar = TwinUIFactory.Block(row.rectTransform, "Bar", TwinTheme.StatusNormal, false);
                 TwinUIFactory.Place(bar.rectTransform, 0f, 8f, 3f, 20f);
@@ -789,12 +810,20 @@ namespace SchoolTwin.UI
                     on ? TwinTheme.AccentDim : TwinTheme.Track,
                     on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, false);
                 TwinUIFactory.Place(chip.rectTransform, RightInnerX, 112f + i * 30f, ColW, 26f);
+                _chipBg[i] = chip;
 
                 Text t = TwinUIFactory.Label(chip.rectTransform, "T", TwinTheme.FsMicro,
                     TextAnchor.MiddleLeft, on ? TwinTheme.Accent : TwinTheme.TextMuted);
                 TwinUIFactory.Place(t.rectTransform, 10f, 0f, ColW - 16f, 26f);
                 t.text = filters[i];
                 t.raycastTarget = false;
+                _chipText[i] = t;
+
+                // 真筛选：0=全部 1=1F 2=2F 3=室外（原来是死的灰块，主理人问"1F/2F 为什么点不动"）
+                int chipIdx = i;
+                Button chipBtn = chip.gameObject.AddComponent<Button>();
+                chipBtn.transition = Selectable.Transition.None;
+                chipBtn.onClick.AddListener(delegate { OnFilterClicked(chipIdx); });
             }
 
             Text sumTitle = TwinUIFactory.Label(_asideGroup, "FSumTitle", TwinTheme.FsCaption,
@@ -817,6 +846,51 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(traceHint.rectTransform, RightInnerX, 450f, ColW, 40f);
             traceHint.text = "选中设备后显示\n下发 → 回执 → 执行 → 回读";
             traceHint.lineSpacing = 1.3f;
+        }
+
+        /// <summary>
+        /// 点设备行 → **只选中**（右栏从告警切到设备详情）。
+        ///
+        /// 为什么**不调** TwinDetailPanel.FocusOn：
+        ///   ① 它内部会让 FreeCameraController 飞过去，但当前相机控制权在 TwinThirdPersonCamera 手里，
+        ///      第三人称每帧覆盖相机位姿 —— 飞了也看不见（主理人 play 实测"无反应"）；
+        ///   ② 它会把窄态那张 470 浮卡叫出来，而全屏 L2 的中间是**数据态、整块不透明**，
+        ///      既没有 3D 可看、也不需要浮卡（详情归右栏）。
+        /// 窄态下的相机聚焦是另一条独立的事（需要给第三人称加"看向/走近"接口），不在本页范围。
+        /// </summary>
+        private void OnDeviceRowClicked(int index)
+        {
+            if (index < 0 || index >= _devBuf.Count) return;
+
+            SchoolTwin.Interaction.TwinPicker.Select(_devBuf[index]);
+
+            // 立刻刷一次，右栏不用等 0.5s 节流
+            _nextRefresh = 0f;
+            Refresh(true);
+        }
+
+        /// <summary>点筛选 chip → 切换楼层过滤，并立即刷新列表。</summary>
+        private void OnFilterClicked(int index)
+        {
+            if (_chipFilter == index) return;
+            _chipFilter = index;
+            RefreshChipStyles();
+            _nextRefresh = 0f;
+            Refresh(true);
+        }
+
+        private void RefreshChipStyles()
+        {
+            for (int i = 0; i < _chipBg.Length; i++)
+            {
+                if (_chipBg[i] == null) continue;
+                bool on = i == _chipFilter;
+                _chipBg[i].SetFill(on ? TwinTheme.AccentDim : TwinTheme.Track,
+                                   on ? TwinTheme.AccentDim : TwinTheme.Track);
+                _chipBg[i].SetBorder(on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width);
+                if (_chipText[i] != null)
+                    _chipText[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
+            }
         }
 
         private Text AsideRow(float y, string label)
@@ -855,10 +929,13 @@ namespace SchoolTwin.UI
             SetGroupActive(_railGroup, !home);      // L2 左轨：5 Tab
             SetGroupActive(_asideGroup, !home);     // L2 辅栏：筛选 / 小结 / 追溯
 
-            // L2 主栏三组互斥，按当前 Tab
+            // 主栏五组互斥：数据监测 / 设备管理 / 电力管理 / 告警中心 / 数据统计
             SetGroupActive(_monitorGroup, !home && _tab == 0);
             SetGroupActive(_deviceGroup, !home && _tab == 1);
-            SetGroupActive(_emptyGroup, !home && _tab >= 2);
+            SetGroupActive(_powerGroup, !home && _tab == 2);
+            SetGroupActive(_alarmCenterGroup, !home && _tab == 3);
+            SetGroupActive(_statsGroup, !home && _tab == 4);
+            SetGroupActive(_emptyGroup, false);
 
             // L1 右栏两态（告警 / 设备详情）交给 RefreshHome 裁决 ——
             // 它才知道有没有选中设备；在这里硬切会和它打架。
@@ -1147,10 +1224,15 @@ namespace SchoolTwin.UI
 
         private void RefreshSystem()
         {
-            if (_tab == 1) { RefreshDevicePage(); return; }
-            if (_tab != 0) return;
-
-            RefreshMonitorPage();
+            // 五页各自刷新，互不牵连。空页（统计数据不足）由各页自己处理空状态。
+            switch (_tab)
+            {
+                case 0: RefreshMonitorPage(); break;
+                case 1: RefreshDevicePage(); break;
+                case 2: RefreshPowerPage(); break;
+                case 3: RefreshAlarmCenterPage(); break;
+                case 4: RefreshStatsPage(); break;
+            }
         }
 
         private void RefreshMonitorPage()
@@ -1237,9 +1319,23 @@ namespace SchoolTwin.UI
                 {
                     TwinAnchor a = all[i];
                     if (!TwinDeviceStats.IsActiveDevice(a)) continue;
+
+                    // 楼层筛选：0=全部 / 1=1F / 2=2F / 3=室外（Floor 0）
+                    if (_chipFilter > 0)
+                    {
+                        TwinRoomInfo info = TwinSiteLayout.Find(a.Zone);
+                        int floor = info != null ? info.Floor : 0;
+                        int want = _chipFilter == 3 ? 0 : _chipFilter;
+                        if (floor != want) continue;
+                    }
+
                     _devBuf.Add(a);
                 }
             }
+
+            TwinAnchor selected = TwinDetailPanel.Instance != null
+                ? TwinDetailPanel.Instance.SelectedAnchor
+                : null;
 
             for (int i = 0; i < DevRows; i++)
             {
@@ -1251,6 +1347,14 @@ namespace SchoolTwin.UI
                 TwinAnchor a = _devBuf[i];
                 TwinStatus s = a.StatusOfWorst();
                 Color c = TwinStatusPalette.Of(s);
+
+                // 选中行高亮：点一行后右栏切详情，列表这边要让人看出选的是哪条
+                bool sel = selected != null && ReferenceEquals(selected, a);
+                if (_devRowBg[i] != null)
+                {
+                    Color fill = sel ? TwinTheme.AccentDim : Color.clear;
+                    _devRowBg[i].SetFill(fill, fill);
+                }
 
                 if (_devBar[i] != null) _devBar[i].color = c;
                 SetText(_devId[i], TwinUIFactory.Truncate(TwinCode.Short(a.TwinId), TwinTheme.FsCaption, 140f));

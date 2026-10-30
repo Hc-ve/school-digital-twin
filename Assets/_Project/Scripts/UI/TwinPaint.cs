@@ -408,5 +408,67 @@ namespace SchoolTwin.UI
             Transform child = parent.Find(name);
             return child == null ? null : child.GetComponent<T>();
         }
+
+        // ================================================================ 圆环（甜甜圈）
+
+        private static readonly Dictionary<int, Sprite> s_ringCache = new Dictionary<int, Sprite>(4);
+
+        /// <summary>
+        /// 圆环贴图：白色实心环，内外透明。配合 `Image.Type.Filled + Radial360` 画甜甜圈。
+        ///
+        /// 为什么代码生成而不是引图片：项目是"零图片资源"约束（所有 UI 都是代码画的）。
+        /// 一张 128×128 的环只有 64 KB，生成一次缓存住，不占导入步骤。
+        ///
+        /// <paramref name="innerRatio"/> 是内径/外径 —— 0.62 大约是一圈"能手写百分比"的厚度，
+        /// 太细了看不清，太粗了像圆饼。
+        /// </summary>
+        public static Sprite RingSprite(int size = 128, float innerRatio = 0.62f)
+        {
+            size = Mathf.Clamp(size, 32, 512);
+            innerRatio = Mathf.Clamp(innerRatio, 0.05f, 0.95f);
+
+            int key = size * 1000 + Mathf.RoundToInt(innerRatio * 100f);
+            Sprite cached;
+            if (s_ringCache.TryGetValue(key, out cached) && cached != null) return cached;
+
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.name = "TwinRing_" + size;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+            tex.anisoLevel = 0;
+
+            float c = (size - 1) * 0.5f;
+            float outer = c;
+            float inner = c * innerRatio;
+
+            Color32 white = new Color32(255, 255, 255, 255);
+            Color32 clear = new Color32(255, 255, 255, 0);
+            Color32[] px = new Color32[size * size];
+
+            for (int y = 0; y < size; y++)
+            {
+                float dy = y - c;
+                int row = y * size;
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - c;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    // 边缘 1px 做线性过渡，避免小尺寸下出现锯齿轮廓
+                    float a = Mathf.Clamp01(outer - d) * Mathf.Clamp01(d - inner);
+                    px[row + x] = a >= 0.5f ? white : clear;
+                }
+            }
+
+            tex.SetPixels32(px);
+            tex.Apply(false, false);
+
+            Sprite sp = Sprite.Create(tex, new Rect(0f, 0f, size, size),
+                new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            sp.name = tex.name;
+
+            s_ringCache[key] = sp;
+            return sp;
+        }
     }
 }
