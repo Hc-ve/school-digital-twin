@@ -1162,6 +1162,31 @@ namespace SchoolTwin.UI
             if (_card != null) _card.gameObject.SetActive(_visible);
         }
 
+        /// <summary>
+        /// 卡片当前是否在显示。供抽屉在打开时判断要不要暂时收起。
+        /// </summary>
+        public bool CardVisible
+        {
+            // _card 是 RectTransform —— activeSelf 在 GameObject 上，不在 Transform 上
+            get { return _card != null && _card.gameObject.activeSelf; }
+        }
+
+        /// <summary>
+        /// 外部强制显隐卡片（P29-4 P0-1）。
+        ///
+        /// 【为什么需要这个】抽屉打开时，页栈只把「页面」`SetActive(false)`，
+        /// 而详情卡是**独立对象**、不随层级隐藏 —— 它的「告警与异常 (4) · 共 53 点位」
+        /// 「未选中点位」就会叠在抽屉面板上，同时造成面板过透、L1 列表多出行、工具行被压三个假象。
+        ///
+        /// **只改渲染显隐，不动 `_visible` 选中状态** —— 关抽屉后 `SetCardVisible(true)`
+        /// 能原样回来，不需要重新选中。
+        /// </summary>
+        public void SetCardVisible(bool visible)
+        {
+            if (_card == null) return;
+            if (_card.gameObject.activeSelf != visible) _card.gameObject.SetActive(visible);
+        }
+
         // ================================================================ 环境准备
 
         private RectTransform EnsureCanvas()

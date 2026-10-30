@@ -90,6 +90,12 @@ namespace SchoolTwin.UI
 
         private TwinTriggerButton _trigger;
 
+        /// <summary>场景层物体详情卡。抽屉打开时要收起 —— 它的文字会叠在面板上（P29-4 P0-1）。</summary>
+        private TwinDetailPanel _detailPanel;
+
+        /// <summary>本次抽屉打开时是否真的收起了详情卡，用于关闭时**按原样**还原。</summary>
+        private bool _detailHiddenByDrawer;
+
         // ---- 状态 ----
         private bool _open;
         private float _widthCur = WidthHome;
@@ -658,6 +664,43 @@ namespace SchoolTwin.UI
             // 抽屉打开时把钮收起来 —— 关闭由抽屉自己的 × 和 Esc 负责。
             // 《异环》也是面板展开后入口图标被面板盖住。
             if (_trigger != null) _trigger.gameObject.SetActive(false);
+
+            HideSceneHud();
+        }
+
+        /// <summary>
+        /// 收起场景层 UI（P29-4 P0-1 的修复）。
+        ///
+        /// 【根因】抽屉打开时，`TwinPageStack.Push()` 只把**旧页面** `SetActive(false)`，
+        /// 而物体详情卡是**独立对象**，不随抽屉层级隐藏。它的标题
+        /// 「告警与异常 (N) · 共 N 点位 · 累计 N 次」和「未选中点位」就叠在抽屉面板上。
+        ///
+        /// 这一个原因同时造成了见微列出的四个现象：
+        ///   ① 面板"过透" —— 其实是卡片文字透过来的
+        ///   ② L1 实时动态看起来 5~6 行（规格 4 行）—— 多出来的是卡片行
+        ///   ③ L2 左轨区域出现杂字
+        ///   ④ 卡片文字压在工具行上，看起来像"溢出"
+        ///
+        /// 只收详情卡：其余常驻面板（点位列表 / 告警历史 / 旧控制面板）默认就是隐藏的，
+        /// 需要用户主动打开，不会在抽屉打开时自己冒出来。
+        /// </summary>
+        private void HideSceneHud()
+        {
+            if (_detailPanel == null) _detailPanel = FindObjectOfType<TwinDetailPanel>(true);
+            if (_detailPanel == null) return;
+
+            _detailHiddenByDrawer = _detailPanel.CardVisible;
+            if (_detailHiddenByDrawer) _detailPanel.SetCardVisible(false);
+        }
+
+        /// <summary>关抽屉时把详情卡还原成"打开前是否可见"的状态（不无条件显示）。</summary>
+        private void RestoreSceneHud()
+        {
+            if (_detailPanel != null && _detailHiddenByDrawer)
+            {
+                _detailPanel.SetCardVisible(true);
+                _detailHiddenByDrawer = false;
+            }
         }
 
         public void Close()
@@ -679,6 +722,9 @@ namespace SchoolTwin.UI
                 _trigger.gameObject.SetActive(true);
                 _trigger.SetOpen(false);
             }
+
+            // 把抽屉打开时收起的场景层 UI 还原（P29-4 P0-1）
+            RestoreSceneHud();
         }
 
         private TwinPageBase _homePage;
