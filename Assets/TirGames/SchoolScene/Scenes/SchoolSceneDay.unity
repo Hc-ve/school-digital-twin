@@ -43655,6 +43655,11 @@ Transform:
   - {fileID: 1369144106}
   m_Father: {fileID: 424032985}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!23 &823652956 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 2300162, guid: bbd61fb0d8f8b7a4a925414339b268a7, type: 3}
+  m_PrefabInstance: {fileID: 989110727}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &825085498 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 406810, guid: cda5269e9a50046489d7b868e1c386e9, type: 3}
@@ -54473,6 +54478,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 2100000, guid: 3524d3cbde65b3242bee00df95e1c7a2, type: 2}
     - target: {fileID: 2300162, guid: bbd61fb0d8f8b7a4a925414339b268a7, type: 3}
+      propertyPath: m_ProbeAnchor
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 2300162, guid: bbd61fb0d8f8b7a4a925414339b268a7, type: 3}
       propertyPath: m_Materials.Array.data[0]
       value: 
       objectReference: {fileID: 2100000, guid: 558274fe9ab152642ad77272af6c2546, type: 2}
@@ -61178,6 +61187,7 @@ GameObject:
   - component: {fileID: 1095861211}
   - component: {fileID: 1095861210}
   - component: {fileID: 1095861209}
+  - component: {fileID: 1095861212}
   m_Layer: 8
   m_Name: TwinPlayer
   m_TagString: Untagged
@@ -61247,6 +61257,19 @@ Transform:
   - {fileID: 1577679866}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1095861212
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1095861208}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8256532ab566334999bd046e89fd68b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 823652956}
 --- !u!1001 &1096440490
 PrefabInstance:
   m_ObjectHideFlags: 0
