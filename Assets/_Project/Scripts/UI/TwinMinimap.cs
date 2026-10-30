@@ -81,6 +81,9 @@ namespace SchoolTwin.UI
         /// 关掉自己之后 Update 不再执行，就再也没有机会恢复。
         /// </summary>
         private CanvasGroup _group;
+
+        /// <summary>上一次摆放的形态（false = 窄态左上 / true = 全屏 3D 右下）。只在变化时重摆。</summary>
+        private bool _fullPlaced;
         private Sprite _circleSprite;
 
         /// <summary>每张底图只建一次 Sprite —— 每次切楼层都 new 一个会一直泄漏。</summary>
@@ -217,6 +220,36 @@ namespace SchoolTwin.UI
 
         // ================================================================ 每帧
 
+        /// <summary>
+        /// 全屏态把小地图摆到 3D 区右下角（P29-6 §7：三栏下唯一露着 3D 的地方）。
+        ///
+        /// 抽屉全屏锁 1000×720 并**居中**，所以必须先算出抽屉左缘在画布里的偏移，
+        /// 再按三栏坐标（3D 区 x 200–800、y 80–660）取右下角。
+        /// 直接写死 620/450 会在画布宽 ≠ 1000 时贴错位置 —— Expand 下画布宽是变的。
+        /// </summary>
+        private void ApplyFullPlacement(bool full)
+        {
+            if (_root == null) return;
+            if (_fullPlaced == full) return;
+            _fullPlaced = full;
+
+            if (!full)
+            {
+                _root.anchoredPosition = new Vector2(_margin.x, -_margin.y);
+                return;
+            }
+
+            RectTransform parent = _root.parent as RectTransform;
+            float canvasW = parent != null ? parent.rect.width : 1000f;
+            float drawerLeft = Mathf.Max(0f, (canvasW - 1000f) * 0.5f);
+
+            float h = _diameter + 30f;      // 圆 + 房间名那一行
+            float x = drawerLeft + 800f - 20f - _diameter;
+            float y = 660f - 20f - h;
+
+            _root.anchoredPosition = new Vector2(x, -y);
+        }
+
         private void Update()
         {
             if (_root == null || _mapImage == null) return;
@@ -225,8 +258,13 @@ namespace SchoolTwin.UI
             // 小地图是独立的 Overlay Canvas，sortingOrder = 90，而主画布（抽屉所在）是 0 ——
             // 所以它**永远压在面板之上**。抽屉只有 420 宽时两者不重叠，看不出来；
             // 一点最大化铺满整屏，小地图就浮在面板上面了。
-            // 这里跟详情卡同一套机制：按 TwinUIState 自检，任何入口打开面板都会自动让位。
-            bool occluded = TwinUIState.Current != TwinUILayer.None;
+            // 【P29-6 §7】但**全屏态要显示**，只是移到 3D 区右下角 —— 那里是三栏布局里
+            // 唯一露着 3D 的地方，地图放那儿既能看到自己位置、也不挡数据栏。
+            bool full = TwinDrawer.IsFullScreen;
+            bool occluded = TwinUIState.Current != TwinUILayer.None && !full;
+
+            ApplyFullPlacement(full);
+
             if (_group == null)
             {
                 _group = GetComponent<CanvasGroup>();

@@ -90,6 +90,22 @@ namespace SchoolTwin.UI
                 || status == TwinStatus.Stale || status == TwinStatus.Offline;
         }
 
+        /// <summary>
+        /// 健康条「按组内最严重级别取色」（P29-6 §6.3，已裁决）。
+        /// 优先级：**离线 ＞ Alarm ＞ Warning ＞ Normal**。
+        ///
+        /// 注意分工：健康条**本身仍是三段**（正常/警告/告警各一段本色，那是信息表达，
+        /// 见 `Of(status)`）；这个颜色给的是**百分比文字与图例**——
+        /// 全条一个色会丢掉"各占多少"的信息，而"整组健康到什么程度"需要一个单一判断。
+        /// </summary>
+        public static Color HealthColor(int normal, int warning, int alarm, int offline)
+        {
+            if (offline > 0) return Offline;
+            if (alarm > 0) return Alarm;
+            if (warning > 0) return Warning;
+            return Normal;
+        }
+
         /// <summary>严重度，越大越严重（与 TwinAnchor 内部口径一致）。</summary>
         public static int Severity(TwinStatus status)
         {

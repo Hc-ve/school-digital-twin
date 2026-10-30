@@ -931,7 +931,8 @@ namespace SchoolTwin.UI
                 string label = TwinStatusPalette.Label(rec.PeakStatus);
 
                 if (_abnBar[i] != null) _abnBar[i].color = sev;
-                SetText(_abnId[i], rec.TwinId);
+                // 【P0-4】Top3 编号 = `2F-201 空调`（P29-6 §6.1），不再出现带 `/` 的原始 TwinId
+                SetText(_abnId[i], TwinCode.WithType(rec.TwinId));
                 SetText(_abnMetric[i], label + " · 已持续 " + TwinAlarmHistory.FormatDuration(rec.Duration(now)));
                 if (_abnTag[i] != null)
                 {
@@ -992,9 +993,16 @@ namespace SchoolTwin.UI
                 Color c = TwinStatusPalette.Of(s);
 
                 if (_devBar[i] != null) _devBar[i].color = c;
-                SetText(_devId[i], a.TwinId);
+
+                // 【P0-3】编号列固定 150、名称列 x=170（间隙 8 ≥ 规格要求的 8）。
+                // 原来这里直接塞 a.TwinId，而 MakeCell 用的是 Overflow ——
+                // 文本画出格子边界压到名称列上。两重修：
+                //   ① 内容换成短码 `2F-201`（TwinCode 唯一出口，原始 TwinId 不进 UI）
+                //   ② 仍然截断兜底：表外分区会退化成 Zone 原名（如 ClassComputer），长度不可控
+                SetText(_devId[i], TwinUIFactory.Truncate(
+                    TwinCode.Short(a.TwinId), TwinTheme.FsBody, 150f));
                 SetText(_devName[i], a.DisplayName);
-                SetText(_devPos[i], ShortZone(a.TwinId));
+                SetText(_devPos[i], TwinCode.Room(a.Zone));
                 SetText(_devTag[i], TwinStatusPalette.Label(s));
                 if (_devTag[i] != null) _devTag[i].color = c;
             }
@@ -1037,7 +1045,7 @@ namespace SchoolTwin.UI
                 Color c = TwinStatusPalette.Of(rec.PeakStatus);
 
                 if (_almBar[n] != null) _almBar[n].color = c;
-                SetText(_almId[n], rec.TwinId);
+                SetText(_almId[n], TwinCode.Short(rec.TwinId));
                 SetText(_almName[n], rec.DisplayName);
                 SetText(_almDesc[n], TwinStatusPalette.Label(rec.PeakStatus) + " · " + rec.Clock);
                 SetText(_almDur[n], "进行中");

@@ -41,6 +41,13 @@ namespace SchoolTwin.UI
         public const float WidthModule = 640f;
 
         /// <summary>
+        /// 全屏态逻辑尺寸（P29-6 §2）：横向 200 + 600 + 200 = 1000，纵向 80 + 580 + 60 = 720。
+        /// 全屏**锁死这两个值并居中**，不跟随画布宽度 —— 见 Update 里的说明。
+        /// </summary>
+        public const float FullW = 1000f;
+        public const float FullH = 720f;
+
+        /// <summary>
         /// 抽屉设计高度。**96 + 544 + 80 = 720** 这条不变量（P29-3.5 规格 §1.2 I1）的唯一依据。
         /// 它不是"参考分辨率的高度"这么简单 —— 它是内容区 544 的分母，必须写死。
         /// </summary>
@@ -87,6 +94,16 @@ namespace SchoolTwin.UI
         /// <summary>内容区当前的水平内缩（最大化时用来居中，非最大化恒为 0）。</summary>
         private float _contentPad = -1f;
 
+        /// <summary>全屏态（20/60/20 三栏）内容层。窄态时整层关闭，窄态布局一行不改。</summary>
+        private TwinFullLayer _fullLayer;
+
+        /// <summary>头部/底部当前高度（缓动值）。96→80、80→60 靠它逐帧逼近，不瞬跳。</summary>
+        private float _headHCur = HeaderH;
+        private float _footHCur = ToolRowH;
+
+        /// <summary>底部工具行容器，全屏时要改高度与四项 x。</summary>
+        private RectTransform _toolRow;
+
         private TwinButton _backBtn;
 
         // ---- 头部右侧摘要（替代原来的三颗胶囊）----
@@ -120,6 +137,9 @@ namespace SchoolTwin.UI
         private int _lastAlarmBadge = -1;
 
         public static bool IsOpen { get { return _instance != null && _instance._open; } }
+
+        /// <summary>当前是否全屏（最大化）态。小地图靠它决定"让位"还是"移到 3D 右下"。</summary>
+        public static bool IsFullScreen { get { return _instance != null && _instance._maximized; } }
 
         // ================================================================ 自举
 
@@ -227,6 +247,12 @@ namespace SchoolTwin.UI
             BuildHeader();
             BuildContent();
             BuildToolRow();
+
+            // 全屏态内容层（P29-6 v2）。挂在最后 = 画在所有窄态元素之上。
+            // 平时整层关闭，只有最大化时 Show —— 窄态布局一个像素都不动。
+            GameObject fullGo = new GameObject("FullLayer", typeof(RectTransform));
+            _fullLayer = fullGo.AddComponent<TwinFullLayer>();
+            _fullLayer.Build(_root);
 
             // 触发钮是抽屉的兄弟节点（抽屉收起时它要还在）
             _trigger = TwinTriggerButton.Create(_root.parent, Toggle);
@@ -572,6 +598,7 @@ namespace SchoolTwin.UI
             row.pivot = new Vector2(0f, 0f);
             row.sizeDelta = new Vector2(0f, ToolRowH);
             row.anchoredPosition = Vector2.zero;
+            _toolRow = row;
 
             // 顶部分隔线（左右内边距 16，和头部那条一致）
             Image line = TwinUIFactory.Block(row, "Line", TwinTheme.Divider, false);
@@ -749,7 +776,7 @@ namespace SchoolTwin.UI
         /// </summary>
         private float ResolveWidthTarget()
         {
-            return _maximized ? CanvasWidth() : DesignWidth();
+            return _maximized ? FullW : DesignWidth();
         }
 
         /// <summary>当前页的设计宽度（首页 420 / 模块页 640）。最大化时内容仍按它居中。</summary>
@@ -766,6 +793,36 @@ namespace SchoolTwin.UI
             _widthTarget = ResolveWidthTarget();
 
             if (_maxGlyph != null) _maxGlyph.text = _maximized ? "▣" : "□";
+            ApplyFullMode();
+        }
+
+        /// <summary>
+        /// 全屏态与窄态的切换（P29-6 §2）。
+        ///
+        /// 两态是**两套骨架**，不是同一套改尺寸：全屏头 80 / 底 60 / 左 200 + 中 600 + 右 200，
+        /// 窄态头 96 / 底 80 / 单侧 420 或 640。所以切的是"哪一层显示"，
+        /// 而不是去挪窄态的坐标 —— 窄态已验收，挪一次就要重验一次。
+        /// </summary>
+        private void ApplyFullMode()
+        {
+            if (_fullLayer == null) return;
+
+            if (_maximized)
+            {
+                TwinFullLayer.Mode mode = (_stack != null && _stack.Top != null
+                                           && !(_stack.Top is TwinHomePage))
+                    ? TwinFullLayer.Mode.System
+                    : TwinFullLayer.Mode.Home;
+                _fullLayer.Show(mode);
+            }
+            else
+            {
+                _fullLayer.Hide();
+            }
+
+            // 窄态内容与全屏层互斥：同时开着会两套字叠在一起
+            if (_content != null && _content.gameObject.activeSelf == _maximized)
+                _content.gameObject.SetActive(!_maximized);
         }
 
         public void Close()
@@ -780,6 +837,8 @@ namespace SchoolTwin.UI
                 _maximized = false;
                 if (_maxGlyph != null) _maxGlyph.text = "□";
             }
+            // 收起全屏层并恢复窄态内容（否则下次打开是一块空白）
+            ApplyFullMode();
 
             // 关抽屉 = 清栈回首页（下次打开从首页开始，不会停在上次的深层页）
             if (_stack != null)
@@ -839,6 +898,9 @@ namespace SchoolTwin.UI
 
             // 首页 420，模块页 640；最大化时铺满画布（统一走 ResolveWidthTarget）
             _widthTarget = ResolveWidthTarget();
+
+            // 全屏态下切页要换内容层（L1 ↔ L2）；窄态下这里是空操作
+            if (_maximized) ApplyFullMode();
         }
 
         // ================================================================ Esc
@@ -883,10 +945,45 @@ namespace SchoolTwin.UI
             // 收起时 x 向右推到屏幕外（pivot 在右边，x 越大越靠外）
             // 高度仍然跟随画布（sizeDelta.y = 0），不写死 —— 见 Build() 里的回退说明
             float hiddenX = _widthCur;
-            _root.sizeDelta = new Vector2(_widthCur, 0f);
-            _root.anchoredPosition = new Vector2(Mathf.Lerp(hiddenX, 0f, TwinTheme.EaseOutCubic(_slide)), 0f);
+
+            if (_maximized)
+            {
+                // 【全屏态】锁 1000×720 居中，**不跟随画布宽度**。
+                // 规格 §4.1 要求全屏在 1000×720 逻辑坐标内重排（三栏 200/600/200 是绝对坐标）。
+                // 而 Expand 下画布宽可能是 1176.9（1069×654 窗口）—— 若让 _root 铺满画布，
+                // 三栏会全部靠左、右侧空出一大块，正是上一版"内容堆在左边"的翻版。
+                // 画布高在 Expand 下恒 ≥720，所以 720 高不会溢出。
+                _root.anchorMin = new Vector2(0.5f, 0.5f);
+                _root.anchorMax = new Vector2(0.5f, 0.5f);
+                _root.sizeDelta = new Vector2(FullW, FullH);
+                _root.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                _root.anchorMin = new Vector2(1f, 0f);
+                _root.anchorMax = new Vector2(1f, 1f);
+                _root.sizeDelta = new Vector2(_widthCur, 0f);
+                _root.anchoredPosition = new Vector2(Mathf.Lerp(hiddenX, 0f, TwinTheme.EaseOutCubic(_slide)), 0f);
+            }
+
+            // 头/底高度缓动：96↔80、80↔60。**必须缓动不能瞬跳**（负责人裁决）——
+            // 16px 的高度突变会让整块内容在切换瞬间"抖"一下，看起来像闪屏。
+            float headTarget = _maximized ? TwinFullLayer.HeadH : HeaderH;
+            float footTarget = _maximized ? TwinFullLayer.FootH : ToolRowH;
+            float step = Time.unscaledDeltaTime * 320f;
+
+            if (Mathf.Abs(_headHCur - headTarget) > 0.01f)
+                _headHCur = Mathf.MoveTowards(_headHCur, headTarget, step);
+            if (Mathf.Abs(_footHCur - footTarget) > 0.01f)
+                _footHCur = Mathf.MoveTowards(_footHCur, footTarget, step);
 
             ApplyMaximizedLayout();
+
+            if (_fullLayer != null && _maximized)
+            {
+                _fullLayer.TickFade();
+                _fullLayer.Refresh(false);
+            }
 
             // 摘要 0.5s 刷新（只在打开时）
             if (_open && Time.unscaledTime >= _nextSummaryAt)
@@ -936,20 +1033,52 @@ namespace SchoolTwin.UI
 
             if (_content == null) return;
 
-            float pad = Mathf.Max(0f, (_widthCur - DesignWidth()) * 0.5f);
+            // 全屏态内容交给 FullLayer 的三栏，窄态内容已隐藏 —— 所以全屏时头部**通栏**（pad=0），
+            // 不能再按"内容居中"去内缩，否则标题会缩到中间、和左右栏对不齐。
+            float pad = _maximized
+                ? 0f
+                : Mathf.Max(0f, (_widthCur - DesignWidth()) * 0.5f);
             if (Mathf.Abs(_contentPad - pad) < 0.5f) return;
 
             _contentPad = pad;
-            _content.offsetMin = new Vector2(pad, ToolRowH);
-            _content.offsetMax = new Vector2(-pad, -HeaderH);
+            _content.offsetMin = new Vector2(pad, _footHCur);
+            _content.offsetMax = new Vector2(-pad, -_headHCur);
 
             // 头部整体内缩同样的量 —— 否则最大化后标题贴屏幕最左、内容在中间，会脱节。
             // header 的 pivot 在左上、anchor 横跨左右，所以「左右各缩 pad」= sizeDelta.x = -2pad
             // 且 anchoredPosition.x = pad。pad 为 0 时逐值回到原始状态。
             if (_header != null)
             {
-                _header.sizeDelta = new Vector2(-2f * pad, HeaderH);
+                _header.sizeDelta = new Vector2(-2f * pad, _headHCur);
                 _header.anchoredPosition = new Vector2(pad, 0f);
+            }
+
+            // 底部工具行：高度缓动 + 全屏时四项右移到 x=20 起（窄态是 34，规格 §3.1 底带要求 20）
+            if (_toolRow != null)
+            {
+                _toolRow.sizeDelta = new Vector2(0f, _footHCur);
+                ApplyToolXs(_maximized ? 20f : 34f);
+            }
+        }
+
+        /// <summary>
+        /// 工具行四项的起点 x。窄态 34 / 全屏 20（P29-6 §3.1 底带）。
+        /// 只在基准变化时重排，不每帧写 —— 每帧改 RectTransform 会白刷布局。
+        /// </summary>
+        private float _toolBaseX = -1f;
+
+        private void ApplyToolXs(float baseX)
+        {
+            if (Mathf.Abs(_toolBaseX - baseX) < 0.01f) return;
+            _toolBaseX = baseX;
+
+            if (_toolLabels == null) return;
+            for (int i = 0; i < _toolLabels.Length; i++)
+            {
+                if (_toolLabels[i] == null) continue;
+                RectTransform rt = _toolLabels[i].rectTransform;
+                Vector2 p = rt.anchoredPosition;
+                rt.anchoredPosition = new Vector2(baseX + i * 96f, p.y);
             }
         }
 

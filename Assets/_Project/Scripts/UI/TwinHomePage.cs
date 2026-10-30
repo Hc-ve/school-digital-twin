@@ -395,7 +395,7 @@ namespace SchoolTwin.UI
                     f.Age = (float)Math.Max(0d, now - e.AtUtc);
                     f.Status = e.Ok ? TwinStatus.Normal : TwinStatus.Alarm;
                     f.Main = e.Action;
-                    f.Sub = e.TwinId;
+                    f.Sub = TwinCode.Short(e.TwinId);
                     f.Time = e.Time;
                     _feedBuf.Add(f);
                 }
@@ -414,7 +414,7 @@ namespace SchoolTwin.UI
                     f.Age = Mathf.Max(0f, now - r.StartTime);
                     f.Status = r.PeakStatus;
                     f.Main = string.IsNullOrEmpty(r.DisplayName) ? "告警" : r.DisplayName;
-                    f.Sub = string.IsNullOrEmpty(r.Zone) ? r.TwinId : r.Zone;
+                    f.Sub = TwinCode.Short(r.TwinId);
                     f.Time = r.Clock;
                     _feedBuf.Add(f);
                 }

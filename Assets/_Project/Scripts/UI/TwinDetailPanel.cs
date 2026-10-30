@@ -652,6 +652,25 @@ namespace SchoolTwin.UI
         private readonly StringBuilder _sbAlarm = new StringBuilder(128);
 
         private TwinAnchor _selected;
+
+        private static TwinDetailPanel _instance;
+
+        /// <summary>单例。首次访问时懒查一次（场景里就一个），之后直接返回缓存。</summary>
+        public static TwinDetailPanel Instance
+        {
+            get
+            {
+                if (_instance == null) _instance = FindObjectOfType<TwinDetailPanel>(true);
+                return _instance;
+            }
+        }
+
+        /// <summary>
+        /// 当前选中的锚点（无选中为 null）。
+        /// 全屏态右栏靠它决定显示「设备详情」还是「告警列表」——
+        /// 只读一个字段，不用事件，省掉订阅/退订的生命周期维护。
+        /// </summary>
+        public TwinAnchor SelectedAnchor { get { return _selected; } }
         private float _nextValueRefresh;
         private float _nextAlarmRefresh;
         private float _cardAlpha = 1f;
@@ -708,6 +727,8 @@ namespace SchoolTwin.UI
 
         private void Awake()
         {
+            _instance = this;
+
             // 【P28】详情卡并入总控抽屉，快捷键停用。
             // ⚠️ 必须在 Awake 里**硬写**，不能只改字段默认值 ——
             // Unity 用场景序列化值覆盖脚本默认值，这个组件已挂在场景里，
@@ -1798,8 +1819,9 @@ namespace SchoolTwin.UI
             }
             else
             {
-                SetCached(_subtitle, ref _cachedSubtitle,
-                    _selected.TwinId + "   ·   " + _selected.Zone + " / " + CategoryLabel(_selected.Category));
+                // 【P29-6 §6.1】详情用**全码**（`1号教学楼-2F-201-空调-001`），
+                // 原来这里是 `TwinId · Zone / Category` —— 原始 TwinId 带 `/`，已裁决禁止出现在 UI。
+                SetCached(_subtitle, ref _cachedSubtitle, TwinCode.Full(_selected.TwinId));
 
                 _chip.gameObject.SetActive(true);
                 RefreshChip();
