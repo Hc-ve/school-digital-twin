@@ -151,8 +151,19 @@ namespace SchoolTwin.UI
 
         public static bool IsOpen { get { return _instance != null && _instance._open; } }
 
-        /// <summary>当前是否全屏（最大化）态。小地图靠它决定"让位"还是"移到 3D 右下"。</summary>
+        /// <summary>当前是否全屏（最大化）态。小地图靠它决定"让位"还是"移到 3D 左上"。</summary>
         public static bool IsFullScreen { get { return _instance != null && _instance._maximized; } }
+
+        /// <summary>
+        /// 当前是否「L1 全屏」（三栏监控态，中间露着 3D）。
+        ///
+        /// 小地图只在**这一态**显示。L2 全屏是数据态、整块 1000×720 不透明、3D 根本看不见，
+        /// 小地图浮上去只会压住「数据监测」标题和 KPI 卡（主理人截图实测）。
+        /// </summary>
+        public static bool IsFullScreenHome
+        {
+            get { return _instance != null && _instance._maximized && _instance._fullIsHome; }
+        }
 
         // ================================================================ 自举
 
@@ -392,16 +403,26 @@ namespace SchoolTwin.UI
             _summary.text = "";
             LayoutSummary();
 
-            // 关闭 ×：文档 16×16（右 24，y=34），同样放大到 28×28 的点击区
-            TwinButton close = TwinButton.Create(header, "×", TwinButtonStyle.Ghost, 28f, 28f, Close, "Close");
-            TwinUIFactory.AnchorTopRight(close.Rect, 18f, 20f, 28f, 28f);
+            // 关闭 ×：全屏 24×24、右距 24、y=28（见微 P1-3 / 规格 §3.1）；
+            // 用 GhostOnDark 变体 —— 纯 Ghost 在深色标题栏上是"看不见底、只能看见字"，
+            // 而这里的字本身又很淡，等于整颗按钮消失。
+            TwinButton close = TwinButton.Create(header, "×", TwinButtonStyle.GhostOnDark,
+                24f, 24f, Close, "Close");
+            TwinUIFactory.AnchorTopRight(close.Rect, 24f, 28f, 24f, 24f);
 
             // 最大化 □（P29-4 C 方案）：只加这一个。
             // **不加「最小化 —」** —— 它的行为和关闭 × 完全重叠，两个入口做一件事只会让人分不清。
-            // 位置在 × 左边 8px（18 + 28 + 8 = 54），同样 28×28 命中区。
+            // 位置：× 左边 8px（24 + 24 + 8 = 56 右距），同为 24×24。
             GameObject maxGo = TwinUIFactory.Node("MaxBtn", header);
             RectTransform maxRt = (RectTransform)maxGo.transform;
-            TwinUIFactory.AnchorTopRight(maxRt, 54f, 20f, 28f, 28f);
+            TwinUIFactory.AnchorTopRight(maxRt, 56f, 28f, 24f, 24f);
+
+            // 与「关闭」同一套底：白 @0.04 + 白 @0.10 描边。
+            // 这个按钮是手写的（不是 TwinButton），所以要自己画底 —— 但视觉必须和 GhostOnDark 一致。
+            TwinRoundedRect maxBg = TwinUIFactory.Rounded(maxRt, "Bg", TwinTheme.R8,
+                TwinTheme.WithAlpha(Color.white, 0.04f), TwinTheme.WithAlpha(Color.white, 0.04f),
+                TwinTheme.WithAlpha(Color.white, 0.10f), 1f, false);
+            TwinUIFactory.Stretch(maxBg.rectTransform);
 
             Image maxHit = TwinUIFactory.Block(maxRt, "Hit", new Color(0f, 0f, 0f, 0f), true);
             TwinUIFactory.Stretch(maxHit.rectTransform);
@@ -412,7 +433,7 @@ namespace SchoolTwin.UI
             maxBtn.onClick.AddListener(ToggleMaximize);
 
             _maxGlyph = TwinUIFactory.Label(maxRt, "Glyph", TwinTheme.FsBody,
-                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+                TextAnchor.MiddleCenter, TwinTheme.TextSecondary);
             TwinUIFactory.Stretch(_maxGlyph.rectTransform);
             _maxGlyph.text = "□";
             _maxGlyph.raycastTarget = false;
@@ -1063,6 +1084,11 @@ namespace SchoolTwin.UI
 
             if (_title != null) TwinUIFactory.Place(_title.rectTransform, titleX, titleY, 300f, 28f);
             if (_subtitle != null) TwinUIFactory.Place(_subtitle.rectTransform, titleX, subY, 260f, 16f);
+
+            // 全屏时摘要提到主色级：全屏顶带更长、右侧更空，TextSecondary 在那片深底上偏灰，
+            // 和「按钮看不见」是同一类问题（亮度不够）。
+            if (_summary != null)
+                _summary.color = _maximized ? TwinTheme.TextPrimary : TwinTheme.TextSecondary;
         }
 
         /// <summary>
@@ -1190,16 +1216,58 @@ namespace SchoolTwin.UI
 
         private void ApplyToolXs(float baseX)
         {
-            if (Mathf.Abs(_toolBaseX - baseX) < 0.01f) return;
-            _toolBaseX = baseX;
-
+            // 用 Place 而不是只改 anchoredPosition：Place 会把 anchorMin/anchorMax/pivot/sizeDelta
+            // 全部重设一遍。只改 anchoredPosition 时，任何一次"别处改过 pivot 或 anchor"
+            // 都会让实际位置与算出来的值脱钩（实测间距 118 而不是 96，像被父节点缩放过）。
             for (int i = 0; i < _toolHits.Length; i++)
             {
                 if (_toolHits[i] == null) continue;
+
+                float want = baseX + i * 96f - 8f;
                 Vector2 p = _toolHits[i].anchoredPosition;
-                // 命中区比文字左移 8（文字 x = 起点），所以 hr.x = baseX + i*96 − 8
-                _toolHits[i].anchoredPosition = new Vector2(baseX + i * 96f - 8f, p.y);
+                bool wrong = Mathf.Abs(p.x - want) > 0.01f
+                             || Mathf.Abs(_toolHits[i].sizeDelta.x - 96f) > 0.01f;
+
+                if (wrong) TwinUIFactory.Place(_toolHits[i], want, 16f, 96f, 40f);
+
+                // label 在命中区内固定 x=8（创建时的值），被污染过就复位
+                if (_toolLabels != null && i < _toolLabels.Length && _toolLabels[i] != null)
+                {
+                    RectTransform lr = _toolLabels[i].rectTransform;
+                    if (Mathf.Abs(lr.anchoredPosition.x - 8f) > 0.01f)
+                        lr.anchoredPosition = new Vector2(8f, lr.anchoredPosition.y);
+                }
             }
+
+            _toolBaseX = baseX;   // 只留作诊断参考，不参与判断
+
+            // 诊断：L1 / L2 各打一次（用位掩码记"打没打过"，切回去不重复刷）。
+            // 两页各出一行，值一对比就知道"两页是不是同一个位置"——
+            // 之前只在第一次全屏打，只拿到 L1 的数，L2 对不对没法核对。
+            if (baseX < 34f)
+            {
+                int bit = _fullIsHome ? 1 : 2;
+                if ((_toolDiagMask & bit) == 0)
+                {
+                    _toolDiagMask |= bit;
+                    Debug.Log("[P29-6] 工具行诊断(" + (_fullIsHome ? "L1" : "L2") + ")："
+                        + "rowW=" + _toolRow.rect.width.ToString("0.0")
+                        + " rowH=" + _toolRow.rect.height.ToString("0.0")
+                        + " rowScale=" + _toolRow.localScale.x.ToString("0.000")
+                        + " baseX=" + baseX.ToString("0.0")
+                        + " hits=" + HitX(0) + "/" + HitX(1) + "/" + HitX(2) + "/" + HitX(3));
+                }
+            }
+        }
+
+        /// <summary>诊断位掩码：bit1 = L1 已打、bit2 = L2 已打。确认无问题后可整段删。</summary>
+        private int _toolDiagMask;
+
+        /// <summary>诊断用：取第 i 个命中区的实际 anchoredPosition.x（保留 1 位）。</summary>
+        private string HitX(int i)
+        {
+            if (_toolHits == null || i >= _toolHits.Length || _toolHits[i] == null) return "-";
+            return _toolHits[i].anchoredPosition.x.ToString("0.0");
         }
 
         // ================================================================ 摘要

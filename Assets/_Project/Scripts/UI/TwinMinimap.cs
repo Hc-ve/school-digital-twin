@@ -261,12 +261,15 @@ namespace SchoolTwin.UI
             // 小地图是独立的 Overlay Canvas，sortingOrder = 90，而主画布（抽屉所在）是 0 ——
             // 所以它**永远压在面板之上**。抽屉只有 420 宽时两者不重叠，看不出来；
             // 一点最大化铺满整屏，小地图就浮在面板上面了。
-            // 【P29-6 §7】但**全屏态要显示**，只是移到 3D 区右下角 —— 那里是三栏布局里
-            // 唯一露着 3D 的地方，地图放那儿既能看到自己位置、也不挡数据栏。
-            bool full = TwinDrawer.IsFullScreen;
-            bool occluded = TwinUIState.Current != TwinUILayer.None && !full;
+            // 【P29-6 §7】小地图只在**两种**情况下显示：
+            //   ① 纯场景（没有任何面板）—— 它是场景 HUD
+            //   ② L1 全屏（三栏监控态，中间露着 3D）—— 摆到 3D 左上
+            // 其余一律让位。特别是 **L2 全屏**：那是数据态，整块 1000×720 不透明、
+            // 3D 根本看不见，小地图浮上去只会压住「数据监测」标题和 KPI 卡（主理人截图实测）。
+            bool fullHome = TwinDrawer.IsFullScreenHome;
+            bool occluded = TwinUIState.Current != TwinUILayer.None && !fullHome;
 
-            ApplyFullPlacement(full);
+            ApplyFullPlacement(fullHome);
 
             if (_group == null)
             {

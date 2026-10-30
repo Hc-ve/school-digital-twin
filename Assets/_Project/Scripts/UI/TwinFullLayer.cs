@@ -107,6 +107,8 @@ namespace SchoolTwin.UI
         private TwinMetricCard _sysOnline;
         private TwinMetricCard _sysAlarm;
         private Text _healthPct;
+        /// <summary>健康卡本体。有告警/离线时外框转红/灰，让"这一块有事"能一眼看到。</summary>
+        private TwinRoundedRect _healthCard;
         private readonly Image[] _healthSeg = new Image[3];
         private readonly Text[] _healthLeg = new Text[3];
         private readonly TwinRoundedRect[] _healthDot = new TwinRoundedRect[3];
@@ -697,6 +699,7 @@ namespace SchoolTwin.UI
             TwinRoundedRect card = TwinUIFactory.Rounded(parent, "FHealth", TwinTheme.R12,
                 TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
             TwinUIFactory.Place(card.rectTransform, x, y, w, 88f);
+            _healthCard = card;
 
             Text title = TwinUIFactory.Label(card.rectTransform, "T", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
@@ -1196,6 +1199,15 @@ namespace SchoolTwin.UI
             {
                 _healthPct.text = "正常 " + Mathf.RoundToInt(rNormal * 100f) + "%";
                 _healthPct.color = worst;
+            }
+
+            // 有告警/离线时整卡外框转该级别色（裁决："存在告警时外框或标题加红"）。
+            // 全正常回原始 Border —— 不能一直亮着，那会让"有红框"变成常态、失去提示意义。
+            if (_healthCard != null)
+            {
+                bool hasIssue = alarm > 0 || offline > 0;
+                _healthCard.SetBorder(
+                    hasIssue ? TwinTheme.WithAlpha(worst, 0.55f) : TwinTheme.Border, 1f);
             }
 
             RefreshTop3();

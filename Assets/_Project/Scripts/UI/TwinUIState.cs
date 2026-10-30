@@ -94,8 +94,15 @@ namespace SchoolTwin.UI
             get { return Current != TwinUILayer.None && !FullScreen; }
         }
 
-        /// <summary>滚轮是否归 UI（相机缩放/推进让路）。</summary>
-        public static bool BlocksScroll { get { return Current != TwinUILayer.None; } }
+        /// <summary>
+        /// 滚轮是否归 UI（相机缩放/推进让路）。
+        /// **与移动同一套判定**：窄态用面板 → 挡；全屏逛场景 → 不挡。
+        /// 全屏只给 WASD 不给滚轮的话，前后推进就没了，逛场景体验差一半。
+        /// </summary>
+        public static bool BlocksScroll
+        {
+            get { return Current != TwinUILayer.None && !FullScreen; }
+        }
 
         /// <summary>左键拾取是否要挡。**只有模态挡** —— 抽屉开着还要能点设备。</summary>
         public static bool BlocksPick { get { return Current == TwinUILayer.Modal; } }

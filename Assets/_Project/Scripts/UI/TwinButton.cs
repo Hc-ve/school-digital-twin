@@ -16,6 +16,15 @@ namespace SchoolTwin.UI
         Danger,
         /// <summary>纯文字按钮（工具行、返回）。</summary>
         Ghost,
+        /// <summary>
+        /// 深色浮层上的图标按钮（顶带的「还原 / 关闭」）。
+        ///
+        /// 与 <see cref="Ghost"/> 的区别：Ghost 是"看不见底、只看得见字"，
+        /// 放在标题栏这种深色大面上就完全消失了（见微第三轮 P1-3：右上两个图标几乎看不见）。
+        /// 这个变体给一层极淡的底 + 1px 描边，让按钮"有边界"，但仍不抢标题。
+        /// **只用于顶带那两个按钮，不要拿去替换全局 Ghost。**
+        /// </summary>
+        GhostOnDark,
         /// <summary>列表行：左对齐、左内边距、选中时左侧竖条。</summary>
         Row,
     }
@@ -207,6 +216,17 @@ namespace SchoolTwin.UI
                         textColor = TwinTheme.TextSecondary;
                         break;
 
+                    case TwinButtonStyle.GhostOnDark:
+                        // 白 @0.04 的底 + 白 @0.10 的 1px 描边：在深色标题栏上"有边界但不抢眼"。
+                        // 底和描边用同一族白色，比给图标单独上色更克制 ——
+                        // 顶带已经有标题、副标、摘要三处文字，按钮再上色就花了。
+                        top = TwinTheme.WithAlpha(Color.white, 0.04f);
+                        bottom = top;
+                        border = TwinTheme.WithAlpha(Color.white, 0.10f);
+                        borderWidth = 1f;
+                        textColor = TwinTheme.TextSecondary;
+                        break;
+
                     default:   // Secondary / Row
                         top = TwinTheme.CardTop;
                         bottom = TwinTheme.CardBottom;
@@ -241,7 +261,19 @@ namespace SchoolTwin.UI
                 {
                     top = TwinTheme.Lighten(top, 0.07f);
                     bottom = TwinTheme.Lighten(bottom, 0.07f);
-                    if (_style == TwinButtonStyle.Ghost) textColor = TwinTheme.TextPrimary;
+
+                    // 悬停时底再提一档（白 @0.04 → 约 @0.10），字转主色 ——
+                    // 见微 P1-3 要求"悬停转 #F0F5FC"，这里用 TextPrimary 近似（它是 0.94,0.96,0.99）
+                    if (_style == TwinButtonStyle.GhostOnDark)
+                    {
+                        top = TwinTheme.WithAlpha(Color.white, 0.10f);
+                        bottom = top;
+                        textColor = TwinTheme.TextPrimary;
+                    }
+                    else if (_style == TwinButtonStyle.Ghost)
+                    {
+                        textColor = TwinTheme.TextPrimary;
+                    }
                 }
             }
 
