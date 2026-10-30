@@ -54,23 +54,30 @@ namespace SchoolTwin.UI
         /// 网格底纹 Sprite：每 <paramref name="cell"/> 单位一条细线（GridLine），
         /// 每 <paramref name="major"/> 单位一条主线（GridMajor）。**全项目只生成一次**。
         ///
+        /// 【P29-3.5 裁决 C-01】**只保留 120 主线，删除 24 细线。**
+        /// 传 `cell: 0`（默认值）即"不画细线"，此时贴图尺寸 = major（120×120）。
+        /// 理由：投影仪缩放下 24px 细线会产生摩尔纹，并且抢面板的视觉权重 ——
+        /// 面板缩略图看过去应该是"纯色深面板"，不是工程图纸。
+        ///
         /// 贴图尺寸不是固定 64×64，而是 cell 与 major 的最小公倍数（默认 24/120 → 120×120）。
         /// 原因：Tiled 的 Image 是按「贴图尺寸」平铺的，若贴图边长不是 cell 的整数倍，
         /// 24px 的线会在每次接缝处变成 24/24/16 这样不均匀的间隔 —— 一眼就能看出来。
-        /// 120×120 只有 57 KB，换来的是严丝合缝的 24 与 120。
         /// </summary>
-        public static Sprite GridSprite(int cell = 24, int major = 120)
+        public static Sprite GridSprite(int cell = 0, int major = 120)
         {
-            cell = Mathf.Max(2, cell);
-            major = Mathf.Max(cell, major);
+            // cell <= 1 视为「不画细线」。这里不能沿用 Mathf.Max(2, cell) —— 那会把 0 变成 2，
+            // 于是"只要主线"的请求反而画出满屏 2px 的密纹，比原来的 24 细线还糟。
+            bool hasMinor = cell >= 2;
+            major = Mathf.Max(hasMinor ? cell : 2, major);
 
             long key = ((long)cell << 32) ^ (uint)major;
             Sprite cached;
             if (s_gridCache.TryGetValue(key, out cached) && cached != null) return cached;
 
-            int tile = TileSize(cell, major);
+            // 没有细线时，贴图边长就等于 major —— 平铺一次正好一个主格，接缝永远落在主线上
+            int tile = hasMinor ? TileSize(cell, major) : major;
             Texture2D tex = new Texture2D(tile, tile, TextureFormat.RGBA32, false);
-            tex.name = "TwinGrid_" + cell + "_" + major;
+            tex.name = hasMinor ? "TwinGrid_" + cell + "_" + major : "TwinGridMajor_" + major;
             tex.wrapMode = TextureWrapMode.Repeat;   // Tiled 必须 Repeat，否则接缝处采样到边缘像素
             tex.filterMode = FilterMode.Bilinear;    // CanvasScaler 非整数缩放时，Point 会让线「断」掉
             tex.anisoLevel = 0;
@@ -83,12 +90,12 @@ namespace SchoolTwin.UI
             for (int y = 0; y < tile; y++)
             {
                 bool rowMajor = y % major == 0;
-                bool rowLine = y % cell == 0;
+                bool rowLine = hasMinor && y % cell == 0;
                 for (int x = 0; x < tile; x++)
                 {
                     Color32 c = clear;
                     if (rowMajor || x % major == 0) c = majorColor;
-                    else if (rowLine || x % cell == 0) c = line;
+                    else if (rowLine || (hasMinor && x % cell == 0)) c = line;
                     pixels[y * tile + x] = c;
                 }
             }
@@ -129,6 +136,9 @@ namespace SchoolTwin.UI
         /// <summary>
         /// 给面板铺网格：挂一个 Image 子节点（Tiled + GridSprite），不可点击，alpha 可整体调。
         /// 重复调用只会更新 alpha，**不会重建贴图、不会重复建节点**。
+        ///
+        /// 【C-01】内部固定走 `GridSprite(cell: 0, major: 120)` —— 只有 120 主线。
+        /// 调用点不需要改，也不允许传 24 进来（细线已被裁决删除）。
         /// </summary>
         public static Image ApplyGrid(RectTransform rt, float alpha = 1f)
         {
@@ -138,7 +148,7 @@ namespace SchoolTwin.UI
             if (image == null)
             {
                 image = TwinUIFactory.Graphic<Image>(rt, GridChildName);
-                image.sprite = GridSprite();
+                image.sprite = GridSprite(cell: 0, major: 120);
                 image.type = Image.Type.Tiled;
                 image.raycastTarget = false;
                 TwinUIFactory.Stretch(image.rectTransform);

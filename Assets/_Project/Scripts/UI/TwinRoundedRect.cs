@@ -22,6 +22,12 @@ namespace SchoolTwin.UI
         [SerializeField] private Color _fillTop = new Color(0.078f, 0.106f, 0.157f, 0.93f);
         [SerializeField] private Color _fillBottom = new Color(0.055f, 0.075f, 0.114f, 0.95f);
         [SerializeField] private bool _gradient = true;
+        /// <summary>
+        /// 渐变方向：false = 垂直（默认，顶→底），true = 横向（左→右）。
+        /// 横向只服务一处：告警卡顶部 2px 红条「左端 100% → 右端 0%」（P29-3.5 规格四）。
+        /// 全项目其余渐变**仍然只能垂直**（P29 §6.3），不要拿它做斜向/径向。
+        /// </summary>
+        [SerializeField] private bool _horizontal;
         [SerializeField] private Color _borderColor = new Color(0.165f, 0.212f, 0.282f, 0.71f);
         [SerializeField] private float _borderWidth = 1f;
         [Range(1, 12)]
@@ -48,20 +54,33 @@ namespace SchoolTwin.UI
 
         public void SetFill(Color color)
         {
-            SetFill(color, color, false);
+            SetFill(color, color, false, false);
         }
 
         public void SetFill(Color top, Color bottom)
         {
-            SetFill(top, bottom, true);
+            SetFill(top, bottom, true, false);
         }
 
-        private void SetFill(Color top, Color bottom, bool gradient)
+        /// <summary>
+        /// 横向渐变：<paramref name="left"/> 在左端、<paramref name="right"/> 在右端。
+        /// 唯一用途是告警卡顶部条的「红 → 透明」淡出（规格四要求横向线性，不是垂直）。
+        /// 右端请传同色 `WithAlpha(c, 0f)` 而不是 `Color.clear` ——
+        /// 后者是 (0,0,0,0)，插值中段会先变暗再透明，看起来像一条脏边。
+        /// </summary>
+        public void SetFillH(Color left, Color right)
         {
-            if (Same(_fillTop, top) && Same(_fillBottom, bottom) && _gradient == gradient) return;
+            SetFill(left, right, true, true);
+        }
+
+        private void SetFill(Color top, Color bottom, bool gradient, bool horizontal)
+        {
+            if (Same(_fillTop, top) && Same(_fillBottom, bottom)
+                && _gradient == gradient && _horizontal == horizontal) return;
             _fillTop = top;
             _fillBottom = bottom;
             _gradient = gradient;
+            _horizontal = horizontal;
             SetVerticesDirty();
         }
 
@@ -85,7 +104,9 @@ namespace SchoolTwin.UI
             if (Mathf.Abs(ta - t.a) < 0.002f && Mathf.Abs(ba - b.a) < 0.002f) return;
             t.a = ta;
             b.a = ba;
-            SetFill(t, b, _gradient);
+            // 必须把 _horizontal 一起传进去：默认参数会把它重置成 false，
+            // 结果是一次 SetAlpha 就把横向渐变悄悄改回垂直（告警顶部条会变成"上亮下暗"）。
+            SetFill(t, b, _gradient, _horizontal);
         }
 
         private static bool Same(Color a, Color b)
@@ -113,14 +134,14 @@ namespace SchoolTwin.UI
             int n = _outer.Count;
             if (n < 3) return;
 
-            // ---------- 填充：中心点 + 外圈扇形三角化，按 y 做上下渐变 ----------
-            Color32 centerColor = ToColor32(GradientAt(rect, (rect.yMin + rect.yMax) * 0.5f));
+            // ---------- 填充：中心点 + 外圈扇形三角化，按 y（或 x）做渐变 ----------
+            Color32 centerColor = ToColor32(GradientAt(rect, rect.center.x, rect.center.y));
             vh.AddVert(new Vector3(rect.center.x, rect.center.y, 0f), centerColor, Vector2.zero);
 
             for (int i = 0; i < n; i++)
             {
                 Vector2 p = _outer[i];
-                vh.AddVert(new Vector3(p.x, p.y, 0f), ToColor32(GradientAt(rect, p.y)), Vector2.zero);
+                vh.AddVert(new Vector3(p.x, p.y, 0f), ToColor32(GradientAt(rect, p.x, p.y)), Vector2.zero);
             }
 
             for (int i = 0; i < n; i++)
@@ -162,9 +183,21 @@ namespace SchoolTwin.UI
             }
         }
 
-        private Color GradientAt(Rect rect, float y)
+        /// <summary>
+        /// 取某点的填充色。垂直渐变时 `_fillTop` 是顶端、`_fillBottom` 是底端；
+        /// 横向渐变时 `_fillTop` 是**左端**、`_fillBottom` 是**右端**（复用同一对字段，
+        /// 由 `_horizontal` 决定方向 —— 不为一个 2px 的告警条再加两个序列化字段）。
+        /// </summary>
+        private Color GradientAt(Rect rect, float x, float y)
         {
             if (!_gradient) return _fillTop;
+
+            if (_horizontal)
+            {
+                float tx = rect.width <= 0.01f ? 0f : Mathf.Clamp01((x - rect.xMin) / rect.width);
+                return Color.Lerp(_fillTop, _fillBottom, tx);
+            }
+
             float t = rect.height <= 0.01f ? 0f : Mathf.Clamp01((y - rect.yMin) / rect.height);
             return Color.Lerp(_fillBottom, _fillTop, t);
         }

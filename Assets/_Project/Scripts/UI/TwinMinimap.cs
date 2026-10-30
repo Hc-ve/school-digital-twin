@@ -118,9 +118,13 @@ namespace SchoolTwin.UI
 
             CanvasScaler scaler = go.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 0.5f;
+            // 【P29-3.6】与主画布统一：1000×720 + Expand。
+            // 原来是 1920×1080 + match 0.5 —— 与主画布（1000×720 / match 0）在 1069×654 下
+            // 缩放比是 0.581 : 1.069，差 1.84 倍。一旦走到这个兜底分支（场景里一个
+            // Overlay Canvas 都没有），小地图会只有正常尺寸的 54%，位置也偏。
+            scaler.referenceResolution = new Vector2(1000f, 720f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            scaler.matchWidthOrHeight = 0f;   // Expand 下该值无效，归零避免误读
 
             if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
             return canvas;

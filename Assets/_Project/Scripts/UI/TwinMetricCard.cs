@@ -35,12 +35,20 @@ namespace SchoolTwin.UI
             Stale
         }
 
+        /// <summary>
+        /// 无数据占位符：U+2014 EM DASH（规格五）。
+        /// 不用 `0`（会被读成"真实读数 0"，答辩最容易被追问"为什么功率是 0"），
+        /// 也不用 `--`（信息量不足，看不出是"没接"还是"断了"）。
+        /// </summary>
+        private const string NoDataText = "—";
+
         private TwinRoundedRect _bg;
-        private TwinRoundedRect _topStrip;  // 告警专用：顶部 2px 红→透明
+        private TwinRoundedRect _topStrip;  // 告警专用：顶部 2px 红→透明（横向）
         private TwinRoundedRect _bar;       // 左内状态条（正常 3px / 告警 5px）
         private Text _label;
         private Text _value;
         private Text _unit;
+        private Text _noDataNote;           // 无数据态说明：「数据源未接入」
         private CanvasGroup _group;
 
         private int _valueSize = TwinTheme.FsDisplay;
@@ -107,11 +115,24 @@ namespace SchoolTwin.UI
             _unit.text = unit;
             _valueWidth = w - 24f;
 
-            // 告警顶部条：2px 高、红→透明垂直渐隐。x 从 12 起 —— 卡片 R12 的圆角在 0–12
-            // 这一段是弧线，条子从 0 起会从弧口探出去。
+            // 无数据态说明（规格五）：卡内左下、9px。
+            // 【为什么必须有这句】只显示「—」的话，看的人分不清是"没接"还是"断了"；
+            // 补一句「数据源未接入」等于把"还差什么"写在了脸上。
+            _noDataNote = TwinUIFactory.Label(Rect, "NoDataNote", TwinTheme.FsMicro,
+                TextAnchor.LowerLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_noDataNote.rectTransform, 12f, h - 16f, w - 24f, 12f);
+            _noDataNote.text = "数据源未接入";
+            _noDataNote.gameObject.SetActive(false);
+
+            // 告警顶部条：2px 高、**横向**「红 100% → 红 0%」（规格四要求横向线性，不是垂直）。
+            // x 从 12 起 —— 卡片 R12 的圆角在 0–12 这一段是弧线，条子从 0 起会从弧口探出去。
+            // 右端用 WithAlpha(StatusAlarm, 0) 而不是 Color.clear：后者是 (0,0,0,0)，
+            // 插值中段会先变暗再透明，看起来像一条脏边。
             _topStrip = TwinUIFactory.Rounded(Rect, "AlarmTop", 0f,
-                TwinTheme.AlarmStroke, Color.clear, Color.clear, 0f, false);
+                TwinTheme.AlarmStroke, TwinTheme.WithAlpha(TwinTheme.StatusAlarm, 0f),
+                Color.clear, 0f, false);
             TwinUIFactory.Place(_topStrip.rectTransform, 12f, 0f, w - 24f, 2f);
+            _topStrip.SetFillH(TwinTheme.AlarmStroke, TwinTheme.WithAlpha(TwinTheme.StatusAlarm, 0f));
             _topStrip.gameObject.SetActive(false);
 
             LayoutUnit();
@@ -167,11 +188,11 @@ namespace SchoolTwin.UI
             if (_bg == null) return;
 
             Color barColor;
-            string valueText = _value != null ? _value.text : "";
 
             // 告警不靠"整圈描边"表达 —— 整圈描边在深色界面里读作"被选中"，
             // 而不是"出事了"。改用四个信号叠加：色条加粗、顶部红条、数值变红、呼吸。
             bool alarm = _state == CardState.Alarm;
+            bool noData = _state == CardState.NoData;
 
             switch (_state)
             {
@@ -180,9 +201,10 @@ namespace SchoolTwin.UI
                     break;
 
                 case CardState.NoData:
-                    barColor = TwinTheme.StatusUnknown;
-                    if (_value != null && !string.Equals(valueText, "—", System.StringComparison.Ordinal))
-                        _value.text = "—";
+                    // 规格 §5.2：无数据态色条 #75859C（TextMuted），不呼吸
+                    barColor = TwinTheme.TextMuted;
+                    if (_value != null && !string.Equals(_value.text, NoDataText, System.StringComparison.Ordinal))
+                        _value.text = NoDataText;
                     break;
 
                 default:
@@ -204,9 +226,19 @@ namespace SchoolTwin.UI
             // 陈旧：整卡 alpha 0.5（§5.1），走 CanvasGroup，不动任何网格
             if (_group != null) _group.alpha = _state == CardState.Stale ? 0.5f : 1f;
 
-            // 只有告警卡允许数值染色
+            // 单位位：无数据态**隐藏** —— 否则「— kW」会被读成"零千瓦"（规格 §5.2）
+            if (_unit != null && _unit.gameObject.activeSelf == noData)
+                _unit.gameObject.SetActive(!noData);
+
+            // 无数据说明：「数据源未接入」只在无数据态出现
+            if (_noDataNote != null && _noDataNote.gameObject.activeSelf != noData)
+                _noDataNote.gameObject.SetActive(noData);
+
+            // 只有告警卡允许数值染色；无数据态用 Muted（规格 §5.2 #75859C）
             if (_value != null)
-                _value.color = alarm ? TwinTheme.StatusAlarm : TwinTheme.TextPrimary;
+                _value.color = alarm ? TwinTheme.StatusAlarm
+                             : noData ? TwinTheme.TextMuted
+                             : TwinTheme.TextPrimary;
 
             LayoutUnit();
         }
@@ -215,11 +247,12 @@ namespace SchoolTwin.UI
         {
             if (!_breathing) return;
 
-            // 周期 2.0s（TwinTheme.Breathe），alpha 0.55 ↔ 1.0，sin 驱动；unscaledTime，暂停时照走。
+            // 周期 2.0s（TwinTheme.Breathe），alpha **0.60 ↔ 1.00**（规格四），sin 驱动；unscaledTime，暂停时照走。
             // 只动「色条 + 数值 + 顶部条」三层的 canvasRenderer alpha —— 不碰顶点、不碰边框。
+            // （0.55 是 P29-3 的旧值，收口规格已改为 0.6 —— 0.55 那档在深色底上"暗到像故障"。）
             _breathPhase += Time.unscaledDeltaTime * (Mathf.PI * 2f / TwinTheme.Breathe);
             if (_breathPhase > Mathf.PI * 2f) _breathPhase -= Mathf.PI * 2f;
-            float a = 0.775f + 0.225f * Mathf.Sin(_breathPhase);   // 0.55..1.0
+            float a = 0.8f + 0.2f * Mathf.Sin(_breathPhase);   // 0.60..1.00
 
             if (_bar != null) _bar.canvasRenderer.SetAlpha(a);
             if (_value != null) _value.canvasRenderer.SetAlpha(a);

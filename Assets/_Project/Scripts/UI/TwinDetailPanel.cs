@@ -334,7 +334,26 @@ namespace SchoolTwin.UI
             Vector2 refRes = scaler.referenceResolution;
             float sx = Screen.width / Mathf.Max(1f, refRes.x);
             float sy = Screen.height / Mathf.Max(1f, refRes.y);
-            float factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+
+            // 【P29-3.6】补 Expand / Shrink 语义。
+            // 原来直接 `Lerp(sx, sy, matchWidthOrHeight)` —— 但 **Expand / Shrink 下
+            // matchWidthOrHeight 根本不参与计算**。主画布已统一到 Expand，一旦走到这个
+            // 兜底分支（拿不到 Canvas 时），手算值会和 Unity 实际 scaleFactor 不一致，
+            // 面板尺寸就跟着错。正常路径走上面的 canvas.scaleFactor，这里只做兜底。
+            float factor;
+            switch (scaler.screenMatchMode)
+            {
+                case CanvasScaler.ScreenMatchMode.Expand:
+                    factor = Mathf.Min(sx, sy);
+                    break;
+                case CanvasScaler.ScreenMatchMode.Shrink:
+                    factor = Mathf.Max(sx, sy);
+                    break;
+                default:
+                    factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+                    break;
+            }
+
             if (factor <= 0.0001f) return 1080f;
             return Screen.height / factor;
         }
@@ -360,7 +379,23 @@ namespace SchoolTwin.UI
             Vector2 refRes = scaler.referenceResolution;
             float sx = Screen.width / Mathf.Max(1f, refRes.x);
             float sy = Screen.height / Mathf.Max(1f, refRes.y);
-            float factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+
+            // 【P29-3.6】同 ViewportHeight：Expand / Shrink 下 matchWidthOrHeight 不参与计算，
+            // 必须按模式分派，否则兜底路径算出的宽度与 Unity 实际值不符。
+            float factor;
+            switch (scaler.screenMatchMode)
+            {
+                case CanvasScaler.ScreenMatchMode.Expand:
+                    factor = Mathf.Min(sx, sy);
+                    break;
+                case CanvasScaler.ScreenMatchMode.Shrink:
+                    factor = Mathf.Max(sx, sy);
+                    break;
+                default:
+                    factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
+                    break;
+            }
+
             if (factor <= 0.0001f) return 1920f;
             return Screen.width / factor;
         }
@@ -2259,8 +2294,11 @@ namespace SchoolTwin.UI
 
             if (runtime != null && runtime.Registry != null)
             {
-                IReadOnlyList<TwinAnchor> all = runtime.Registry.All;
-                _twinTotal = all.Count;
+                IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+                // 【P29-3.6】「设备总数」与面板同口径（Active 判定），不再用注册数 ——
+                // 注册数含 BAK 备份锚点的风险。下面的 all 仍要逐条遍历（告警列表要按点判定），
+                // 遍历入口也走快照层，UI 层不再出现 Registry.All。
+                _twinTotal = TwinDeviceStats.ActiveDeviceCount;
 
                 for (int i = 0; i < all.Count; i++)
                 {

@@ -35,31 +35,65 @@ namespace SchoolTwin.UI
     public sealed class TwinHomePage : TwinPageBase
     {
         public override string Title { get { return "总控面板"; } }
-        public override string Subtitle { get { return "1号教学楼 · 室内 + 室外路灯"; } }
+
+        /// <summary>
+        /// 副标（规格 §2.3 R4）：`1号教学楼 · 已接入 N 个点位 · 室内 + 室外路灯`。
+        ///
+        /// N 走取数，**禁止字面量** —— P3 接入 100 盏路灯后这里自动变 153，不改代码。
+        /// 量词按定盘裁决写「个点位」：这里的"台"是点位不是物理台数
+        /// （`ClassComputer/PC/Room_01` 一个点位代表整间机房 19 台电脑），
+        /// 副标负责把这件事说清楚，KPI 卡面仍用「台」。
+        /// </summary>
+        public override string Subtitle
+        {
+            get
+            {
+                int n = TwinDeviceStats.ActiveDeviceCount;
+                return n > 0
+                    ? "1号教学楼 · 已接入 " + n + " 个点位 · 室内 + 室外路灯"
+                    : "1号教学楼 · 室内 + 室外路灯";
+            }
+        }
 
         /// <summary>点「校园管理系统」时回调（抽屉负责 Push 二级页）。</summary>
         public Action OnOpenSystem;
 
-        // ---- 布局常量（页面坐标；括号内是抽屉坐标）----
-        // 【P29-3 补丁 A3】小节标题统一「上 28 / 下 12」，时间线首行再 +6 —— 三处间距全部是 4 的倍数。
+        // ---- 布局常量（页面坐标；页面顶为 0、向下计）----
+        //
+        // 【P29-3.5 规格一 §1.5 权威预算表】—— 这一组数字是唯一权威，改之前先对表。
+        //   0 ─────────────────────────────  页面顶
+        //   8   [KPI 121×88]                  8 → 96
+        // 118   功能入口 ──────────            118 → 132
+        // 136   [入口格 88×104]               136 → 240
+        // 276   实时动态 ──────────            276 → 290
+        // 296   ● 行1                         296 → 348
+        // 348   ● 行2                         348 → 400
+        // 400   ● 行3                         400 → 452
+        // 452   ● 行4                         452 → 504
+        // 504 ─────────────────────────────  安全区 24
+        // 544 ─────────────────────────────  内容底（= 720 − 96 头部 − 80 工具行）
+        //
+        // 上一版时间线从 312 起、竖线到 526，距内容底只剩 18px —— 数字上"没溢出"，
+        // 但和工具行分隔线之间几乎没有呼吸，投影仪缩放下看着就是"压住了"。
+        // 现在上移到 296，安全区 24（规格 I4 要求 ≥16）。
+        public const float PageH = 544f;       // 内容区硬预算，不许改
+        public const float SafeBottom = 528f;  // 内容下沿红线（544 − 16）
+
         private const float PadX = 16f;
-        private const float KpiY = 8f;          // 104
+        private const float KpiY = 8f;
         private const float KpiW = 121f;
         private const float KpiH = 88f;
         private const float KpiStep = 133f;     // 16 / 149 / 282
-        private const float SectionGapUp = 28f;     // 小节标题上方
-        private const float SectionGapDown = 12f;   // 小节标题下方
-        private const float SectionH = 16f;         // 标题行高（11 号字）
-        private const float SectionEntryY = 124f;   // 220 = 192 + 28
-        private const float EntryY = 152f;          // 248 = 220 + 16 + 12
+        private const float SectionH = 16f;     // 标题行高（11 号字）
+        private const float SectionEntryY = 118f;
+        private const float EntryY = 136f;
         private const float EntryW = 88f;
         private const float EntryH = 104f;
         private const float EntryGap = 16f;
-        private const float SectionFeedY = 284f;    // 380 = 352 + 28
-        private const float FeedTopY = 312f;        // 408 = 380 + 16 + 12（竖线起点）
-        private const float FeedFirstRow = 6f;      // 首行再往下 6
+        private const float SectionFeedY = 276f;
+        private const float FeedTopY = 296f;    // 竖线起点，也是行 1 顶部
         private const float FeedRowH = 52f;
-        private const float FeedLineH = 214f;       // 408→622
+        private const float FeedLineH = 208f;   // 296 → 504
         private const int FeedRows = 4;
 
         private TwinMetricCard _cardDevice;
@@ -227,24 +261,29 @@ namespace SchoolTwin.UI
 
             for (int i = 0; i < FeedRows; i++)
             {
-                float y = FeedTopY + FeedFirstRow + i * FeedRowH;
+                // 行 1 顶部 = 竖线起点 296，逐行 +52 → 296/348/400/452，行 4 下沿 504
+                float y = FeedTopY + i * FeedRowH;
 
+                // 圆点：x=18、行内 +22、8×8（规格 §1.5 行内排版）
                 TwinRoundedRect dot = TwinUIFactory.Rounded(root, "Dot_" + i, 4f,
                     TwinTheme.StatusUnknown, TwinTheme.StatusUnknown, Color.clear, 0f, false);
                 TwinUIFactory.Place(dot.rectTransform, 18f, y + 22f, 8f, 8f);
                 _feedDot[i] = dot;
 
+                // 主文案 11：x=34、行内 +3
                 Text main = TwinUIFactory.Label(root, "Row_" + i, TwinTheme.FsCaption,
                     TextAnchor.UpperLeft, TwinTheme.TextSecondary);
-                TwinUIFactory.Place(main.rectTransform, 34f, y + 8f, 420f - 34f - 78f, 16f);
+                TwinUIFactory.Place(main.rectTransform, 34f, y + 3f, 420f - 34f - 92f, 16f);
 
+                // 副文案 9：x=34、行内 +20
                 Text sub = TwinUIFactory.Label(root, "RowSub_" + i, TwinTheme.FsMicro,
                     TextAnchor.UpperLeft, TwinTheme.TextMuted);
-                TwinUIFactory.Place(sub.rectTransform, 34f, y + 26f, 420f - 34f - 78f, 12f);
+                TwinUIFactory.Place(sub.rectTransform, 34f, y + 20f, 420f - 34f - 92f, 12f);
 
+                // 时间 9：右对齐到 404（= 420 − 16），行内 +3
                 Text time = TwinUIFactory.Label(root, "RowTime_" + i, TwinTheme.FsMicro,
                     TextAnchor.UpperRight, TwinTheme.TextMuted);
-                TwinUIFactory.Place(time.rectTransform, 420f - PadX - 70f, y + 8f, 70f, 12f);
+                TwinUIFactory.Place(time.rectTransform, 420f - PadX - 70f, y + 3f, 70f, 12f);
 
                 _feedMain[i] = main;
                 _feedSub[i] = sub;
@@ -254,7 +293,7 @@ namespace SchoolTwin.UI
 
             _feedEmpty = TwinUIFactory.Label(root, "FeedEmpty", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
-            TwinUIFactory.Place(_feedEmpty.rectTransform, 34f, FeedTopY + FeedFirstRow, 300f, 16f);
+            TwinUIFactory.Place(_feedEmpty.rectTransform, 34f, FeedTopY, 300f, 16f);
             _feedEmpty.text = "暂无动态";
             _feedEmpty.gameObject.SetActive(false);
         }
@@ -301,34 +340,30 @@ namespace SchoolTwin.UI
 
         private void RefreshStats()
         {
-            TwinRuntime rt = TwinRuntime.Instance;
-            if (rt == null || rt.Registry == null) return;
+            // 【P29-3.6】三个数字全部来自快照，本页不再遍历 Registry。
+            // 同一帧内三张卡读到的是同一份快照 —— 这是"同屏一致"的唯一保证。
+            int total = TwinDeviceStats.ActiveDeviceCount;
+            int online = TwinDeviceStats.OnlineDeviceCount;
+            int alarm = TwinDeviceStats.AlarmDeviceCount;
 
-            int total = 0, online = 0, alarm = 0;
-            IReadOnlyList<TwinAnchor> all = rt.Registry.All;
-            if (all != null)
+            // Registry 未就绪（启动首帧）→ 三张卡全部走无数据态，**不显示 0**
+            // （规格 §2.4：0 会被读成"真实读数 0"，答辩时最容易被追问）
+            bool ready = total > 0;
+
+            if (ready)
             {
-                for (int i = 0; i < all.Count; i++)
-                {
-                    TwinAnchor a = all[i];
-                    if (a == null) continue;
-                    total++;
-
-                    TwinStatus s = a.StatusOfWorst();
-                    if (s == TwinStatus.Alarm || s == TwinStatus.Warning) alarm++;
-                    if (s != TwinStatus.Offline && s != TwinStatus.Stale) online++;
-                }
+                _cardDevice.SetValue(total.ToString());
+                _cardOnline.SetValue(online.ToString());
+                _cardAlarm.SetValue(alarm.ToString());
             }
 
-            _cardDevice.SetValue(total.ToString());
-            _cardOnline.SetValue(online.ToString());
-            _cardAlarm.SetValue(alarm.ToString());
+            _cardDevice.SetState(ready ? TwinMetricCard.CardState.Normal : TwinMetricCard.CardState.NoData);
+            _cardOnline.SetState(ready ? TwinMetricCard.CardState.Normal : TwinMetricCard.CardState.NoData);
+            _cardAlarm.SetState(!ready ? TwinMetricCard.CardState.NoData
+                                : alarm > 0 ? TwinMetricCard.CardState.Alarm
+                                : TwinMetricCard.CardState.Normal);
 
-            _cardDevice.SetState(TwinMetricCard.CardState.Normal);
-            _cardOnline.SetState(TwinMetricCard.CardState.Normal);
-            _cardAlarm.SetState(alarm > 0 ? TwinMetricCard.CardState.Alarm : TwinMetricCard.CardState.Normal);
-
-            ApplyFocus(alarm > 0);
+            ApplyFocus(ready && alarm > 0);
         }
 
         /// <summary>

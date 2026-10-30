@@ -289,5 +289,101 @@ namespace SchoolTwin.UI
             if (text.Length <= limit) return text;
             return text.Substring(0, limit - 1) + "…";
         }
+
+        // ================================================================ 画布缩放策略
+
+        /// <summary>
+        /// 全项目画布缩放的统一口径：`ScaleWithScreenSize` + 参考 1000×720 + **Expand**。
+        ///
+        /// ── 为什么必须是 Expand（P29-3.6，修「面板消失 / 尺寸异常」）──────────
+        /// 原来是 `MatchWidthOrHeight` + `matchWidthOrHeight = 0`（**只按宽度缩放**）。
+        /// 那意味着画布高度完全由窗口宽高比决定：
+        ///
+        ///     scaleFactor = screenW / 1000
+        ///     画布高     = screenH / scaleFactor = screenH × 1000 / screenW
+        ///
+        /// 1000×720 窗口下正好 720；但主理人用的 **1069×654 只有 611.8** ——
+        /// 抽屉是按 720 排的，于是上下各溢 54px：头部 96 被裁掉上半（标题、关闭 × 看不见）、
+        /// 工具行 80 被裁掉下半（数据源/录制/帮助/设置 看不见）、抽屉关不掉、触发钮回不来。
+        ///
+        /// Expand 的语义是 `scaleFactor = min(screenW/1000, screenH/720)`，
+        /// 画布**逻辑尺寸只增不减**：
+        ///
+        /// | 窗口 | scaleFactor | 画布逻辑尺寸 |
+        /// |---|---|---|
+        /// | 1000×720 | 1.000 | 1000 × 720 |
+        /// | 1069×654 | 0.908 | 1177 × **720** |
+        ///
+        /// 两种窗口高度都是 720，所有按 720 排的布局原样成立 —— **零布局常量改动**。
+        /// 代价是窗口更扁时画布变宽（右侧多出空白），但那比裁掉内容好得多，
+        /// 也正是 Expand（"扩张而不是裁切"）的设计意图。
+        ///
+        /// ── 为什么要运行时改而不是改场景 ────────────────────────────────
+        /// 任务明确禁止动 `.unity`。运行时改 CanvasScaler 实例，场景里存的旧值不变，
+        /// 但每次进 Play 都会被这里纠正 —— 不会出现"编辑器里看着对、进游戏就错"。
+        /// 后续若要一次性落库，在编辑器里把它改成同样的值即可，本方法会自动跳过（见下面的早退）。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        public static void ApplyCanvasPolicy()
+        {
+            Canvas main = FindMainOverlayCanvas();
+            if (main == null)
+            {
+                Debug.LogWarning("[TwinUI] 没找到 ScreenSpaceOverlay 主画布，跳过缩放统一。" +
+                                 "若界面比例异常，检查场景里的 [TwinUI] 是否被禁用或没建出来。");
+                return;
+            }
+
+            CanvasScaler scaler = main.GetComponent<CanvasScaler>();
+            if (scaler == null)
+            {
+                Debug.LogWarning("[TwinUI] 主画布 " + main.name + " 上没有 CanvasScaler，跳过缩放统一。");
+                return;
+            }
+
+            if (scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize) return;
+            if (scaler.screenMatchMode == CanvasScaler.ScreenMatchMode.Expand) return;   // 已符合，不重复写
+
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            scaler.matchWidthOrHeight = 0f;   // Expand 下该值无效，归零避免下次有人误读
+
+            Debug.Log("[TwinUI] 主画布缩放已切到 Expand（" + main.name +
+                      "，参考 " + scaler.referenceResolution.x.ToString("0") + "×" +
+                      scaler.referenceResolution.y.ToString("0") +
+                      "）—— 画布逻辑高度不再随窗口宽高比缩水");
+        }
+
+        /// <summary>
+        /// 取**面积最大**的 ScreenSpaceOverlay 画布。
+        ///
+        /// 【为什么不能取第一个】`FindObjectsOfType` 顺序不保证，工程里有若干子 Canvas
+        /// （排序层、局部遮罩），取第一个会命中它们。上一轮探针就栽在这，
+        /// 日志里报了 `Canvas.rect = 220×68` 这种假数，误导过排查。
+        /// </summary>
+        private static Canvas FindMainOverlayCanvas()
+        {
+            Canvas[] all = UnityEngine.Object.FindObjectsOfType<Canvas>(true);
+
+            Canvas best = null;
+            float bestArea = -1f;
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Canvas c = all[i];
+                if (c == null || c.renderMode != RenderMode.ScreenSpaceOverlay) continue;
+
+                RectTransform rt = c.transform as RectTransform;
+                if (rt == null) continue;
+
+                float area = rt.rect.width * rt.rect.height;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = c;
+                }
+            }
+
+            return best;
+        }
     }
 }

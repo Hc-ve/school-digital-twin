@@ -130,6 +130,17 @@ namespace SchoolTwin.Twin
                 Evaluate(anchor, now);
             }
 
+            // 【P29-3.6】设备指标快照，与告警判定共用这一轮 0.2s 遍历。
+            //
+            // 为什么挂在这里而不是新开一个 Update：
+            //   ① 本方法本来就在遍历 Registry.All，顺手算 4 个计数不增加任何遍历成本；
+            //   ② 新开一个 Update 会多一遍 53 次属性读，且与告警判定的时序错开，
+            //      会出现「告警卡显示 2、告警中心列表 3 条」这种对不上的画面。
+            //
+            // ⚠️ Rebuild 内部**不读**本类的 Entry.Status —— 那是断电抑制后的状态，
+            //    拿它统计会让「拉一次闸 = 全部设备离线」。详见 TwinDeviceStats 类注释。
+            TwinDeviceStats.Rebuild();
+
             if (now >= _nextPrune)
             {
                 _nextPrune = now + 5f;

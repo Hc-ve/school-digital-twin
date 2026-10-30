@@ -266,7 +266,10 @@ namespace SchoolTwin.Perf
             _prevDropped = drop;
             _prevOrphan = orphan;
 
-            int twinCount = _runtime != null && _runtime.Registry != null ? _runtime.Registry.Count : 0;
+            // 【P29-3.6】与 UI 同口径（A1~A4 的 Active 判定）。
+            // 原来读的是 `Registry.Count`（注册数），含 6 个 BAK 备份锚点的风险 ——
+            // 一旦那个未激活容器被勾上，报告里的设备数会比面板多 6。
+            int twinCount = TwinDeviceStats.ActiveDeviceCount;
 
             AppendRow(elapsed, avgFps, avgMs, _windowWorstFrameMs, _windowAllocSum,
                       dRecv, dDisp, dDrop, dOrphan, pending, subs, twinCount,
@@ -303,9 +306,15 @@ namespace SchoolTwin.Perf
             return _runtime != null && _runtime.Bus != null ? _runtime.Bus.PendingCount : 0;
         }
 
+        /// <summary>
+        /// 订阅者数量。
+        /// 【P29-3.6 修】原实现返回 `Registry.Count` —— 订阅数和设备数是两件事，
+        /// 混用会让报告里「订阅 53」在根本没有订阅者时也显示 53，排查数据分发问题时会看反。
+        /// 改用总线自己的计数。
+        /// </summary>
         private int SubscriberCount()
         {
-            return _runtime != null && _runtime.Registry != null ? _runtime.Registry.Count : 0;
+            return _runtime != null && _runtime.Bus != null ? _runtime.Bus.GetStats().SubscriberCount : 0;
         }
 
         /// <summary>按状态统计点位数。TwinRegistry 已提供该接口，避免自己遍历。</summary>

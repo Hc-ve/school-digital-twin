@@ -39,7 +39,13 @@ namespace SchoolTwin.UI
     {
         public const float WidthHome = 420f;
         public const float WidthModule = 640f;
-        private const float HeightRef = 720f;
+
+        /// <summary>
+        /// 抽屉设计高度。**96 + 544 + 80 = 720** 这条不变量（P29-3.5 规格 §1.2 I1）的唯一依据。
+        /// 它不是"参考分辨率的高度"这么简单 —— 它是内容区 544 的分母，必须写死。
+        /// </summary>
+        public const float HeightRef = 720f;
+
         private const float HeaderH = 96f;
 
         /// <summary>
@@ -180,6 +186,18 @@ namespace SchoolTwin.UI
         private void Build()
         {
             _root = transform as RectTransform;
+
+            // ── 抽屉高度：跟随画布（已回退 P29-3.5 的「锁死 720」）──────────────────
+            //
+            // 【为什么撤销】上一版把高度写死 720 并垂直居中，理由是「保证内容区稳定拿到 544」。
+            // 实测 1069×654 窗口下画布只有 1004×614 —— 720 高的抽屉上下各溢 53px，
+            // 结果**头部 96 被裁掉上半（标题、关闭 × 看不见）、工具行 80 被裁掉下半
+            // （数据源/录制/帮助/设置 四项看不见）**。主理人 play 实测确认。
+            //
+            // 结论：抽屉高度必须跟随画布。画布高 < 720 时内容区会不足 544，
+            // 那是 CanvasScaler（match=0 只按宽度缩放）带来的 R7 问题，
+            // 要根治得改 CanvasScaler 的 match 或整体缩放 —— 属打包阶段的多分辨率适配，
+            // 不能靠在 UI 里写死 720 来绕。
             _root.anchorMin = new Vector2(1f, 0f);
             _root.anchorMax = new Vector2(1f, 1f);
             _root.pivot = new Vector2(1f, 0.5f);
@@ -313,29 +331,52 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// 摘要那一行的排版：右对齐到 (宽度 − 右边距)，色点贴在文字左侧。
-        /// 放不下就换紧凑文案（`受控 38` → `38 受控`），**不允许换行、不允许缩字号**。
+        /// 摘要那一行的排版（P29-3.5 规格三）：**只显示「当前页没有用 KPI 卡表达过」的全局数字**。
+        ///
+        /// 逐项判定，不做整行开关：
+        ///   L1 总控       在线/告警已有 KPI 卡，受控本页不出现  → 整行隐藏（右侧只留 ×）
+        ///   L2 数据监测    KPI 2×2 已有在线/告警                → 只剩「受控 N」
+        ///   L2 告警中心    页内自己表达告警总数                  → 「在线 / 受控」
+        ///   其余 L2 页     三项都没有                           → 三项齐全
+        ///
+        /// 上一版是「L1 隐藏、L2 全显」的整行开关，于是数据监测页把 KPI 卡上的
+        /// 在线/告警又用 11px 小字复读了一遍 —— 这正是规格 §3 要消掉的重复。
         /// </summary>
         private void LayoutSummary()
         {
             if (_summary == null || _summaryDot == null) return;
 
-            string full = "在线 " + _sumOnline + " / 告警 " + _sumAlarm + " / 受控 " + _sumScope;
-            string compact = _sumOnline + " 在线 / " + _sumAlarm + " 告警 / " + _sumScope + " 受控";
+            bool showOnline, showAlarm, showScope;
+            ResolveSummaryItems(out showOnline, out showAlarm, out showScope);
 
-            // 右缘必须让开关闭键：× 的点击区占 width−46 ~ width−18，再退 8 才不叠。
-            // 文档写的「右对齐 404 / 620」等于贴到 width−16，正好压在 × 上（截图里实锤），
-            // 所以统一改成 width−54 —— L1/L2 同一规则，视觉上都紧贴 × 左侧。
-            const float rightInset = 54f;
+            string text = BuildSummaryText(showOnline, showAlarm, showScope, false);
+            bool visible = text.Length > 0;
 
-            // 可用宽度 = 抽屉宽 − 右缘让位 − 左边留白(标题区最多占到 332)
+            // 摘要与色点必须一起收 —— 只收文字会留一个孤零零的绿点
+            if (_summary.gameObject.activeSelf != visible) _summary.gameObject.SetActive(visible);
+            if (_summaryDot.gameObject.activeSelf != visible) _summaryDot.gameObject.SetActive(visible);
+            if (!visible) return;
+
+            // 右缘必须让开关闭键。
+            //
+            // 【为什么是 58 不是规格写的 54】规格 §3.3 同时给了两个约束：
+            //   ①「右对齐 width−54」 ②「与 × 间距 ≥12px（× 占 380–396）」。
+            // 这两个在代码里对不上：× 的**点击区**是 28×28（AnchorTopRight 18 → 右端 width−18、
+            // 左端 width−46），比规格假设的 16×16 更宽。按 54 排，摘要右端在 width−54、
+            // × 左端在 width−46，间距只有 8px —— 不满足 ②。
+            // ① 是排版值、② 是硬指标，冲突时保 ②：rightInset = 46 + 12 = 58。
+            const float rightInset = 58f;
+
+            // 可用宽度 = 抽屉宽 − 右缘让位 − 左边留白（标题区最多占到 332）
             float avail = _widthCur - rightInset - 332f;
 
-            _summary.text = full;
+            _summary.text = text;
             float w = _summary.preferredWidth;
+
+            // 放不下就换紧凑文案（`受控 38` → `38 受控`），**不换行、不缩字号**（规格 §3.3）
             if (w > avail)
             {
-                _summary.text = compact;
+                _summary.text = BuildSummaryText(showOnline, showAlarm, showScope, true);
                 w = _summary.preferredWidth;
             }
 
@@ -354,6 +395,84 @@ namespace SchoolTwin.UI
             dr.anchoredPosition = new Vector2(-(rightInset + w + 8.5f), -34f);
         }
 
+        /// <summary>按「当前页」决定摘要里哪几项该出现。三项全 false 即整行隐藏。</summary>
+        private void ResolveSummaryItems(out bool showOnline, out bool showAlarm, out bool showScope)
+        {
+            // Registry 未就绪（启动首帧）→ 整行隐藏，不显示「在线 0」这种假数（规格 §2.4）
+            if (TwinDeviceStats.ActiveDeviceCount <= 0)
+            {
+                showOnline = false;
+                showAlarm = false;
+                showScope = false;
+                return;
+            }
+
+            TwinPageBase top = _stack != null ? _stack.Top : null;
+
+            if (top is TwinHomePage)
+            {
+                // L1：在线/告警已在三张 KPI 卡上；受控本页不出现 → 整行隐藏
+                showOnline = false;
+                showAlarm = false;
+                showScope = false;
+                return;
+            }
+
+            TwinSystemPage sys = top as TwinSystemPage;
+            string key = sys != null ? sys.CurrentModuleKey : null;
+
+            if (string.Equals(key, "monitor", StringComparison.Ordinal))
+            {
+                // 数据监测：KPI 2×2 已表达在线/告警，只剩受控
+                showOnline = false;
+                showAlarm = false;
+                showScope = true;
+                return;
+            }
+
+            if (string.Equals(key, "alarm", StringComparison.Ordinal))
+            {
+                // 告警中心：页内自己表达告警总数，摘要不再重复
+                showOnline = true;
+                showAlarm = false;
+                showScope = true;
+                return;
+            }
+
+            // 设备管理 / 电力管理 / 数据统计 / 天气（预留）
+            showOnline = true;
+            showAlarm = true;
+            showScope = true;
+        }
+
+        /// <summary>
+        /// 拼摘要文案。分隔符固定 ` / `（前后各 1 个半角空格），顺序固定 在线 → 告警 → 受控。
+        /// <paramref name="compact"/> = true 时用「N 在线」的紧凑写法。
+        /// </summary>
+        private string BuildSummaryText(bool online, bool alarm, bool scope, bool compact)
+        {
+            string text = "";
+
+            if (online) text += compact ? _sumOnline + " 在线" : "在线 " + _sumOnline;
+            if (alarm) text += (text.Length > 0 ? " / " : "") + (compact ? _sumAlarm + " 告警" : "告警 " + _sumAlarm);
+            if (scope) text += (text.Length > 0 ? " / " : "") + (compact ? _sumScope + " 受控" : "受控 " + _sumScope);
+
+            return text;
+        }
+
+        /// <summary>
+        /// 副标同步。L1 的副标含设备总数（`已接入 N 个点位`），会随数据变化 ——
+        /// 跟着摘要一起 0.5s 对一次，变了才写。
+        /// </summary>
+        private void SyncSubtitle()
+        {
+            if (_subtitle == null || _stack == null) return;
+
+            TwinPageBase top = _stack.Top;
+            string text = top != null ? (top.Subtitle ?? "1号教学楼") : "1号教学楼";
+            if (!string.Equals(_subtitle.text, text, StringComparison.Ordinal)) _subtitle.text = text;
+        }
+
         private void BuildContent()
         {
             GameObject go = new GameObject("Content", typeof(RectTransform));
@@ -365,6 +484,13 @@ namespace SchoolTwin.UI
             _content.pivot = new Vector2(0f, 1f);
             _content.offsetMin = new Vector2(0f, ToolRowH);      // 下边留出工具行
             _content.offsetMax = new Vector2(0f, -HeaderH);      // 上边留出头部
+            // 高度恒为 720 − 80 − 96 = 544。这是内容区硬预算，页面根不得再设固定高度。
+
+            // 【P29-3.5 规格一 A2】裁剪加在 _content，**不加 _root**。
+            // 加在 root 会把主入口的双层发光描边（外层向外扩 3px）一起裁掉，发光就没了；
+            // 加在 content 正好把越界内容切在工具行之上 ——
+            // 这是"就算哪天又算错了，也绝不会出现内容压在工具行上"的兜底。
+            go.AddComponent<RectMask2D>();
 
             _stack = TwinPageStack.Create(_content);
             _stack.Changed += OnStackChanged;
@@ -591,17 +717,10 @@ namespace SchoolTwin.UI
             if (_title != null) TwinUIFactory.Place(_title.rectTransform, titleX, 20f, 300f, 28f);
             if (_subtitle != null) TwinUIFactory.Place(_subtitle.rectTransform, titleX, 62f, 260f, 16f);
 
-            // 【P29-3 补丁 A1】摘要只在 L2 出现。
-            // L1 的在线/告警/受控已经是三张 KPI 卡上的大数字，头部再来一行 11px 说同一件事，
-            // 就是"首屏同一数字出现两遍"。摘要 + 色点必须一起收，只收文字会留一个孤零零的绿点。
-            bool showSummary = !isHome;
-            if (_summary != null && _summary.gameObject.activeSelf != showSummary)
-                _summary.gameObject.SetActive(showSummary);
-            if (_summaryDot != null && _summaryDot.gameObject.activeSelf != showSummary)
-                _summaryDot.gameObject.SetActive(showSummary);
-
-            // 摘要位置随页切换重排（文案长度与可用宽度都会变）
+            // 【P29-3.5 规格三】摘要按页逐项判定 —— L1 整行隐藏、数据监测只剩受控、其余三项齐全。
+            // 显示与否交给 LayoutSummary 统一裁决，这里不再单独 SetActive（两处都管会互相打）。
             LayoutSummary();
+            SyncSubtitle();
 
             // 首页 420，模块页 640
             _widthTarget = isHome ? WidthHome : WidthModule;
@@ -647,6 +766,7 @@ namespace SchoolTwin.UI
             }
 
             // 收起时 x 向右推到屏幕外（pivot 在右边，x 越大越靠外）
+            // 高度仍然跟随画布（sizeDelta.y = 0），不写死 —— 见 Build() 里的回退说明
             float hiddenX = _widthCur;
             _root.sizeDelta = new Vector2(_widthCur, 0f);
             _root.anchoredPosition = new Vector2(Mathf.Lerp(hiddenX, 0f, TwinTheme.EaseOutCubic(_slide)), 0f);
@@ -663,31 +783,26 @@ namespace SchoolTwin.UI
 
         private void RefreshSummary(bool force)
         {
-            TwinRuntime rt = TwinRuntime.Instance;
-            if (rt == null || rt.Registry == null) return;
+            // 【P29-3.6】三个数全部来自快照，本类不再遍历 Registry。
+            // 快照 0.2s 更新一次，这里 0.5s 读一次，读的是同一个数 —— 所以头部摘要
+            // 与 L1 KPI 卡、L2 数据监测 KPI 永远是同一个值。
+            int online = TwinDeviceStats.OnlineDeviceCount;
+            int alarm = TwinDeviceStats.AlarmDeviceCount;
+            int scope = TwinDeviceStats.ControlScopeCount;
 
-            int online = 0, alarm = 0, total = 0;
-            IReadOnlyList<TwinAnchor> all = rt.Registry.All;
-            if (all != null)
-            {
-                for (int i = 0; i < all.Count; i++)
-                {
-                    TwinAnchor a = all[i];
-                    if (a == null) continue;
-                    total++;
-                    TwinStatus s = a.StatusOfWorst();
-                    if (s == TwinStatus.Alarm || s == TwinStatus.Warning) alarm++;
-                    if (s != TwinStatus.Offline && s != TwinStatus.Stale) online++;
-                }
-            }
+            bool changed = force || online != _sumOnline || alarm != _sumAlarm || scope != _sumScope;
 
-            if (_summary != null)
+            if (changed)
             {
                 _sumOnline = online;
                 _sumAlarm = alarm;
-                _sumScope = TwinControlScope.Count;
+                _sumScope = scope;
                 LayoutSummary();
-                // 色点跟着最坏状态走：有告警就红，否则绿（受控是"操作量"，不是健康度，不参与取色）
+            }
+
+            // 色点跟着最坏状态走：有告警就红，否则绿（受控是"操作量"，不是健康度，不参与取色）
+            if (_summaryDot != null)
+            {
                 Color dot = alarm > 0 ? TwinTheme.StatusAlarm : TwinTheme.StatusNormal;
                 _summaryDot.SetFill(dot, dot);
             }
@@ -698,6 +813,9 @@ namespace SchoolTwin.UI
                 _lastAlarmBadge = alarm;
                 _trigger.SetAlarmCount(alarm);
             }
+
+            // 副标含设备总数（L1 是「已接入 N 个点位」），跟着摘要一起 0.5s 对一次
+            SyncSubtitle();
 
             if (force) _nextSummaryAt = Time.unscaledTime + 0.5f;
         }

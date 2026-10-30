@@ -38,17 +38,55 @@ namespace SchoolTwin.UI
 
         public Action<string> OnModulePicked;
 
+        /// <summary>当前选中的模块 key（monitor / device / power / alarm / stats）。抽屉用它做「摘要按页逐项判定」。</summary>
+        public string CurrentModuleKey
+        {
+            get { return _selected >= 0 && _selected < Modules.Length ? Modules[_selected].Key : null; }
+        }
+
         // ---- 左轨 ----
         private const float RailX = 8f;
         private const float TabW = 152f;
         private const float TabH = 44f;
         private const float TabGap = 4f;
 
-        // ---- 右区 ----
+        // ---- 右区（横向）----
         private const float RightX = 184f;
         private const float RightW = 440f;
         private const float CardW = 216f;
         private const float CardH = 88f;
+
+        // ---- 右区（纵向，P29-3.5 规格一 §1.5 权威预算表 + 基线 B15 余量规则）----
+        //   8   模块标题 17        8 → 32
+        //  34   模块说明 11       34 → 52（留 2 行空间，这是整体下移 8px 的原因）
+        //  60   KPI 行 1         60 → 148
+        // 156   KPI 行 2        156 → 244
+        // 260   楼层健康卡       260 → 348
+        // 364   「异常 Top3」    364 → 380
+        // 380   异常行 1         380 → 420
+        // 426   异常行 2         426 → 466
+        // 472   异常行 3         472 → 512
+        // 544   内容底（安全区 32）
+        //
+        // 【基线 §1.6 B15】异常行组由规格的 384/430/476 **整体上移 4px** 到 380/426/472。
+        // 规格给的 476 让第 3 行下沿正好压在 516 —— 等于上限，等于没过。
+        // 任何分辨率缩放、字体差异、DPI 变化都会把它顶出去，所以余量至少留 4。
+        // 这里取 512（余 32），标题到首行的间距随之由 20 变 16，仍是 4 的倍数。
+        private const float ModTitleY = 8f;
+        private const float ModDescY = 34f;
+        private const float KpiY1 = 60f;
+        private const float KpiY2 = 156f;
+        private const float HealthY = 260f;
+        private const float AbnTitleY = 364f;
+        private const float AbnRowY = 380f;
+        private const float AbnRowH = 40f;
+        private const float AbnRowGap = 6f;
+
+        /// <summary>
+        /// 异常 Top3 第 3 行下沿红线。**512，不是规格的 516** ——
+        /// 516 是「等于上限」，按 B15 不予通过；512 留 32px 安全区。
+        /// </summary>
+        public const float AbnLastRowBottom = 512f;
 
         private sealed class ModuleDef
         {
@@ -89,6 +127,25 @@ namespace SchoolTwin.UI
         private TwinMetricCard _kpiOnline;
         private TwinMetricCard _kpiAlarm;
 
+        // ---- 楼层健康卡（三段条 + 图例都要能刷新，所以留引用）----
+        private readonly TwinRoundedRect[] _healthSeg = new TwinRoundedRect[3];
+        private readonly Text[] _healthLeg = new Text[3];
+        private Text _healthPct;
+
+        // ---- 异常 Top3（真实数据，不再是写死的三行示例）----
+        private readonly RectTransform[] _abnRow = new RectTransform[3];
+        private readonly Image[] _abnBar = new Image[3];
+        private readonly Text[] _abnId = new Text[3];
+        private readonly Text[] _abnMetric = new Text[3];
+        private readonly Text[] _abnTag = new Text[3];
+        private Text _abnEmpty;
+
+        private readonly List<TwinAlarmHistory.AlarmRecord> _abnBuf =
+            new List<TwinAlarmHistory.AlarmRecord>(64);
+        private readonly List<TwinAlarmHistory.AlarmRecord> _abnTop =
+            new List<TwinAlarmHistory.AlarmRecord>(3);
+
+        private float _nextRefresh;
         private int _selected = -1;
         private bool _built;
 
@@ -205,13 +262,15 @@ namespace SchoolTwin.UI
         {
             Text title = TwinUIFactory.Label(root, "ModTitle", TwinTheme.FsSubtitle,
                 TextAnchor.UpperLeft, TwinTheme.TextPrimary);
-            TwinUIFactory.Place(title.rectTransform, RightX, 10f, RightW, 22f);
+            TwinUIFactory.Place(title.rectTransform, RightX, ModTitleY, RightW, 24f);
             title.text = m.Name;
 
-            // 说明 10.5 → 11（legacy Text 只吃整数）
+            // 说明 10.5 → 11（legacy Text 只吃整数）。高度 18 给它 2 行空间 ——
+            // 「分级停电：整层批量分合闸 / 单个场景（如机房）独立停电」在 440 宽下会折行。
             Text desc = TwinUIFactory.Label(root, "ModDesc", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
-            TwinUIFactory.Place(desc.rectTransform, RightX, 34f, RightW, 16f);
+            TwinUIFactory.Place(desc.rectTransform, RightX, ModDescY, RightW, 18f);
+            desc.horizontalOverflow = HorizontalWrapMode.Wrap;
             desc.text = m.Desc;
         }
 
@@ -227,57 +286,55 @@ namespace SchoolTwin.UI
 
         private void BuildMonitor(RectTransform root)
         {
-            // KPI 2×2：216×88，x=184 / 408，y=52 / 148（页面坐标）
-            _kpiPower = TwinMetricCard.Create(root, "Kpi_Power", RightX, 52f,
+            // KPI 2×2：216×88，x=184 / 408，y=60 / 156（规格 §1.5 权威预算）
+            _kpiPower = TwinMetricCard.Create(root, "Kpi_Power", RightX, KpiY1,
                 CardW, CardH, TwinTheme.FsTitle, "总功率", "kW");
-            _kpiEnergy = TwinMetricCard.Create(root, "Kpi_Energy", RightX + CardW + 8f, 52f,
+            _kpiEnergy = TwinMetricCard.Create(root, "Kpi_Energy", RightX + CardW + 8f, KpiY1,
                 CardW, CardH, TwinTheme.FsTitle, "今日用电", "kWh");
-            _kpiOnline = TwinMetricCard.Create(root, "Kpi_Online", RightX, 148f,
+            _kpiOnline = TwinMetricCard.Create(root, "Kpi_Online", RightX, KpiY2,
                 CardW, CardH, TwinTheme.FsTitle, "在线", "台");
-            _kpiAlarm = TwinMetricCard.Create(root, "Kpi_Alarm", RightX + CardW + 8f, 148f,
+            _kpiAlarm = TwinMetricCard.Create(root, "Kpi_Alarm", RightX + CardW + 8f, KpiY2,
                 CardW, CardH, TwinTheme.FsTitle, "告警", "台");
 
             BuildHealthCard(root);
             BuildTop3(root);
 
             RefreshMonitor();
+            _nextRefresh = Time.unscaledTime + 0.5f;
         }
 
-        /// <summary>楼层健康卡：标题 11 + 三段条（h9）+ 图例 9。</summary>
+        /// <summary>
+        /// 楼层健康卡：标题 11 + 三段条（h9）+ 图例 9。
+        /// 这里只建骨架，数值由 <see cref="RefreshHealthCard"/> 填 ——
+        /// 上一版把 `ratio {0.92,0.05,0.03}` 和 `正常 141 / 警告 7 / 告警 5` 写死在构建里，
+        /// 同屏和 KPI 的「设备总数 53」对不上（141+7+5=153），是 R10 的第二处来源。
+        /// </summary>
         private void BuildHealthCard(RectTransform root)
         {
             TwinRoundedRect card = TwinUIFactory.Rounded(root, "HealthCard", TwinTheme.R12,
                 TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
-            TwinUIFactory.Place(card.rectTransform, RightX, 256f, RightW, CardH);
+            TwinUIFactory.Place(card.rectTransform, RightX, HealthY, RightW, CardH);
 
             Text title = TwinUIFactory.Label(card.rectTransform, "Title", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(title.rectTransform, 16f, 12f, 200f, 16f);
             title.text = "楼层健康";
 
-            Text pct = TwinUIFactory.Label(card.rectTransform, "Pct", TwinTheme.FsCaption,
+            _healthPct = TwinUIFactory.Label(card.rectTransform, "Pct", TwinTheme.FsCaption,
                 TextAnchor.UpperRight, TwinTheme.TextSecondary);
-            TwinUIFactory.Place(pct.rectTransform, RightW - 160f, 12f, 144f, 16f);
-            pct.text = "正常 96%";
+            TwinUIFactory.Place(_healthPct.rectTransform, RightW - 160f, 12f, 144f, 16f);
+            _healthPct.text = "";
 
-            // 三段条：h=9，段间 4，圆角 2
-            float[] ratio = { 0.92f, 0.05f, 0.03f };
             Color[] colors = { TwinTheme.StatusNormal, TwinTheme.StatusWarning, TwinTheme.StatusAlarm };
-            string[] names = { "正常 141", "警告 7", "告警 5" };
-
-            float x = 16f;
-            float barW = RightW - 32f;
-            const float gap = 4f;
-            float used = 0f;
 
             for (int i = 0; i < 3; i++)
             {
-                float w = i == 2 ? barW - used : Mathf.Round((barW - gap * 2f) * ratio[i]);
-                used += w + gap;
-
+                // 三段条：h=9，段间 4，圆角 2。宽度与 x 全部由刷新现算。
                 TwinRoundedRect seg = TwinUIFactory.Rounded(card.rectTransform, "Seg_" + i, 2f,
                     colors[i], colors[i], Color.clear, 0f, false);
-                TwinUIFactory.Place(seg.rectTransform, x, 34f, Mathf.Max(2f, w), 9f);
+                TwinUIFactory.Place(seg.rectTransform, 16f, 34f, 2f, 9f);
+                seg.gameObject.SetActive(false);
+                _healthSeg[i] = seg;
 
                 // 图例：色点 6 + 文案 9
                 TwinRoundedRect dot = TwinUIFactory.Rounded(card.rectTransform, "LegDot_" + i, 3f,
@@ -287,92 +344,259 @@ namespace SchoolTwin.UI
                 Text leg = TwinUIFactory.Label(card.rectTransform, "Leg_" + i, TwinTheme.FsMicro,
                     TextAnchor.MiddleLeft, TwinTheme.TextMuted);
                 TwinUIFactory.Place(leg.rectTransform, 26f + i * 96f, 50f, 84f, 16f);
-                leg.text = names[i];
-
-                x += w + gap;
+                leg.text = "";
+                _healthLeg[i] = leg;
             }
         }
 
-        /// <summary>异常 Top3：行高 40、gap 6，左 3px 严重度条 + 编号 11 + 指标 9 + 右侧标签 9。</summary>
+        /// <summary>
+        /// 三段 = 正常 / 警告+告警 / 离线（含 Stale）。**三段之和必须等于设备总数**，
+        /// 不等就整卡转无数据态 —— 宁可显示"数据不一致"，也不画一条比例是编的条（规格 R2）。
+        /// </summary>
+        private void RefreshHealthCard()
+        {
+            if (_healthSeg[0] == null) return;
+
+            int total = TwinDeviceStats.ActiveDeviceCount;
+            int online = TwinDeviceStats.OnlineDeviceCount;
+            int alarm = TwinDeviceStats.AlarmDeviceCount;
+            int offline = TwinDeviceStats.OfflineDeviceCount;
+
+            int normal = Mathf.Max(0, online - alarm);   // 正常 = 在线 − 告警（告警是在线子集）
+            int warnAlarm = alarm;
+            int off = offline;
+
+            bool consistent = total > 0
+                              && TwinDeviceStats.IsPartitionConsistent
+                              && normal + warnAlarm + off == total;
+
+            if (!consistent)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (_healthSeg[i] != null) _healthSeg[i].gameObject.SetActive(false);
+                    if (_healthLeg[i] != null) SetText(_healthLeg[i], "");
+                }
+                if (_healthPct != null)
+                    SetText(_healthPct, total > 0 ? "数据不一致" : "数据源未接入");
+                return;
+            }
+
+            const float gap = 4f;
+            float usable = RightW - 32f - gap * 2f;
+            int[] values = { normal, warnAlarm, off };
+
+            float x = 16f;
+            float used = 0f;
+
+            for (int i = 0; i < 3; i++)
+            {
+                // 最后一段吃掉取整余数，保证三段首尾正好铺满 usable
+                float w = i == 2 ? usable - used : Mathf.Round(usable * values[i] / total);
+                if (w < 0f) w = 0f;
+                used += w;
+
+                TwinRoundedRect seg = _healthSeg[i];
+                if (seg != null)
+                {
+                    // 0 值段不画：宽度 0 的圆角矩形会退化成一条 1px 竖线，看着像"凭空多一段"
+                    bool visible = w >= 1f;
+                    if (seg.gameObject.activeSelf != visible) seg.gameObject.SetActive(visible);
+                    if (visible)
+                    {
+                        RectTransform sr = seg.rectTransform;
+                        // 变了才写：Place 会触发 layout dirty，0.5s 一次也别白写
+                        if (Mathf.Abs(sr.sizeDelta.x - w) > 0.5f || Mathf.Abs(sr.anchoredPosition.x - x) > 0.5f)
+                            TwinUIFactory.Place(sr, x, 34f, w, 9f);
+                    }
+                }
+
+                if (_healthLeg[i] != null) SetText(_healthLeg[i], HealthLabel(i) + " " + values[i]);
+
+                x += w + gap;
+            }
+
+            int pct = Mathf.RoundToInt(normal * 100f / total);
+            if (_healthPct != null) SetText(_healthPct, "正常 " + pct + "%");
+        }
+
+        private static string HealthLabel(int index)
+        {
+            switch (index)
+            {
+                case 0: return "正常";
+                case 1: return "警告";
+                default: return "离线";
+            }
+        }
+
+        /// <summary>
+        /// 异常 Top3：行高 40、gap 6，左 3px 严重度条 + 编号 11 + 指标 9 + 右侧标签 9。
+        ///
+        /// 只建 3 个空壳，内容由 <see cref="RefreshTop3"/> 填。
+        /// 上一版这里写死 `B1-001-配电-001 / 1F-101-插座-004 / 3F-302-空调-002` 三行示例 ——
+        /// 告警 KPI 显示 0 的同时右边挂着 3 条"异常"，答辩一问就露。
+        /// </summary>
         private void BuildTop3(RectTransform root)
         {
             Text head = TwinUIFactory.Label(root, "AbnTitle", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
-            TwinUIFactory.Place(head.rectTransform, RightX, 352f, RightW, 16f);
+            TwinUIFactory.Place(head.rectTransform, RightX, AbnTitleY, RightW, 16f);
             head.text = "异常 Top3";
 
-            string[][] rows =
+            for (int i = 0; i < 3; i++)
             {
-                new[] { "B1-001-配电-001", "回路断电 · 已持续 12 分钟", "严重" },
-                new[] { "1F-101-插座-004", "功率 3.2kW / 量程 3.5kW", "警告" },
-                new[] { "3F-302-空调-002", "离线 26 分钟", "离线" },
-            };
-
-            for (int i = 0; i < rows.Length; i++)
-            {
-                float y = 376f + i * (40f + 6f);
+                float y = AbnRowY + i * (AbnRowH + AbnRowGap);
 
                 TwinRoundedRect row = TwinUIFactory.Rounded(root, "Abn_" + i, TwinTheme.R8,
                     Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
-                TwinUIFactory.Place(row.rectTransform, RightX, y, RightW, 40f);
+                TwinUIFactory.Place(row.rectTransform, RightX, y, RightW, AbnRowH);
+                _abnRow[i] = row.rectTransform;
 
-                Color sev = i == 0 ? TwinTheme.StatusAlarm
-                          : i == 1 ? TwinTheme.StatusWarning
-                          : TwinTheme.StatusOffline;
-
-                Image bar = TwinUIFactory.Block(row.rectTransform, "Sev", sev, false);
+                Image bar = TwinUIFactory.Block(row.rectTransform, "Sev", TwinTheme.StatusUnknown, false);
                 TwinUIFactory.Place(bar.rectTransform, 0f, 8f, TwinTheme.BarStatusWidth, 24f);
+                _abnBar[i] = bar;
 
                 Text id = TwinUIFactory.Label(row.rectTransform, "Id", TwinTheme.FsCaption,
                     TextAnchor.MiddleLeft, TwinTheme.TextPrimary);
-                TwinUIFactory.Place(id.rectTransform, 12f, 0f, 150f, 40f);
-                id.text = rows[i][0];
+                TwinUIFactory.Place(id.rectTransform, 12f, 0f, 150f, AbnRowH);
+                _abnId[i] = id;
 
                 Text metric = TwinUIFactory.Label(row.rectTransform, "Metric", TwinTheme.FsMicro,
                     TextAnchor.MiddleLeft, TwinTheme.TextMuted);
-                TwinUIFactory.Place(metric.rectTransform, 168f, 0f, 190f, 40f);
-                metric.text = rows[i][1];
+                TwinUIFactory.Place(metric.rectTransform, 168f, 0f, 190f, AbnRowH);
+                _abnMetric[i] = metric;
 
                 Text tag = TwinUIFactory.Label(row.rectTransform, "Tag", TwinTheme.FsMicro,
-                    TextAnchor.MiddleRight, sev);
-                TwinUIFactory.Place(tag.rectTransform, RightW - 84f, 0f, 68f, 40f);
-                tag.text = rows[i][2];
+                    TextAnchor.MiddleRight, TwinTheme.StatusUnknown);
+                TwinUIFactory.Place(tag.rectTransform, RightW - 84f, 0f, 68f, AbnRowH);
+                _abnTag[i] = tag;
+
+                row.gameObject.SetActive(false);
             }
+
+            _abnEmpty = TwinUIFactory.Label(root, "AbnEmpty", TwinTheme.FsCaption,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_abnEmpty.rectTransform, RightX + 12f, AbnRowY, RightW - 12f, AbnRowH);
+            _abnEmpty.text = "暂无异常";
+        }
+
+        /// <summary>
+        /// 取「仍在持续」的异常，按严重度降序、同严重度按时长降序，填前 3 行。
+        /// 数据源是 `TwinAlarmHistory`（事件维度），不遍历 Registry —— 这正是
+        /// `grep Registry.All` 能在 UI 层归零的前提。
+        /// </summary>
+        private void RefreshTop3()
+        {
+            if (_abnRow[0] == null) return;
+
+            _abnBuf.Clear();
+            TwinAlarmHistory history = TwinAlarmHistory.Instance;
+            if (history != null) history.GetRecent(_abnBuf, 64);
+
+            _abnTop.Clear();
+            for (int i = 0; i < _abnBuf.Count; i++)
+            {
+                // 已恢复的不该出现在「异常 Top3」里 —— 那里回答的是"现在还在出什么事"
+                if (_abnBuf[i].Ongoing) _abnTop.Add(_abnBuf[i]);
+                if (_abnTop.Count >= 3) break;
+            }
+
+            float now = Time.realtimeSinceStartup;
+
+            // 手写选择排序：最多 3 个元素，避免用捕获 now 的 lambda 每 0.5s 分配一次闭包
+            for (int i = 0; i < _abnTop.Count - 1; i++)
+            {
+                int best = i;
+                for (int j = i + 1; j < _abnTop.Count; j++)
+                    if (CompareAlarm(_abnTop[j], _abnTop[best], now) < 0) best = j;
+                if (best == i) continue;
+
+                TwinAlarmHistory.AlarmRecord tmp = _abnTop[i];
+                _abnTop[i] = _abnTop[best];
+                _abnTop[best] = tmp;
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                bool on = i < _abnTop.Count;
+                if (_abnRow[i] != null && _abnRow[i].gameObject.activeSelf != on)
+                    _abnRow[i].gameObject.SetActive(on);
+                if (!on) continue;
+
+                TwinAlarmHistory.AlarmRecord rec = _abnTop[i];
+                Color sev = TwinStatusPalette.Of(rec.PeakStatus);
+                string label = TwinStatusPalette.Label(rec.PeakStatus);
+
+                if (_abnBar[i] != null) _abnBar[i].color = sev;
+                SetText(_abnId[i], rec.TwinId);
+                SetText(_abnMetric[i], label + " · 已持续 " + TwinAlarmHistory.FormatDuration(rec.Duration(now)));
+                if (_abnTag[i] != null)
+                {
+                    SetText(_abnTag[i], label);
+                    _abnTag[i].color = sev;
+                }
+            }
+
+            if (_abnEmpty != null && _abnEmpty.gameObject.activeSelf != (_abnTop.Count == 0))
+                _abnEmpty.gameObject.SetActive(_abnTop.Count == 0);
+        }
+
+        /// <summary>排序比较：返回负数表示 a 应排在 b 前面（更严重 / 更久）。</summary>
+        private static int CompareAlarm(TwinAlarmHistory.AlarmRecord a, TwinAlarmHistory.AlarmRecord b, float now)
+        {
+            int sa = TwinStatusPalette.Severity(a.PeakStatus);
+            int sb = TwinStatusPalette.Severity(b.PeakStatus);
+            if (sa != sb) return sb.CompareTo(sa);           // 严重度高的在前
+            return b.Duration(now).CompareTo(a.Duration(now)); // 同严重度，久的在前
         }
 
         private void RefreshMonitor()
         {
-            TwinRuntime rt = TwinRuntime.Instance;
-            int online = 0, alarm = 0, total = 0;
-            if (rt != null && rt.Registry != null)
+            // 【P29-3.6】在线/告警改读快照，本页不再遍历 Registry。
+            int total = TwinDeviceStats.ActiveDeviceCount;
+            int online = TwinDeviceStats.OnlineDeviceCount;
+            int alarm = TwinDeviceStats.AlarmDeviceCount;
+            bool ready = total > 0;
+
+            if (_kpiOnline != null)
             {
-                IReadOnlyList<TwinAnchor> all = rt.Registry.All;
-                if (all != null)
-                {
-                    for (int i = 0; i < all.Count; i++)
-                    {
-                        TwinAnchor a = all[i];
-                        if (a == null) continue;
-                        total++;
-                        TwinStatus s = a.StatusOfWorst();
-                        if (s == TwinStatus.Alarm || s == TwinStatus.Warning) alarm++;
-                        if (s != TwinStatus.Offline && s != TwinStatus.Stale) online++;
-                    }
-                }
+                if (ready) _kpiOnline.SetValue(online.ToString());
+                _kpiOnline.SetState(ready ? TwinMetricCard.CardState.Normal : TwinMetricCard.CardState.NoData);
             }
 
-            if (_kpiOnline != null) _kpiOnline.SetValue(total > 0 ? online.ToString() : "—");
             if (_kpiAlarm != null)
             {
-                _kpiAlarm.SetValue(total > 0 ? alarm.ToString() : "—");
-                _kpiAlarm.SetState(alarm > 0 ? TwinMetricCard.CardState.Alarm : TwinMetricCard.CardState.Normal);
+                if (ready) _kpiAlarm.SetValue(alarm.ToString());
+                _kpiAlarm.SetState(!ready ? TwinMetricCard.CardState.NoData
+                                   : alarm > 0 ? TwinMetricCard.CardState.Alarm
+                                   : TwinMetricCard.CardState.Normal);
             }
 
-            // 总功率 / 今日用电 需要电力数据源（P3）。现在没有统一聚合口径 ——
+            // 总功率 / 今日用电 需要电力聚合 sink（P5）。现在没有统一口径 ——
             // 单设备 Power 的量程有的按 W、有的按 kW（灯 0~120W / 插座 0~3.5kW），
-            // 直接求和会得出"1.2 + 42"这种没意义的数，所以宁可显示「—」。
+            // 直接求和会得出"1.2 + 42"这种没意义的数，所以恒走无数据态（规格五）。
             if (_kpiPower != null) _kpiPower.SetState(TwinMetricCard.CardState.NoData);
             if (_kpiEnergy != null) _kpiEnergy.SetState(TwinMetricCard.CardState.NoData);
+
+            RefreshHealthCard();
+            RefreshTop3();
+        }
+
+        /// <summary>数据监测页 0.5s 刷新一次。页面隐藏时 GameObject 不激活，Update 自然停跑。</summary>
+        private void Update()
+        {
+            if (!_built || _selected != 0) return;
+            if (Time.unscaledTime < _nextRefresh) return;
+            _nextRefresh = Time.unscaledTime + 0.5f;
+            RefreshMonitor();
+        }
+
+        private static void SetText(Text t, string value)
+        {
+            if (t == null) return;
+            if (string.Equals(t.text, value, StringComparison.Ordinal)) return;
+            t.text = value;
         }
     }
 }
