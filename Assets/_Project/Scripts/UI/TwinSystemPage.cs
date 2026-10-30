@@ -88,6 +88,30 @@ namespace SchoolTwin.UI
         /// </summary>
         public const float AbnLastRowBottom = 512f;
 
+        // ---- 设备管理（规格 §3.2；下沿 506）----
+        private const float DevSearchY = 60f;
+        private const float DevCountY = 108f;
+        private const float DevHeadY = 134f;
+        private const float DevListY = 158f;
+        private const float DevRowH = 44f;
+        private const int DevRows = 7;          // 158 + 7×44 = 466，视口 348 内 7 行
+
+        // ---- 电力管理（规格 §3.3；下沿 508）----
+        private const float PwrTreeY = 60f;
+        private const float PwrTreeH = 360f;
+        private const float PwrImpactY = 428f;
+        private const float PwrImpactH = 80f;
+
+        // ---- 告警中心（规格 §3.4；下沿 508）----
+        private const float AlmSegY = 60f;
+        private const float AlmSegH = 32f;
+        private const float AlmListY = 100f;
+        private const float AlmListH = 348f;
+        private const float AlmRowH = 52f;
+        private const int AlmRows = 6;          // 100 + 6×52 = 412，视口 348 内 6 行
+        private const float AlmTraceY = 456f;
+        private const float AlmTraceH = 52f;
+
         private sealed class ModuleDef
         {
             public string Key;
@@ -120,7 +144,18 @@ namespace SchoolTwin.UI
         private readonly TwinRoundedRect[] _tabBg = new TwinRoundedRect[5];
         private readonly Image[] _tabBar = new Image[5];
         private readonly Text[] _tabLabel = new Text[5];
+        private readonly TwinRoundedRect[] _tabIcon = new TwinRoundedRect[5];
+        private readonly Text[] _tabGlyph = new Text[5];
         private readonly RectTransform[] _pages = new RectTransform[5];
+
+        /// <summary>告警中心 Tab 的右上红点（未确认告警 &gt; 0 时显示）。</summary>
+        private RectTransform _alarmDot;
+
+        /// <summary>图标底未选态：白 @0.10（规格 §2）。</summary>
+        private static readonly Color IconFillIdle = TwinTheme.WithAlpha(Color.white, 0.10f);
+
+        /// <summary>图标底选中态：主色 @0.16（规格 §2）。</summary>
+        private static readonly Color IconFillOn = TwinTheme.WithAlpha(TwinTheme.Accent, 0.16f);
 
         private TwinMetricCard _kpiPower;
         private TwinMetricCard _kpiEnergy;
@@ -144,6 +179,27 @@ namespace SchoolTwin.UI
             new List<TwinAlarmHistory.AlarmRecord>(64);
         private readonly List<TwinAlarmHistory.AlarmRecord> _abnTop =
             new List<TwinAlarmHistory.AlarmRecord>(3);
+
+        // ---- 设备管理：7 行台账（数据由 RefreshDevice 填）----
+        private Text _devCount;
+        private readonly RectTransform[] _devRow = new RectTransform[DevRows];
+        private readonly Image[] _devBar = new Image[DevRows];
+        private readonly Text[] _devId = new Text[DevRows];
+        private readonly Text[] _devName = new Text[DevRows];
+        private readonly Text[] _devPos = new Text[DevRows];
+        private readonly Text[] _devTag = new Text[DevRows];
+
+        // ---- 告警中心：6 行列表 ----
+        private readonly RectTransform[] _almRow = new RectTransform[AlmRows];
+        private readonly Image[] _almBar = new Image[AlmRows];
+        private readonly Text[] _almId = new Text[AlmRows];
+        private readonly Text[] _almName = new Text[AlmRows];
+        private readonly Text[] _almDesc = new Text[AlmRows];
+        private readonly Text[] _almDur = new Text[AlmRows];
+        private Text _almSegOn;
+        private Text _almSegHis;
+
+        private readonly List<TwinAnchor> _devBuf = new List<TwinAnchor>(64);
 
         private float _nextRefresh;
         private int _selected = -1;
@@ -192,24 +248,37 @@ namespace SchoolTwin.UI
                 bar.gameObject.SetActive(false);
                 _tabBar[i] = bar;
 
-                // 图标 20×20 R6
+                // 图标 20×20 R6（规格 §2）：底 白@0.10（未选）/ 主色@0.16（选中），字形 11 居中
                 TwinRoundedRect icon = TwinUIFactory.Rounded(rt, "Icon", 6f,
-                    TwinTheme.EntryIconFill, TwinTheme.EntryIconFill, Color.clear, 0f, false);
+                    IconFillIdle, IconFillIdle, Color.clear, 0f, false);
                 TwinUIFactory.Place(icon.rectTransform, 12f, 12f, 20f, 20f);
+                _tabIcon[i] = icon;
 
-                Text g = TwinUIFactory.Label(icon.rectTransform, "Glyph", TwinTheme.FsMicro,
-                    TextAnchor.MiddleCenter, TwinTheme.Accent);
+                Text g = TwinUIFactory.Label(icon.rectTransform, "Glyph", TwinTheme.FsCaption,
+                    TextAnchor.MiddleCenter, TwinTheme.TextMuted);
                 TwinUIFactory.Stretch(g.rectTransform);
                 g.text = m.Glyph;
                 g.raycastTarget = false;
+                _tabGlyph[i] = g;
 
                 // 三件套之三：文字（选中 TextPrimary / 未选 TextSecondary）
+                // 规格写 12.5，legacy Text 的 fontSize 只吃整数，取 13（FsBody）最接近
                 Text label = TwinUIFactory.Label(rt, "Label", TwinTheme.FsBody,
                     TextAnchor.MiddleLeft, TwinTheme.TextSecondary);
                 TwinUIFactory.Place(label.rectTransform, 40f, 0f, TabW - 44f, TabH);
                 label.text = m.Name;
                 label.raycastTarget = false;
                 _tabLabel[i] = label;
+
+                // 告警中心角标：右上 6×6 红点（未确认 >0 时显示，见 RefreshTabBadge）
+                if (string.Equals(m.Key, "alarm", StringComparison.Ordinal))
+                {
+                    TwinRoundedRect dot = TwinUIFactory.Rounded(rt, "AlarmDot", 3f,
+                        TwinTheme.StatusAlarm, TwinTheme.StatusAlarm, Color.clear, 0f, false);
+                    TwinUIFactory.Place(dot.rectTransform, TabW - 14f, 8f, 6f, 6f);
+                    dot.gameObject.SetActive(false);
+                    _alarmDot = dot.rectTransform;
+                }
             }
         }
 
@@ -231,13 +300,41 @@ namespace SchoolTwin.UI
                                   on ? TwinTheme.AccentDim : Color.clear);
                 _tabBar[i].gameObject.SetActive(on);
                 _tabLabel[i].color = on ? TwinTheme.TextPrimary : TwinTheme.TextSecondary;
+
+                // 图标底 / 字形跟着选中态走（规格 §2：底 主色@0.16、字形 主色）
+                if (_tabIcon[i] != null)
+                    _tabIcon[i].SetFill(on ? IconFillOn : IconFillIdle, on ? IconFillOn : IconFillIdle);
+                if (_tabGlyph[i] != null)
+                    _tabGlyph[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
             }
+
+            RefreshTabBadge();
 
             RectTransform page = GetPage(index);
             if (page != null) page.gameObject.SetActive(true);
 
+            // 首次进入该页立刻填一次数据，不等 0.5s 周期 —— 否则切过去会空白半秒
+            switch (index)
+            {
+                case 1: RefreshDevice(); break;
+                case 3: RefreshAlarm(); break;
+            }
+
             Action<string> cb = OnModulePicked;
             if (cb != null) cb(Modules[index].Key);
+        }
+
+        /// <summary>
+        /// 告警中心 Tab 的红点：未确认告警 &gt; 0 时亮。
+        /// 由 <see cref="RefreshMonitor"/> 每 0.5s 带一次，不单独开 Update ——
+        /// 与快照同频，不会出现「角标亮了但数字还没更新」的错拍。
+        /// </summary>
+        private void RefreshTabBadge()
+        {
+            if (_alarmDot == null) return;
+
+            bool show = TwinDeviceStats.UnackedAlarmEventCount > 0;
+            if (_alarmDot.gameObject.activeSelf != show) _alarmDot.gameObject.SetActive(show);
         }
 
         private RectTransform GetPage(int index)
@@ -252,8 +349,15 @@ namespace SchoolTwin.UI
 
             BuildModuleHeader(rt, Modules[index]);
 
-            if (index == 0) BuildMonitor(rt);
-            else BuildEmpty(rt, Modules[index]);
+            // 五页结构（规格 §3.1~§3.5）。数据统计本轮只出空状态（§3.5「不出图表」）
+            switch (index)
+            {
+                case 0: BuildMonitor(rt); break;
+                case 1: BuildDevice(rt); break;
+                case 2: BuildPower(rt); break;
+                case 3: BuildAlarm(rt); break;
+                default: BuildStats(rt); break;
+            }
 
             return rt;
         }
@@ -274,12 +378,293 @@ namespace SchoolTwin.UI
             desc.text = m.Desc;
         }
 
-        private void BuildEmpty(RectTransform root, ModuleDef m)
+        /// <summary>
+        /// 数据统计（规格 §3.5）：本轮整页空状态，**不出图表**。
+        ///
+        /// 【为什么不出图表】项目无时序存储，kWh 只能按瞬时功率积分估算。
+        /// 画一条「趋势折线」等于在答辩现场展示编造数据 —— 评审一问「这条线哪来的」就崩。
+        /// 空状态反而是诚实且专业的处理（规格原文 §3.5）。
+        ///
+        /// 版式：空状态组 y=228、高 132（规格 §4.2），下方留白 168 到 528，把视线压到说明上。
+        /// </summary>
+        private void BuildStats(RectTransform root)
         {
-            // 标题写「什么时候」，说明写「有什么」—— 别在两处重复同一句"将在 Px 接入"
-            int step = m.Phase == "P3" ? 1 : (m.Phase == "P4" ? 2 : 3);
-            TwinEmptyState.Create(root, RightX, 96f, RightW, 180f,
-                "该模块将在 " + m.Phase + " 接入", m.AfterText, step, 4);
+            TwinEmptyState.Create(root, RightX, 228f, RightW, 132f,
+                "数据统计待接入",
+                "无时序存储，用电量只能按功率积分估算。\nP5 接入 1s 均值聚合后显示趋势、占比与排行。",
+                2, 3);
+        }
+
+        // ---------------------------------------------------------------- 设备管理
+
+        private void BuildDevice(RectTransform root)
+        {
+            // ---- 搜索筛选条 y=60 高 40：搜索框 240×32 R8 + 楼层 chip ×3（高 28 R14）----
+            TwinRoundedRect search = TwinUIFactory.Rounded(root, "SearchBox", TwinTheme.R8,
+                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(search.rectTransform, RightX, DevSearchY, 240f, 32f);
+
+            Text ph = TwinUIFactory.Label(search.rectTransform, "Placeholder", TwinTheme.FsCaption,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(ph.rectTransform, 12f, 0f, 216f, 32f);
+            ph.text = "搜索编号 / 名称";
+            ph.raycastTarget = false;
+
+            // 楼层 chip ×3：全部 / 1F / 2F，高 28 R14
+            string[] chips = { "全部", "1F", "2F" };
+            for (int i = 0; i < chips.Length; i++)
+            {
+                bool on = i == 0;
+                TwinRoundedRect chip = TwinUIFactory.Rounded(root, "Chip_" + i, 14f,
+                    on ? TwinTheme.AccentDim : TwinTheme.Track,
+                    on ? TwinTheme.AccentDim : TwinTheme.Track,
+                    on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, false);
+                TwinUIFactory.Place(chip.rectTransform, RightX + 248f + i * 52f, DevSearchY + 2f, 48f, 28f);
+
+                Text ct = TwinUIFactory.Label(chip.rectTransform, "T", TwinTheme.FsMicro,
+                    TextAnchor.MiddleCenter, on ? TwinTheme.Accent : TwinTheme.TextMuted);
+                TwinUIFactory.Stretch(ct.rectTransform);
+                ct.text = chips[i];
+                ct.raycastTarget = false;
+            }
+
+            // ---- 计数行 y=108 高 18 ----
+            _devCount = TwinUIFactory.Label(root, "DevCount", TwinTheme.FsCaption,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_devCount.rectTransform, RightX, DevCountY, RightW, 18f);
+
+            // ---- 表头 y=134 高 20：编号 150 / 名称 自适应 / 位置 90 / 状态 56 / 开关 40 ----
+            string[] heads = { "编号", "名称", "位置", "状态", "" };
+            float[] hx = { 0f, 158f, 268f, 358f, 404f };
+            float[] hw = { 150f, 104f, 86f, 44f, 36f };
+            for (int i = 0; i < heads.Length; i++)
+            {
+                Text h = TwinUIFactory.Label(root, "Th_" + i, TwinTheme.FsMicro,
+                    TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(h.rectTransform, RightX + hx[i], DevHeadY, hw[i], 20f);
+                h.text = heads[i];
+            }
+
+            // 表头下的分隔线
+            Image line = TwinUIFactory.Block(root, "ThLine", TwinTheme.Divider, false);
+            TwinUIFactory.Place(line.rectTransform, RightX, DevHeadY + 20f, RightW, 1f);
+
+            // ---- 台账列表 y=158 高 348，行高 44，视口 7 行 ----
+            for (int i = 0; i < DevRows; i++)
+            {
+                float y = DevListY + i * DevRowH;
+
+                RectTransform row = TwinUIFactory.Node("DevRow_" + i, root).transform as RectTransform;
+                TwinUIFactory.Place(row, RightX, y, RightW, DevRowH);
+                _devRow[i] = row;
+
+                // 左 3px 状态条
+                Image bar = TwinUIFactory.Block(row, "Bar", TwinTheme.StatusUnknown, false);
+                TwinUIFactory.Place(bar.rectTransform, 0f, (DevRowH - 24f) * 0.5f,
+                    TwinTheme.BarStatusWidth, 24f);
+                _devBar[i] = bar;
+
+                _devId[i] = MakeCell(row, "Id", 12f, 150f, TwinTheme.FsBody, TwinTheme.TextPrimary);
+                _devName[i] = MakeCell(row, "Name", 170f, 104f, TwinTheme.FsCaption, TwinTheme.TextSecondary);
+                _devPos[i] = MakeCell(row, "Pos", 274f, 86f, TwinTheme.FsCaption, TwinTheme.TextMuted);
+                _devTag[i] = MakeCell(row, "Tag", 358f, 44f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+
+                row.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>列表单元格：一行一个 Text，垂直居中，超宽截断。</summary>
+        private static Text MakeCell(RectTransform row, string name, float x, float w, int size, Color color)
+        {
+            Text t = TwinUIFactory.Label(row, name, size, TextAnchor.MiddleLeft, color);
+            TwinUIFactory.Place(t.rectTransform, x, 0f, w, DevRowH);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            return t;
+        }
+
+        // ---------------------------------------------------------------- 电力管理
+
+        private void BuildPower(RectTransform root)
+        {
+            // ---- 三级树 y=60 高 360，内部滚动 ----
+            // 20 节点 × 平均 30 = 600 > 360，必须滚（规格 §3.3）。结构：Scroll → Viewport(裁) → Content
+            GameObject scrollGo = TwinUIFactory.Node("PwrScroll", root);
+            RectTransform scrollRt = (RectTransform)scrollGo.transform;
+            TwinUIFactory.Place(scrollRt, RightX, PwrTreeY, RightW, PwrTreeH);
+
+            GameObject viewGo = TwinUIFactory.Node("Viewport", scrollRt);
+            RectTransform viewRt = (RectTransform)viewGo.transform;
+            TwinUIFactory.Stretch(viewRt);
+            viewGo.AddComponent<RectMask2D>();
+
+            GameObject contentGo = TwinUIFactory.Node("Content", viewRt);
+            RectTransform contentRt = (RectTransform)contentGo.transform;
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(1f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
+            contentRt.anchoredPosition = Vector2.zero;
+            contentRt.sizeDelta = new Vector2(0f, 0f);
+
+            ScrollRect sr = scrollGo.AddComponent<ScrollRect>();
+            sr.viewport = viewRt;
+            sr.content = contentRt;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = 20f;
+
+            // 滚动条：宽 4、白@0.08（规格 §3.3「滚动条可见」）。
+            // 只做视觉提示，不做可拖拽手柄 —— 本轮只验"能看出可滚"，交互细化留 P29-5。
+            Image bar = TwinUIFactory.Block(scrollRt, "Scrollbar", TwinTheme.WithAlpha(Color.white, 0.08f), false);
+            TwinUIFactory.Place(bar.rectTransform, RightW - 4f, 0f, 4f, PwrTreeH);
+
+            BuildPowerRows(contentRt);
+
+            // ---- 影响面卡 y=428 高 80 ----
+            TwinRoundedRect card = TwinUIFactory.Rounded(root, "ImpactCard", TwinTheme.R12,
+                TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(card.rectTransform, RightX, PwrImpactY, RightW, PwrImpactH);
+
+            Text title = TwinUIFactory.Label(card.rectTransform, "T", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(title.rectTransform, 16f, 10f, 200f, 16f);
+            title.text = "影响面";
+
+            Text main = TwinUIFactory.Label(card.rectTransform, "Main", TwinTheme.FsBody,
+                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(main.rectTransform, 16f, 28f, RightW - 32f, 20f);
+            main.text = "选中回路后显示受影响的设备数与功率合计";
+
+            Text sub = TwinUIFactory.Label(card.rectTransform, "Sub", TwinTheme.FsMicro,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(sub.rectTransform, 16f, 50f, RightW - 32f, 24f);
+            sub.horizontalOverflow = HorizontalWrapMode.Wrap;
+            sub.text = "点左侧任意回路查看分级停电的影响范围";
+        }
+
+        /// <summary>
+        /// 电路树行：按 <see cref="TwinCircuitNode.Level"/> 缩进 16/级，
+        /// 楼栋 36 / 楼层 32 / 房间 28（规格 §3.3）。数据直接读 <see cref="TwinCircuit.All"/>。
+        /// </summary>
+        private static void BuildPowerRows(RectTransform content)
+        {
+            IReadOnlyList<TwinCircuitNode> nodes = TwinCircuit.All;
+            float y = 0f;
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                TwinCircuitNode n = nodes[i];
+                float h = n.Level == 0 ? 36f : (n.Level == 1 ? 32f : 28f);
+
+                RectTransform row = TwinUIFactory.Node("Pwr_" + i, content).transform as RectTransform;
+                TwinUIFactory.Place(row, n.Level * 16f, y, 440f - n.Level * 16f, h);
+
+                // 标题 15 / 13 / 11 按层级
+                int size = n.Level == 0 ? TwinTheme.FsBodyStrong
+                         : (n.Level == 1 ? TwinTheme.FsBody : TwinTheme.FsCaption);
+                Color col = n.Level == 0 ? TwinTheme.TextPrimary
+                          : (n.Level == 1 ? TwinTheme.TextSecondary : TwinTheme.TextMuted);
+
+                Text t = TwinUIFactory.Label(row, "Title", size, TextAnchor.MiddleLeft, col);
+                TwinUIFactory.Place(t.rectTransform, 0f, 0f, 220f, h);
+                t.text = n.Title;
+                t.raycastTarget = false;
+
+                // 通断胶囊：高 22，通电绿 / 断电红（低透明度底 + 同色字）
+                Color state = n.On ? TwinTheme.StatusNormal : TwinTheme.StatusAlarm;
+                TwinRoundedRect pill = TwinUIFactory.Rounded(row, "Pill", 11f,
+                    TwinTheme.WithAlpha(state, 0.16f), TwinTheme.WithAlpha(state, 0.16f),
+                    Color.clear, 0f, false);
+                TwinUIFactory.Place(pill.rectTransform, 240f, (h - 22f) * 0.5f, 52f, 22f);
+
+                Text pt = TwinUIFactory.Label(pill.rectTransform, "P", TwinTheme.FsMicro,
+                    TextAnchor.MiddleCenter, state);
+                TwinUIFactory.Stretch(pt.rectTransform);
+                pt.text = n.On ? "通电" : "断电";
+                pt.raycastTarget = false;
+
+                y += h;
+            }
+
+            // Content 高度 = 所有行总高（ScrollRect 靠它算可滚范围）
+            content.sizeDelta = new Vector2(0f, y);
+        }
+
+        // ---------------------------------------------------------------- 告警中心
+
+        private void BuildAlarm(RectTransform root)
+        {
+            // ---- 分段切换 y=60 高 32，两段等分 220 ----
+            TwinRoundedRect segBox = TwinUIFactory.Rounded(root, "SegBox", TwinTheme.R8,
+                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(segBox.rectTransform, RightX, AlmSegY, RightW, AlmSegH);
+
+            // 选中段：AccentDim 底 + 主色字
+            TwinRoundedRect segOn = TwinUIFactory.Rounded(segBox.rectTransform, "On", TwinTheme.R8,
+                TwinTheme.AccentDim, TwinTheme.AccentDim, Color.clear, 0f, false);
+            TwinUIFactory.Place(segOn.rectTransform, 0f, 0f, RightW * 0.5f, AlmSegH);
+
+            _almSegOn = TwinUIFactory.Label(segOn.rectTransform, "T", TwinTheme.FsCaption,
+                TextAnchor.MiddleCenter, TwinTheme.Accent);
+            TwinUIFactory.Stretch(_almSegOn.rectTransform);
+            _almSegOn.text = "进行中";
+            _almSegOn.raycastTarget = false;
+
+            _almSegHis = TwinUIFactory.Label(segBox.rectTransform, "His", TwinTheme.FsCaption,
+                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_almSegHis.rectTransform, RightW * 0.5f, 0f, RightW * 0.5f, AlmSegH);
+            _almSegHis.text = "历史";
+            _almSegHis.raycastTarget = false;
+
+            // ---- 告警列表 y=100 高 348，行高 52，视口 6 行 ----
+            for (int i = 0; i < AlmRows; i++)
+            {
+                float y = AlmListY + i * AlmRowH;
+
+                RectTransform row = TwinUIFactory.Node("AlmRow_" + i, root).transform as RectTransform;
+                TwinUIFactory.Place(row, RightX, y, RightW, AlmRowH);
+                _almRow[i] = row;
+
+                // 左 4px 严重度条
+                Image bar = TwinUIFactory.Block(row, "Bar", TwinTheme.StatusUnknown, false);
+                TwinUIFactory.Place(bar.rectTransform, 0f, 8f, 4f, AlmRowH - 16f);
+                _almBar[i] = bar;
+
+                _almId[i] = MakeAlmCell(row, "Id", 12f, 200f, 8f, TwinTheme.FsBody, TwinTheme.TextPrimary);
+                _almName[i] = MakeAlmCell(row, "Name", 12f, 260f, 18f, TwinTheme.FsCaption, TwinTheme.TextSecondary);
+                _almDesc[i] = MakeAlmCell(row, "Desc", 12f, 300f, 34f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+                _almDur[i] = MakeAlmCell(row, "Dur", 290f, 70f, 8f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+
+                row.gameObject.SetActive(false);
+            }
+
+            // ---- 追溯占位条 y=456 高 52（规格 §3.4「⏸ 占位」）----
+            // 占位判据：无填充底、更淡描边、只用 Muted 字、不出现数字（§4.1）
+            TwinRoundedRect trace = TwinUIFactory.Rounded(root, "TraceBox", TwinTheme.R8,
+                Color.clear, Color.clear, TwinTheme.WithAlpha(Color.white, 0.006f),
+                TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(trace.rectTransform, RightX, AlmTraceY, RightW, AlmTraceH);
+
+            Text tt = TwinUIFactory.Label(trace.rectTransform, "T", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(tt.rectTransform, 12f, 8f, RightW - 24f, 16f);
+            tt.text = "全链路追溯待接入";
+
+            Text td = TwinUIFactory.Label(trace.rectTransform, "D", TwinTheme.FsMicro,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(td.rectTransform, 12f, 26f, RightW - 24f, 14f);
+            td.horizontalOverflow = HorizontalWrapMode.Wrap;
+            td.text = "选中一条告警后，这里显示 下发→回执→执行→回读→恢复 的完整时间线。";
+        }
+
+        /// <summary>告警行单元格：可指定相对行顶的 y 偏移（行内是编号/名称/描述三段竖排）。</summary>
+        private static Text MakeAlmCell(RectTransform row, string name, float x, float w,
+                                        float y, int size, Color color)
+        {
+            Text t = TwinUIFactory.Label(row, name, size, TextAnchor.UpperLeft, color);
+            TwinUIFactory.Place(t.rectTransform, x, y, w, size + 6f);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            return t;
         }
 
         // ---------------------------------------------------------------- 数据监测
@@ -551,6 +936,104 @@ namespace SchoolTwin.UI
             return b.Duration(now).CompareTo(a.Duration(now)); // 同严重度，久的在前
         }
 
+        // ---------------------------------------------------------------- 设备管理 / 告警中心 刷新
+
+        /// <summary>
+        /// 台账刷新：计数行 + 7 行列表。
+        /// 遍历走 <see cref="TwinDeviceStats.AllDevices"/>（快照层的统一遍历入口），
+        /// 行级过滤用 <see cref="TwinDeviceStats.IsActiveDevice"/> —— UI 层不直接碰 `Registry.All`。
+        /// </summary>
+        private void RefreshDevice()
+        {
+            if (_devCount == null) return;
+
+            int total = TwinDeviceStats.ActiveDeviceCount;
+            int scope = TwinDeviceStats.ControlScopeCount;
+            _devCount.text = "共 " + total + " 台 · 受控 " + scope + " · 缺失 0";
+
+            IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+            _devBuf.Clear();
+            if (all != null)
+            {
+                for (int i = 0; i < all.Count && _devBuf.Count < DevRows; i++)
+                {
+                    TwinAnchor a = all[i];
+                    if (!TwinDeviceStats.IsActiveDevice(a)) continue;
+                    _devBuf.Add(a);
+                }
+            }
+
+            for (int i = 0; i < DevRows; i++)
+            {
+                bool on = i < _devBuf.Count;
+                if (_devRow[i] != null && _devRow[i].gameObject.activeSelf != on)
+                    _devRow[i].gameObject.SetActive(on);
+                if (!on) continue;
+
+                TwinAnchor a = _devBuf[i];
+                TwinStatus s = a.StatusOfWorst();
+                Color c = TwinStatusPalette.Of(s);
+
+                if (_devBar[i] != null) _devBar[i].color = c;
+                SetText(_devId[i], a.TwinId);
+                SetText(_devName[i], a.DisplayName);
+                SetText(_devPos[i], ShortZone(a.TwinId));
+                SetText(_devTag[i], TwinStatusPalette.Label(s));
+                if (_devTag[i] != null) _devTag[i].color = c;
+            }
+        }
+
+        /// <summary>TwinId 的第一段当位置短码（`Class2-1/Light/Main_01` → `Class2-1`）。全码放详情卡。</summary>
+        private static string ShortZone(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return "";
+            int slash = twinId.IndexOf('/');
+            return slash > 0 ? twinId.Substring(0, slash) : twinId;
+        }
+
+        /// <summary>
+        /// 告警列表刷新：分段文案 + 6 行。
+        /// 只取「进行中」，状态标签统一「进行中」—— 严重度由左侧色条承载，
+        /// 文字不再重复写「严重/警告」（规格 §3.4 负责人裁决）。
+        /// </summary>
+        private void RefreshAlarm()
+        {
+            if (_almRow[0] == null) return;
+
+            int ongoing = TwinDeviceStats.UnackedAlarmEventCount;
+            if (_almSegOn != null) _almSegOn.text = "进行中 " + ongoing;
+
+            // 复用 _abnBuf：Top3 与告警中心不会同帧执行（Update 里按当前页分派）
+            _abnBuf.Clear();
+            TwinAlarmHistory history = TwinAlarmHistory.Instance;
+            if (history != null) history.GetRecent(_abnBuf, 64);
+
+            int n = 0;
+            for (int i = 0; i < _abnBuf.Count && n < AlmRows; i++)
+            {
+                if (!_abnBuf[i].Ongoing) continue;
+
+                TwinAlarmHistory.AlarmRecord rec = _abnBuf[i];
+                if (_almRow[n] != null && !_almRow[n].gameObject.activeSelf)
+                    _almRow[n].gameObject.SetActive(true);
+
+                Color c = TwinStatusPalette.Of(rec.PeakStatus);
+
+                if (_almBar[n] != null) _almBar[n].color = c;
+                SetText(_almId[n], rec.TwinId);
+                SetText(_almName[n], rec.DisplayName);
+                SetText(_almDesc[n], TwinStatusPalette.Label(rec.PeakStatus) + " · " + rec.Clock);
+                SetText(_almDur[n], "进行中");
+                if (_almDur[n] != null) _almDur[n].color = TwinTheme.StatusAlarm;
+
+                n++;
+            }
+
+            for (int i = n; i < AlmRows; i++)
+                if (_almRow[i] != null && _almRow[i].gameObject.activeSelf)
+                    _almRow[i].gameObject.SetActive(false);
+        }
+
         private void RefreshMonitor()
         {
             // 【P29-3.6】在线/告警改读快照，本页不再遍历 Registry。
@@ -584,12 +1067,25 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>数据监测页 0.5s 刷新一次。页面隐藏时 GameObject 不激活，Update 自然停跑。</summary>
+        /// <summary>
+        /// 0.5s 周期刷新。**按当前页只刷该页** —— 五页同时重建文本会白烧 CPU，
+        /// 而且没显示的页刷了也看不见。角标不分页，每轮都更。
+        /// </summary>
         private void Update()
         {
-            if (!_built || _selected != 0) return;
+            if (!_built) return;
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.5f;
-            RefreshMonitor();
+
+            RefreshTabBadge();
+
+            switch (_selected)
+            {
+                case 0: RefreshMonitor(); break;
+                case 1: RefreshDevice(); break;
+                case 3: RefreshAlarm(); break;
+                // 电力管理（2）不周期刷新：电路状态变化少，树是静态构建的
+            }
         }
 
         private static void SetText(Text t, string value)
