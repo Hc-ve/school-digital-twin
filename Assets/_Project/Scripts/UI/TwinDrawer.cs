@@ -68,6 +68,25 @@ namespace SchoolTwin.UI
         private Text _title;
         private Text _subtitle;
         private Image _titleBar;            // 标题左侧 3×22 主色小竖条（L1 才有）
+
+        /// <summary>头部容器。最大化时要跟着内容一起内缩（见 ApplyMaximizedLayout）。</summary>
+        private RectTransform _header;
+
+        /// <summary>最大化按钮的字形（□ / ▣）。切换时直接改 text，不引新贴图。</summary>
+        private Text _maxGlyph;
+
+        /// <summary>是否处于最大化（铺满画布宽度）。</summary>
+        private bool _maximized;
+
+        /// <summary>面板底。最大化时要把它拉实（见 ApplyMaximizedLayout），所以要存引用。</summary>
+        private TwinRoundedRect _bg;
+
+        /// <summary>全屏态的不透明实底（垫在 Bg 之下，窄态关闭）。</summary>
+        private Image _backdrop;
+
+        /// <summary>内容区当前的水平内缩（最大化时用来居中，非最大化恒为 0）。</summary>
+        private float _contentPad = -1f;
+
         private TwinButton _backBtn;
 
         // ---- 头部右侧摘要（替代原来的三颗胶囊）----
@@ -89,12 +108,6 @@ namespace SchoolTwin.UI
         private static readonly float[] ToolXs = { 34f, 130f, 226f, 322f };
 
         private TwinTriggerButton _trigger;
-
-        /// <summary>场景层物体详情卡。抽屉打开时要收起 —— 它的文字会叠在面板上（P29-4 P0-1）。</summary>
-        private TwinDetailPanel _detailPanel;
-
-        /// <summary>本次抽屉打开时是否真的收起了详情卡，用于关闭时**按原样**还原。</summary>
-        private bool _detailHiddenByDrawer;
 
         // ---- 状态 ----
         private bool _open;
@@ -242,14 +255,36 @@ namespace SchoolTwin.UI
             // 只留左侧圆角：TwinRoundedRect 只支持统一半径，而抽屉右缘永远贴着屏幕右缘，
             // 所以把底往右多铺 16 —— 右侧两个圆角被推到画布外，看得见的只有左边的圆角。
             // 这比新写一个"四角不同半径"的 Graphic 便宜得多，也不用改 TwinRoundedRect。
-            TwinRoundedRect bg = TwinUIFactory.Rounded(_root, "Bg", TwinTheme.R16,
-                TwinTheme.PanelTop, TwinTheme.PanelBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
-            RectTransform br = bg.rectTransform;
+            // 【P29-4 P0-2】raycast 必须为 true：抽屉底要挡住鼠标，
+            // 否则点击会穿透面板打到场景里的物体（实测"能透过面板点选设备"）。
+            // 背景是父节点，子元素按钮在它之上，UGUI 按层级从前往后判定，不会被它吃掉。
+            _bg = TwinUIFactory.Rounded(_root, "Bg", TwinTheme.R16,
+                TwinTheme.PanelTop, TwinTheme.PanelBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
+            RectTransform br = _bg.rectTransform;
             br.anchorMin = Vector2.zero;
             br.anchorMax = Vector2.one;
             br.pivot = new Vector2(0.5f, 0.5f);
             br.offsetMin = Vector2.zero;
             br.offsetMax = new Vector2(TwinTheme.R16, 0f);
+
+            // 全屏态的实底兜底（默认关闭）。
+            //
+            // 为什么需要：PanelTop/PanelBottom 的 alpha 是 0.94/0.96，420~640 宽时只盖住
+            // 右缘一条，透出去的 6% 落在暗处看不出来；一点最大化铺满整屏，整片明亮走廊
+            // 都会从那 6% 里透出来，观感就是"面板是透明的"。
+            // 这里铺一块不透明的同色矩形垫在 Bg 之下，**只在最大化时启用** ——
+            // 窄态保持原样（玻璃感不动），全屏态才做实。
+            // 四边内缩 R16 是为了不破坏 Bg 的圆角轮廓。
+            Image backdrop = TwinUIFactory.Block(_root, "Backdrop", Opaque(TwinTheme.PanelBottom), false);
+            RectTransform bk = backdrop.rectTransform;
+            bk.anchorMin = Vector2.zero;
+            bk.anchorMax = Vector2.one;
+            bk.pivot = new Vector2(0.5f, 0.5f);
+            bk.offsetMin = new Vector2(TwinTheme.R16, TwinTheme.R16);
+            bk.offsetMax = new Vector2(-TwinTheme.R16, -TwinTheme.R16);
+            backdrop.transform.SetSiblingIndex(0);      // 压到 Bg 之下
+            _backdrop = backdrop;
+            _backdrop.gameObject.SetActive(false);
 
             // 24 单位网格底纹。**必须紧跟背景、在头部/内容/工具行之前**：
             // ApplyGrid 不抢 sibling 位置（抢了会在"背景也是子节点"的面板里被压到底下），
@@ -289,6 +324,7 @@ namespace SchoolTwin.UI
             header.pivot = new Vector2(0f, 1f);
             header.sizeDelta = new Vector2(0f, HeaderH);
             header.anchoredPosition = Vector2.zero;
+            _header = header;
 
             // 标题左侧 3×22 主色小竖条（§4.1：x=20，y=24–46）。L2 让位给返回键。
             Image bar = TwinUIFactory.Block(header, "TitleBar", TwinTheme.Accent, false);
@@ -325,6 +361,27 @@ namespace SchoolTwin.UI
             // 关闭 ×：文档 16×16（右 24，y=34），同样放大到 28×28 的点击区
             TwinButton close = TwinButton.Create(header, "×", TwinButtonStyle.Ghost, 28f, 28f, Close, "Close");
             TwinUIFactory.AnchorTopRight(close.Rect, 18f, 20f, 28f, 28f);
+
+            // 最大化 □（P29-4 C 方案）：只加这一个。
+            // **不加「最小化 —」** —— 它的行为和关闭 × 完全重叠，两个入口做一件事只会让人分不清。
+            // 位置在 × 左边 8px（18 + 28 + 8 = 54），同样 28×28 命中区。
+            GameObject maxGo = TwinUIFactory.Node("MaxBtn", header);
+            RectTransform maxRt = (RectTransform)maxGo.transform;
+            TwinUIFactory.AnchorTopRight(maxRt, 54f, 20f, 28f, 28f);
+
+            Image maxHit = TwinUIFactory.Block(maxRt, "Hit", new Color(0f, 0f, 0f, 0f), true);
+            TwinUIFactory.Stretch(maxHit.rectTransform);
+
+            Button maxBtn = maxGo.AddComponent<Button>();
+            maxBtn.targetGraphic = maxHit;
+            maxBtn.transition = Selectable.Transition.None;
+            maxBtn.onClick.AddListener(ToggleMaximize);
+
+            _maxGlyph = TwinUIFactory.Label(maxRt, "Glyph", TwinTheme.FsBody,
+                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+            TwinUIFactory.Stretch(_maxGlyph.rectTransform);
+            _maxGlyph.text = "□";
+            _maxGlyph.raycastTarget = false;
 
             // 分隔线 1px（§4.1：y=88，左右内边距 16）
             Image line = TwinUIFactory.Block(_root, "HeaderLine", TwinTheme.Divider, false);
@@ -655,7 +712,7 @@ namespace SchoolTwin.UI
             if (_open) return;
             _open = true;
             _slideTarget = 1f;
-            _widthTarget = WidthHome;
+            _widthTarget = ResolveWidthTarget();
 
             TwinUIState.Set(TwinUILayer.Drawer);
             RefreshSummary(true);
@@ -665,42 +722,50 @@ namespace SchoolTwin.UI
             // 《异环》也是面板展开后入口图标被面板盖住。
             if (_trigger != null) _trigger.gameObject.SetActive(false);
 
-            HideSceneHud();
+            // 注意：场景层详情卡的收起**不在这里做** ——
+            // 改由 TwinDetailPanel.SyncCardVisibility() 每帧按 TwinUIState.Current 自检。
+            // 放在抽屉里会有两个问题：① 依赖 FindObjectOfType 找到对方；
+            // ② 抽屉 Close 时的「还原」会和自检打架。见 P29-4 P0-1。
+        }
+
+        // 场景层 UI 的收起统一交给 TwinDetailPanel.SyncCardVisibility()（按 TwinUIState.Current 自检），
+        // 抽屉这边不再插手 —— 双头管理会互相打架。见 P29-4 P0-1。
+
+        // ================================================================ 最大化
+
+        /// <summary>画布逻辑宽度 —— 最大化时的目标宽度。</summary>
+        private float CanvasWidth()
+        {
+            RectTransform parent = _root != null ? _root.parent as RectTransform : null;
+            float w = parent != null ? parent.rect.width : 0f;
+            return w > 1f ? w : WidthModule;
         }
 
         /// <summary>
-        /// 收起场景层 UI（P29-4 P0-1 的修复）。
+        /// 当前应该用多宽：**最大化优先**，否则按页（首页 420 / 模块页 640）。
         ///
-        /// 【根因】抽屉打开时，`TwinPageStack.Push()` 只把**旧页面** `SetActive(false)`，
-        /// 而物体详情卡是**独立对象**，不随抽屉层级隐藏。它的标题
-        /// 「告警与异常 (N) · 共 N 点位 · 累计 N 次」和「未选中点位」就叠在抽屉面板上。
-        ///
-        /// 这一个原因同时造成了见微列出的四个现象：
-        ///   ① 面板"过透" —— 其实是卡片文字透过来的
-        ///   ② L1 实时动态看起来 5~6 行（规格 4 行）—— 多出来的是卡片行
-        ///   ③ L2 左轨区域出现杂字
-        ///   ④ 卡片文字压在工具行上，看起来像"溢出"
-        ///
-        /// 只收详情卡：其余常驻面板（点位列表 / 告警历史 / 旧控制面板）默认就是隐藏的，
-        /// 需要用户主动打开，不会在抽屉打开时自己冒出来。
+        /// 收成一处是为了避免「切页时把最大化宽度冲掉」—— 原来 `Open()` 和
+        /// `OnStackChanged()` 各写一遍 `_widthTarget = ...`，加最大化后必须都走这里判。
         /// </summary>
-        private void HideSceneHud()
+        private float ResolveWidthTarget()
         {
-            if (_detailPanel == null) _detailPanel = FindObjectOfType<TwinDetailPanel>(true);
-            if (_detailPanel == null) return;
-
-            _detailHiddenByDrawer = _detailPanel.CardVisible;
-            if (_detailHiddenByDrawer) _detailPanel.SetCardVisible(false);
+            return _maximized ? CanvasWidth() : DesignWidth();
         }
 
-        /// <summary>关抽屉时把详情卡还原成"打开前是否可见"的状态（不无条件显示）。</summary>
-        private void RestoreSceneHud()
+        /// <summary>当前页的设计宽度（首页 420 / 模块页 640）。最大化时内容仍按它居中。</summary>
+        private float DesignWidth()
         {
-            if (_detailPanel != null && _detailHiddenByDrawer)
-            {
-                _detailPanel.SetCardVisible(true);
-                _detailHiddenByDrawer = false;
-            }
+            bool isHome = _stack == null || _stack.Top == null || _stack.Top is TwinHomePage;
+            return isHome ? WidthHome : WidthModule;
+        }
+
+        /// <summary>切最大化：展开铺满画布，再点还原。</summary>
+        private void ToggleMaximize()
+        {
+            _maximized = !_maximized;
+            _widthTarget = ResolveWidthTarget();
+
+            if (_maxGlyph != null) _maxGlyph.text = _maximized ? "▣" : "□";
         }
 
         public void Close()
@@ -708,6 +773,13 @@ namespace SchoolTwin.UI
             if (!_open) return;
             _open = false;
             _slideTarget = 0f;
+
+            // 关抽屉后回到普通宽度 —— 下次打开不该还是最大化状态
+            if (_maximized)
+            {
+                _maximized = false;
+                if (_maxGlyph != null) _maxGlyph.text = "□";
+            }
 
             // 关抽屉 = 清栈回首页（下次打开从首页开始，不会停在上次的深层页）
             if (_stack != null)
@@ -722,9 +794,6 @@ namespace SchoolTwin.UI
                 _trigger.gameObject.SetActive(true);
                 _trigger.SetOpen(false);
             }
-
-            // 把抽屉打开时收起的场景层 UI 还原（P29-4 P0-1）
-            RestoreSceneHud();
         }
 
         private TwinPageBase _homePage;
@@ -768,8 +837,8 @@ namespace SchoolTwin.UI
             LayoutSummary();
             SyncSubtitle();
 
-            // 首页 420，模块页 640
-            _widthTarget = isHome ? WidthHome : WidthModule;
+            // 首页 420，模块页 640；最大化时铺满画布（统一走 ResolveWidthTarget）
+            _widthTarget = ResolveWidthTarget();
         }
 
         // ================================================================ Esc
@@ -817,11 +886,70 @@ namespace SchoolTwin.UI
             _root.sizeDelta = new Vector2(_widthCur, 0f);
             _root.anchoredPosition = new Vector2(Mathf.Lerp(hiddenX, 0f, TwinTheme.EaseOutCubic(_slide)), 0f);
 
+            ApplyMaximizedLayout();
+
             // 摘要 0.5s 刷新（只在打开时）
             if (_open && Time.unscaledTime >= _nextSummaryAt)
             {
                 _nextSummaryAt = Time.unscaledTime + 0.5f;
                 RefreshSummary(false);
+            }
+        }
+
+        /// <summary>同色但不透明（alpha 拉满）。只用于全屏实底，不改动任何 token。</summary>
+        private static Color Opaque(Color c)
+        {
+            c.a = 1f;
+            return c;
+        }
+
+        /// <summary>
+        /// 最大化（铺满画布）态的收尾。非最大化时逐值回到原样。
+        ///
+        /// ① **面板底做实。** PanelTop/PanelBottom 的 alpha 是 0.94 / 0.96 ——
+        ///    抽屉只有 420~640 宽时只盖住右缘一条，透出去的 6% 落在暗处看不出来；
+        ///    铺满整屏后，整片明亮的走廊都会从那 6% 里透出来，观感就是"面板是透明的"。
+        ///    全屏态把 alpha 补到 1，两个 token 本身不动（420/640 窄态仍是原值）。
+        ///
+        /// ② **内容按设计宽度水平居中。** L1/L2 是固定宽度设计（KPI 121×3、右区 440），
+        ///    最大化只放大了容器，内容仍从左边起排 → 全部堆在左侧、右边一大片空。
+        ///    这里给 _content 加左右等量内缩，让内容整体居中。
+        ///    注意是"居中"不是"拉伸重排" —— 真自适应要按可用宽度重新分配列宽，
+        ///    那要动布局常量与页面内部坐标，属重新设计，不在这里做。
+        /// </summary>
+        private void ApplyMaximizedLayout()
+        {
+            if (_bg != null)
+            {
+                Color top = TwinTheme.PanelTop;
+                Color bottom = TwinTheme.PanelBottom;
+                if (_maximized)
+                {
+                    top.a = 1f;
+                    bottom.a = 1f;
+                }
+                _bg.SetFill(top, bottom);
+            }
+
+            if (_backdrop != null && _backdrop.gameObject.activeSelf != _maximized)
+                _backdrop.gameObject.SetActive(_maximized);
+
+            if (_content == null) return;
+
+            float pad = Mathf.Max(0f, (_widthCur - DesignWidth()) * 0.5f);
+            if (Mathf.Abs(_contentPad - pad) < 0.5f) return;
+
+            _contentPad = pad;
+            _content.offsetMin = new Vector2(pad, ToolRowH);
+            _content.offsetMax = new Vector2(-pad, -HeaderH);
+
+            // 头部整体内缩同样的量 —— 否则最大化后标题贴屏幕最左、内容在中间，会脱节。
+            // header 的 pivot 在左上、anchor 横跨左右，所以「左右各缩 pad」= sizeDelta.x = -2pad
+            // 且 anchoredPosition.x = pad。pad 为 0 时逐值回到原始状态。
+            if (_header != null)
+            {
+                _header.sizeDelta = new Vector2(-2f * pad, HeaderH);
+                _header.anchoredPosition = new Vector2(pad, 0f);
             }
         }
 

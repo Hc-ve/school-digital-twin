@@ -492,6 +492,13 @@ namespace SchoolTwin.UI
             RectTransform scrollRt = (RectTransform)scrollGo.transform;
             TwinUIFactory.Place(scrollRt, RightX, PwrTreeY, RightW, PwrTreeH);
 
+            // 【滚轮为什么点了没反应】ScrollRect 实现了 IScrollHandler，但滚轮事件是
+            // **沿着射线命中的 Graphic 派发**的。scrollRt 上没有任何 Graphic，
+            // 鼠标悬停时射线打不到它 → ScrollRect 收不到 OnScroll → 滑条不动。
+            // 这里铺一层完全透明、但 raycastTarget = true 的 Image 当"事件接收垫"。
+            Image scrollHit = TwinUIFactory.Block(scrollRt, "HitArea", new Color(0f, 0f, 0f, 0f), true);
+            TwinUIFactory.Stretch(scrollHit.rectTransform);
+
             GameObject viewGo = TwinUIFactory.Node("Viewport", scrollRt);
             RectTransform viewRt = (RectTransform)viewGo.transform;
             TwinUIFactory.Stretch(viewRt);
@@ -570,17 +577,21 @@ namespace SchoolTwin.UI
                 t.text = n.Title;
                 t.raycastTarget = false;
 
-                // 通断胶囊：高 22，通电绿 / 断电红（低透明度底 + 同色字）
+                // 通断胶囊：高 22，**右对齐到绝对 380**。
+                // ⚠️ 不能写行内固定 x —— 行本身有 `Level*16` 缩进，胶囊会跟着右移，
+                // 三层节点看起来就是"一圈按钮歪着排"（P29-4 P0-2 反馈）。
+                float pillX = 440f - n.Level * 16f - 52f - 8f;
                 Color state = n.On ? TwinTheme.StatusNormal : TwinTheme.StatusAlarm;
                 TwinRoundedRect pill = TwinUIFactory.Rounded(row, "Pill", 11f,
                     TwinTheme.WithAlpha(state, 0.16f), TwinTheme.WithAlpha(state, 0.16f),
                     Color.clear, 0f, false);
-                TwinUIFactory.Place(pill.rectTransform, 240f, (h - 22f) * 0.5f, 52f, 22f);
+                TwinUIFactory.Place(pill.rectTransform, pillX, (h - 22f) * 0.5f, 52f, 22f);
 
                 Text pt = TwinUIFactory.Label(pill.rectTransform, "P", TwinTheme.FsMicro,
                     TextAnchor.MiddleCenter, state);
                 TwinUIFactory.Stretch(pt.rectTransform);
-                pt.text = n.On ? "通电" : "断电";
+                // 文案沿用既有「合闸 / 分闸」——优化单 §5 第 8 条明确列为"做对了不要动"
+                pt.text = n.On ? "合闸" : "分闸";
                 pt.raycastTarget = false;
 
                 y += h;
@@ -630,10 +641,13 @@ namespace SchoolTwin.UI
                 TwinUIFactory.Place(bar.rectTransform, 0f, 8f, 4f, AlmRowH - 16f);
                 _almBar[i] = bar;
 
-                _almId[i] = MakeAlmCell(row, "Id", 12f, 200f, 8f, TwinTheme.FsBody, TwinTheme.TextPrimary);
-                _almName[i] = MakeAlmCell(row, "Name", 12f, 260f, 18f, TwinTheme.FsCaption, TwinTheme.TextSecondary);
-                _almDesc[i] = MakeAlmCell(row, "Desc", 12f, 300f, 34f, TwinTheme.FsMicro, TwinTheme.TextMuted);
-                _almDur[i] = MakeAlmCell(row, "Dur", 290f, 70f, 8f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+                // 行内三段竖排（规格 §3.4）：编号 13 @y=2 / 名称 11 @y=20 / 描述 9 @y=36。
+                // ⚠️ 高度必须显式给，不能沿用字号 —— `size + 6` 会让 13px 的编号占到 19，
+                // 与 y=20 的名称压出 1px 重叠（实测"告警日志文字叠在一起"）。
+                _almId[i] = MakeAlmCell(row, "Id", 12f, 240f, 2f, 16f, TwinTheme.FsBody, TwinTheme.TextPrimary);
+                _almName[i] = MakeAlmCell(row, "Name", 12f, 200f, 20f, 16f, TwinTheme.FsCaption, TwinTheme.TextSecondary);
+                _almDesc[i] = MakeAlmCell(row, "Desc", 12f, 280f, 36f, 14f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+                _almDur[i] = MakeAlmCell(row, "Dur", 290f, 70f, 2f, 16f, TwinTheme.FsMicro, TwinTheme.TextMuted);
 
                 row.gameObject.SetActive(false);
             }
@@ -657,12 +671,15 @@ namespace SchoolTwin.UI
             td.text = "选中一条告警后，这里显示 下发→回执→执行→回读→恢复 的完整时间线。";
         }
 
-        /// <summary>告警行单元格：可指定相对行顶的 y 偏移（行内是编号/名称/描述三段竖排）。</summary>
+        /// <summary>
+        /// 告警行单元格。**高度由调用方显式给** —— 不能按字号推（`size + 6`），
+        /// 否则 13px 编号会占到 19 高，与下一段 y=20 的名称压出重叠。
+        /// </summary>
         private static Text MakeAlmCell(RectTransform row, string name, float x, float w,
-                                        float y, int size, Color color)
+                                        float y, float h, int size, Color color)
         {
             Text t = TwinUIFactory.Label(row, name, size, TextAnchor.UpperLeft, color);
-            TwinUIFactory.Place(t.rectTransform, x, y, w, size + 6f);
+            TwinUIFactory.Place(t.rectTransform, x, y, w, h);
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
             return t;
         }

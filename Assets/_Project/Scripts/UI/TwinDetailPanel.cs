@@ -865,8 +865,35 @@ namespace SchoolTwin.UI
             _cardAlpha = 0f;
         }
 
+        /// <summary>
+        /// 按「当前有没有别的 UI 层在前台」决定卡片是否显示（P29-4 P0-1）。
+        ///
+        /// 【为什么由卡片自己判，而不是抽屉来找它】
+        /// 抽屉去找卡片要 `FindObjectOfType`，依赖两个对象都已就绪、且抽屉一定先于卡片执行；
+        /// 而卡片自检只依赖 `TwinUIState.Current` 这个静态状态，任何时机都成立，
+        /// 也不怕以后再有第三个入口打开 UI 层。
+        ///
+        /// 【效果】抽屉打开 → Layer = Drawer → 卡片隐藏；
+        /// 关抽屉 → Layer 回 None → 卡片按 `_visible &amp;&amp; !_cardClosed` 原样回来，
+        /// 不需要重新点选。
+        /// </summary>
+        private void SyncCardVisibility()
+        {
+            if (_card == null) return;
+
+            bool occluded = TwinUIState.Current != TwinUILayer.None;
+            bool want = _visible && !_cardClosed && !occluded;
+
+            if (_card.gameObject.activeSelf != want) _card.gameObject.SetActive(want);
+        }
+
         private void Update()
         {
+            // 【P29-4 P0-1】任何 UI 层（抽屉 / 模态）在前台时，场景层卡片必须让位。
+            // 卡片是**独立对象**，页栈 Push 只隐藏「页面」，管不到它 —— 靠这里每帧自检。
+            // 放在最前面：即使 _visible 为 false 也要保证卡片确实是关的。
+            SyncCardVisibility();
+
             if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) SetVisible(!_visible);
             if (!_visible) return;
 

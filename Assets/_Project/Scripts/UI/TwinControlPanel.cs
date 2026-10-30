@@ -1241,6 +1241,11 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
+            // 【P29-4 P0-1】抽屉 / 模态在前台时，旧面板必须让位 ——
+            // 否则它会和抽屉并排显示两块「校园总控」，看起来像两套系统。
+            // 只改 _panel 的显隐，不动 _visible：关抽屉后按原状态回来。
+            SyncOcclusion();
+
             if (_toggleKey != KeyCode.None && Input.GetKeyDown(_toggleKey)) Toggle();
             if (!_visible || _panel == null) return;
 
@@ -1248,6 +1253,17 @@ namespace SchoolTwin.UI
             if (now < _nextRefresh) return;
             _nextRefresh = now + Mathf.Max(0.05f, _refreshInterval);
             Refresh(false);
+        }
+
+        /// <summary>按当前 UI 层状态决定面板是否显示（P29-4 P0-1，与 TwinDetailPanel 同口径）。</summary>
+        private void SyncOcclusion()
+        {
+            if (_panel == null) return;
+
+            bool occluded = TwinUIState.Current != TwinUILayer.None;
+            bool want = _visible && !occluded;
+
+            if (_panel.gameObject.activeSelf != want) _panel.gameObject.SetActive(want);
         }
 
         private void Refresh(bool force)

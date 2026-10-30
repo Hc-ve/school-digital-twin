@@ -75,6 +75,12 @@ namespace SchoolTwin.UI
         private float _zoomTarget;
         private float _nextSwitchTime;
         private bool _warnedNoAtlas;
+
+        /// <summary>
+        /// 面板打开时用来整体淡出小地图。**不能用 SetActive**：小地图的根就是本对象，
+        /// 关掉自己之后 Update 不再执行，就再也没有机会恢复。
+        /// </summary>
+        private CanvasGroup _group;
         private Sprite _circleSprite;
 
         /// <summary>每张底图只建一次 Sprite —— 每次切楼层都 new 一个会一直泄漏。</summary>
@@ -214,6 +220,25 @@ namespace SchoolTwin.UI
         private void Update()
         {
             if (_root == null || _mapImage == null) return;
+
+            // 【P29-4】抽屉/详情卡打开时让位。
+            // 小地图是独立的 Overlay Canvas，sortingOrder = 90，而主画布（抽屉所在）是 0 ——
+            // 所以它**永远压在面板之上**。抽屉只有 420 宽时两者不重叠，看不出来；
+            // 一点最大化铺满整屏，小地图就浮在面板上面了。
+            // 这里跟详情卡同一套机制：按 TwinUIState 自检，任何入口打开面板都会自动让位。
+            bool occluded = TwinUIState.Current != TwinUILayer.None;
+            if (_group == null)
+            {
+                _group = GetComponent<CanvasGroup>();
+                if (_group == null) _group = gameObject.AddComponent<CanvasGroup>();
+            }
+            float wantAlpha = occluded ? 0f : 1f;
+            if (!Mathf.Approximately(_group.alpha, wantAlpha))
+            {
+                _group.alpha = wantAlpha;
+                _group.blocksRaycasts = !occluded;
+            }
+            if (occluded) return;
 
             if (_atlas == null)
             {

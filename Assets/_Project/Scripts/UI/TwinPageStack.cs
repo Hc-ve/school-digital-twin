@@ -64,7 +64,11 @@ namespace SchoolTwin.UI
             {
                 if (top.GetType() == page.GetType())
                 {
-                    // 已经在看同一页了 —— 不动栈，只把它拉到栈顶刷新一次
+                    // 已经在看同一页了 —— 不动栈，只把它拉到栈顶刷新一次。
+                    // 【P29-4 P0-2】这里必须补一次归 1：如果这一页上次的入场动画
+                    // 被打断（alpha 停在 0.3~0.6），早退分支不会重跑动画，
+                    // 它就会**永久半透明**，透出走廊和角色。
+                    ForceOpaque(top);
                     top.OnShow();
                     return;
                 }
@@ -138,6 +142,13 @@ namespace SchoolTwin.UI
             RectTransform rt = page.transform as RectTransform;
             if (rt == null) return;
 
+            // 【P29-4 P0-2 根因】`_animGroup` 是**单个字段**：新一次入场会覆盖它，
+            // 上一位的动画就再也没人收尾，alpha 永久停在半透明。
+            // 症状是"面板整体发虚、能透过它看到走廊和角色"，且**换页越频繁越严重**。
+            // 修法：每次入场前先把栈内所有页归 1，再给新页从 0 起动画 —— 这样
+            // 任何被打断的中间态都会被下一次入场顺手抹平。
+            ForceAllOpaque();
+
             CanvasGroup group = page.GetComponent<CanvasGroup>();
             if (group == null) group = page.gameObject.AddComponent<CanvasGroup>();
 
@@ -147,6 +158,20 @@ namespace SchoolTwin.UI
 
             rt.anchoredPosition = new Vector2(SlideDistance, 0f);
             group.alpha = 0f;
+        }
+
+        /// <summary>把某一页强制置为不透明（不动它的位置）。</summary>
+        private static void ForceOpaque(TwinPageBase page)
+        {
+            if (page == null) return;
+            CanvasGroup g = page.GetComponent<CanvasGroup>();
+            if (g != null) g.alpha = 1f;
+        }
+
+        /// <summary>栈内所有页归 1。入场动画前调用，抹平上一次被打断的中间态。</summary>
+        private void ForceAllOpaque()
+        {
+            for (int i = 0; i < _stack.Count; i++) ForceOpaque(_stack[i]);
         }
 
         private void Update()
