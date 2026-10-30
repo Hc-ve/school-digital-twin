@@ -67,12 +67,32 @@ namespace SchoolTwin.UI
         public static void Reset()
         {
             Current = TwinUILayer.None;
+            // 一并清全屏标记：Reset 是"回到纯 3D"，这时若还留着 true，
+            // BlocksMovement 会误判成"可以走"（其实本来就可以，但语义要干净）
+            FullScreen = false;
         }
 
         // ================================================================ 读（消费方只用这些）
 
         /// <summary>角色移动输入是否要被清空。</summary>
-        public static bool BlocksMovement { get { return Current != TwinUILayer.None; } }
+        /// <summary>
+        /// 是否处于「全屏态」（抽屉最大化）。由 `TwinDrawer` 在切最大化时写入。
+        ///
+        /// 放在这里而不是让本类去问 TwinDrawer：TwinUIState 是底层状态机，
+        /// 反向依赖上层会绕成环（虽然同程序集能编过，但读代码的人会绕晕）。
+        /// 上层写、底层读，方向单一。
+        /// </summary>
+        public static bool FullScreen { get; set; }
+
+        /// <summary>
+        /// 移动是否要挡。
+        /// **窄态挡、全屏不挡** —— 窄态是"用面板"，全屏是"逛场景"。
+        /// 全屏还禁走的话，人就只能原地转圈，3D 那块面积等于白给。
+        /// </summary>
+        public static bool BlocksMovement
+        {
+            get { return Current != TwinUILayer.None && !FullScreen; }
+        }
 
         /// <summary>滚轮是否归 UI（相机缩放/推进让路）。</summary>
         public static bool BlocksScroll { get { return Current != TwinUILayer.None; } }

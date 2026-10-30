@@ -50,6 +50,11 @@ namespace SchoolTwin.UI
         private RectTransform _root;
         private CanvasGroup _group;
 
+        // ---- 组容器（切换页面时整组显隐，这是不串页的关键）----
+        private RectTransform _homeGroup;      // L1 左栏：KPI / 入口 / 动态
+        private RectTransform _railGroup;      // L2 左轨：5 Tab
+        private RectTransform _asideGroup;     // L2 辅栏：筛选 / 小结 / 追溯
+
         // ---- L1 左栏 ----
         private TwinMetricCard _kpiDevice;
         private TwinMetricCard _kpiOnline;
@@ -69,6 +74,8 @@ namespace SchoolTwin.UI
         private readonly Text[] _alarmDesc = new Text[3];
         private readonly Text[] _alarmTag = new Text[3];
         private Text _alarmTitle;
+        /// <summary>3 条之外的余量提示（P1-2：标题写 5、列表只 3 条，必须给"还有 N 条"）。</summary>
+        private Text _moreAlarm;
         private readonly Text[] _typeName = new Text[4];
         private readonly Text[] _typeCount = new Text[4];
         private readonly Image[] _typeBar = new Image[4];
@@ -102,6 +109,7 @@ namespace SchoolTwin.UI
         private Text _healthPct;
         private readonly Image[] _healthSeg = new Image[3];
         private readonly Text[] _healthLeg = new Text[3];
+        private readonly TwinRoundedRect[] _healthDot = new TwinRoundedRect[3];
         private readonly RectTransform[] _abnRow = new RectTransform[3];
         private readonly Image[] _abnBar = new Image[3];
         private readonly Text[] _abnId = new Text[3];
@@ -151,6 +159,7 @@ namespace SchoolTwin.UI
             _group.alpha = 1f;
 
             BuildTopDivider();
+            BuildColumnDivider();
             BuildLeftRail();
             BuildRightRail();
             BuildSystemRail();
@@ -170,6 +179,27 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(line.rectTransform, 0f, HeadH - 1f, RailW * 2f + MidW, 1f);
         }
 
+        /// <summary>
+        /// 主栏与右栏的分界线（见微 P0-2）。
+        ///
+        /// 没有这条线时，右栏「筛选 / 台账小结 / 全链路追溯」和主栏「KPI / 健康条 / Top3」
+        /// 直接并排，读起来像"一栏两列内容"，而不是两个区。
+        /// x=800、y 92–652，白 @0.06 —— 比卡片描边（@0.006）明显，比主色线（@0.25）克制。
+        /// </summary>
+        private void BuildColumnDivider()
+        {
+            Color c = TwinTheme.WithAlpha(Color.white, 0.06f);
+
+            // x=200：左栏与 3D 的分界（见微第三轮要求"能量取到 x=200"，
+            // 3D 是透明区、没有实体边界，不给线就没法判断左栏到底多宽）
+            Image left = TwinUIFactory.Block(_root, "ColDivLeft", c, false);
+            TwinUIFactory.Place(left.rectTransform, RailW, 92f, 1f, 560f);
+
+            // x=800：3D 与右栏的分界
+            Image right = TwinUIFactory.Block(_root, "ColDivRight", c, false);
+            TwinUIFactory.Place(right.rectTransform, RightX, 92f, 1f, 560f);
+        }
+
         /// <summary>底带右侧的时间 / 版本（规格 §7：全屏独有）。</summary>
         private void BuildFooter()
         {
@@ -184,12 +214,14 @@ namespace SchoolTwin.UI
 
         private void BuildLeftRail()
         {
+            _homeGroup = NewGroup("HomeRail");
+
             // 三张 KPI 竖排 168×88（规格 §3.3：y=96 / 192 / 288）
-            _kpiDevice = TwinMetricCard.Create(_root, "FullKpi_Device", Pad, 96f,
+            _kpiDevice = TwinMetricCard.Create(_homeGroup, "FullKpi_Device", Pad, 96f,
                 ColW, 88f, TwinTheme.FsDisplay, "设备总数", TwinCode.UnitDevice);
-            _kpiOnline = TwinMetricCard.Create(_root, "FullKpi_Online", Pad, 192f,
+            _kpiOnline = TwinMetricCard.Create(_homeGroup, "FullKpi_Online", Pad, 192f,
                 ColW, 88f, TwinTheme.FsDisplay, "在线", TwinCode.UnitDevice);
-            _kpiAlarm = TwinMetricCard.Create(_root, "FullKpi_Alarm", Pad, 288f,
+            _kpiAlarm = TwinMetricCard.Create(_homeGroup, "FullKpi_Alarm", Pad, 288f,
                 ColW, 88f, TwinTheme.FsDisplay, "告警", TwinCode.UnitDevice);
 
             // 卡片序号 01/02/03（规格 §7：全屏独有）
@@ -204,7 +236,7 @@ namespace SchoolTwin.UI
 
             // 实时动态 3 行 ×44
             SectionTitle(Pad, 510f, "实时动态");
-            _feedMore = TwinUIFactory.Label(_root, "FeedMore", TwinTheme.FsMicro,
+            _feedMore = TwinUIFactory.Label(_homeGroup, "FeedMore", TwinTheme.FsMicro,
                 TextAnchor.UpperRight, TwinTheme.TextMuted);
             TwinUIFactory.Place(_feedMore.rectTransform, Pad, 510f, ColW, 14f);
             _feedMore.text = "";
@@ -214,22 +246,22 @@ namespace SchoolTwin.UI
             {
                 float y = 524f + i * 44f;
 
-                TwinRoundedRect dot = TwinUIFactory.Rounded(_root, "FDot_" + i, 3f,
+                TwinRoundedRect dot = TwinUIFactory.Rounded(_homeGroup, "FDot_" + i, 3f,
                     TwinTheme.StatusUnknown, TwinTheme.StatusUnknown, Color.clear, 0f, false);
                 TwinUIFactory.Place(dot.rectTransform, Pad, y + 16f, 6f, 6f);
                 _feedDot[i] = dot;
 
-                Text main = TwinUIFactory.Label(_root, "FMain_" + i, TwinTheme.FsCaption,
+                Text main = TwinUIFactory.Label(_homeGroup, "FMain_" + i, TwinTheme.FsCaption,
                     TextAnchor.UpperLeft, TwinTheme.TextSecondary);
                 TwinUIFactory.Place(main.rectTransform, Pad + 12f, y + 4f, ColW - 12f - 44f, 16f);
                 _feedMain[i] = main;
 
-                Text sub = TwinUIFactory.Label(_root, "FSub_" + i, TwinTheme.FsMicro,
+                Text sub = TwinUIFactory.Label(_homeGroup, "FSub_" + i, TwinTheme.FsMicro,
                     TextAnchor.UpperLeft, TwinTheme.TextMuted);
                 TwinUIFactory.Place(sub.rectTransform, Pad + 12f, y + 22f, ColW - 12f - 44f, 12f);
                 _feedSub[i] = sub;
 
-                Text time = TwinUIFactory.Label(_root, "FTime_" + i, TwinTheme.FsMicro,
+                Text time = TwinUIFactory.Label(_homeGroup, "FTime_" + i, TwinTheme.FsMicro,
                     TextAnchor.UpperRight, TwinTheme.TextMuted);
                 TwinUIFactory.Place(time.rectTransform, Pad + ColW - 44f, y + 4f, 44f, 12f);
                 _feedTime[i] = time;
@@ -248,7 +280,7 @@ namespace SchoolTwin.UI
 
         private void BuildEntry(string glyph, string name, string note, float x, float y, bool on)
         {
-            TwinRoundedRect card = TwinUIFactory.Rounded(_root, "Entry_" + name, TwinTheme.R12,
+            TwinRoundedRect card = TwinUIFactory.Rounded(_homeGroup, "Entry_" + name, TwinTheme.R12,
                 on ? TwinTheme.AccentDim : TwinTheme.CardTop,
                 on ? TwinTheme.AccentDim : TwinTheme.CardBottom,
                 on ? TwinTheme.AccentLine : TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
@@ -279,7 +311,7 @@ namespace SchoolTwin.UI
 
         private void SectionTitle(float x, float y, string text)
         {
-            Text t = TwinUIFactory.Label(_root, "Sec_" + text, TwinTheme.FsMicro,
+            Text t = TwinUIFactory.Label(_homeGroup, "Sec_" + text, TwinTheme.FsMicro,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(t.rectTransform, x, y, ColW, 14f);
             t.text = text;
@@ -334,6 +366,12 @@ namespace SchoolTwin.UI
             Image div = TwinUIFactory.Block(_alarmGroup, "RDiv", TwinTheme.Divider, false);
             TwinUIFactory.Place(div.rectTransform, RightInnerX, 320f, ColW, 1f);
 
+            // 【P1-2】3 条之外还有多少。放在第 3 条（底 312）与分隔线（320）之间，
+            // 不能省 —— 标题写「告警 5」而列表只 3 条、又不说还有几条，读起来像丢了数据。
+            _moreAlarm = TwinUIFactory.Label(_alarmGroup, "RAlarmMore", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_moreAlarm.rectTransform, RightInnerX, 314f, ColW, 12f);
+            _moreAlarm.raycastTarget = false;
             // 设备类型
             Text typeTitle = TwinUIFactory.Label(_alarmGroup, "RTypeTitle", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextSecondary);
@@ -443,11 +481,13 @@ namespace SchoolTwin.UI
 
         private void BuildSystemRail()
         {
+            _railGroup = NewGroup("SysRail");
+
             for (int i = 0; i < 5; i++)
             {
                 float y = 88f + i * 52f;
 
-                TwinRoundedRect bg = TwinUIFactory.Rounded(_root, "FTab_" + i, TwinTheme.R8,
+                TwinRoundedRect bg = TwinUIFactory.Rounded(_railGroup, "FTab_" + i, TwinTheme.R8,
                     Color.clear, Color.clear, Color.clear, 0f, true);
                 TwinUIFactory.Place(bg.rectTransform, 8f, y, RailW - 16f, 48f);
                 _tabBg[i] = bg;
@@ -679,6 +719,7 @@ namespace SchoolTwin.UI
                 TwinRoundedRect dot = TwinUIFactory.Rounded(card.rectTransform, "Dot_" + i, 3f,
                     TwinTheme.StatusNormal, TwinTheme.StatusNormal, Color.clear, 0f, false);
                 TwinUIFactory.Place(dot.rectTransform, 16f + i * 130f, 56f, 6f, 6f);
+                _healthDot[i] = dot;
 
                 Text leg = TwinUIFactory.Label(card.rectTransform, "Leg_" + i, TwinTheme.FsMicro,
                     TextAnchor.MiddleLeft, TwinTheme.TextMuted);
@@ -729,7 +770,9 @@ namespace SchoolTwin.UI
 
         private void BuildSystemAside()
         {
-            Text title = TwinUIFactory.Label(_root, "FAsideTitle", TwinTheme.FsCaption,
+            _asideGroup = NewGroup("SysAside");
+
+            Text title = TwinUIFactory.Label(_asideGroup, "FAsideTitle", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(title.rectTransform, RightInnerX, 92f, ColW, 16f);
             title.text = "筛选";
@@ -738,7 +781,7 @@ namespace SchoolTwin.UI
             for (int i = 0; i < filters.Length; i++)
             {
                 bool on = i == 0;
-                TwinRoundedRect chip = TwinUIFactory.Rounded(_root, "FChip_" + i, TwinTheme.R8,
+                TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinTheme.R8,
                     on ? TwinTheme.AccentDim : TwinTheme.Track,
                     on ? TwinTheme.AccentDim : TwinTheme.Track,
                     on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, false);
@@ -751,7 +794,7 @@ namespace SchoolTwin.UI
                 t.raycastTarget = false;
             }
 
-            Text sumTitle = TwinUIFactory.Label(_root, "FSumTitle", TwinTheme.FsCaption,
+            Text sumTitle = TwinUIFactory.Label(_asideGroup, "FSumTitle", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(sumTitle.rectTransform, RightInnerX, 260f, ColW, 16f);
             sumTitle.text = "台账小结";
@@ -761,12 +804,12 @@ namespace SchoolTwin.UI
             _sumMissing = AsideRow(330f, "缺失");
             _sumOffline = AsideRow(354f, "离线");
 
-            Text trace = TwinUIFactory.Label(_root, "FTrace", TwinTheme.FsCaption,
+            Text trace = TwinUIFactory.Label(_asideGroup, "FTrace", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(trace.rectTransform, RightInnerX, 430f, ColW, 16f);
             trace.text = "全链路追溯";
 
-            Text traceHint = TwinUIFactory.Label(_root, "FTraceHint", TwinTheme.FsMicro,
+            Text traceHint = TwinUIFactory.Label(_asideGroup, "FTraceHint", TwinTheme.FsMicro,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(traceHint.rectTransform, RightInnerX, 450f, ColW, 40f);
             traceHint.text = "选中设备后显示\n下发 → 回执 → 执行 → 回读";
@@ -775,12 +818,12 @@ namespace SchoolTwin.UI
 
         private Text AsideRow(float y, string label)
         {
-            Text l = TwinUIFactory.Label(_root, "AL_" + label, TwinTheme.FsMicro,
+            Text l = TwinUIFactory.Label(_asideGroup, "AL_" + label, TwinTheme.FsMicro,
                 TextAnchor.MiddleLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(l.rectTransform, RightInnerX, y, 80f, 20f);
             l.text = label;
 
-            Text v = TwinUIFactory.Label(_root, "AV_" + label, TwinTheme.FsMicro,
+            Text v = TwinUIFactory.Label(_asideGroup, "AV_" + label, TwinTheme.FsMicro,
                 TextAnchor.MiddleRight, TwinTheme.TextSecondary);
             TwinUIFactory.Place(v.rectTransform, RightInnerX + ColW - 60f, y, 60f, 20f);
             v.text = "0";
@@ -799,15 +842,28 @@ namespace SchoolTwin.UI
             // 直接出现会有一下"闪"。0.15s 淡入把这次跳变压下去（宽度没法缓动，那是两套骨架）。
             if (_group != null) _group.alpha = 0f;
 
+            // 【关键】按模式整组切换。**不能只切几个元素** ——
+            // 第一版只切了 KPI 与 L2 的 sys 标题，结果 L1 右栏（告警/类型）与
+            // L2 主栏（健康条/Top3）同时显示，三套字叠在一起（主理人 play 实测）。
+            // 现在每栏都有独立组容器，切组即切整栏。
             bool home = mode == Mode.Home;
-            SetGroupActive(_kpiDevice, home);
-            SetGroupActive(_kpiOnline, home);
-            SetGroupActive(_kpiAlarm, home);
-            SetGroupActive(_sysTitle, !home);
-            SetGroupActive(_sysPower, !home);
-            SetGroupActive(_sysEnergy, !home);
-            SetGroupActive(_sysOnline, !home);
-            SetGroupActive(_sysAlarm, !home);
+
+            SetGroupActive(_homeGroup, home);       // L1 左栏：KPI / 入口 / 动态
+            SetGroupActive(_railGroup, !home);      // L2 左轨：5 Tab
+            SetGroupActive(_asideGroup, !home);     // L2 辅栏：筛选 / 小结 / 追溯
+
+            // L2 主栏三组互斥，按当前 Tab
+            SetGroupActive(_monitorGroup, !home && _tab == 0);
+            SetGroupActive(_deviceGroup, !home && _tab == 1);
+            SetGroupActive(_emptyGroup, !home && _tab >= 2);
+
+            // L1 右栏两态（告警 / 设备详情）交给 RefreshHome 裁决 ——
+            // 它才知道有没有选中设备；在这里硬切会和它打架。
+            if (!home)
+            {
+                SetGroupActive(_alarmGroup, false);
+                SetGroupActive(_detailGroup, false);
+            }
 
             Refresh(true);
         }
@@ -906,6 +962,11 @@ namespace SchoolTwin.UI
             int n = 0;
             float now = Time.realtimeSinceStartup;
 
+            // 先数"进行中"的总数，才能算"还有几条"。不能只数前 3 条 —— 那正是 P1-2 的问题。
+            int ongoing = 0;
+            for (int i = 0; i < _alarmBuf.Count; i++)
+                if (_alarmBuf[i].Ongoing) ongoing++;
+
             for (int i = 0; i < _alarmBuf.Count && n < 3; i++)
             {
                 TwinAlarmHistory.AlarmRecord r = _alarmBuf[i];
@@ -932,6 +993,9 @@ namespace SchoolTwin.UI
                     _alarmCard[i].gameObject.SetActive(false);
 
             if (_alarmTitle != null) _alarmTitle.text = "告警  " + TwinDeviceStats.AlarmDeviceCount;
+
+            if (_moreAlarm != null)
+                _moreAlarm.text = ongoing > 3 ? "还有 " + (ongoing - 3) + " 条 · 点开查看" : "";
         }
 
         /// <summary>
@@ -1120,6 +1184,12 @@ namespace SchoolTwin.UI
             SetText(_healthLeg[0], "正常 " + normal);
             SetText(_healthLeg[1], "告警 " + alarm);
             SetText(_healthLeg[2], "离线 " + offline);
+
+            // 图例点必须跟段色一一对应（见微 P1-2 验收）。
+            // 原来只在创建时给了 StatusNormal 初始色，刷新时没更新 —— 三个点永远是绿的。
+            Color[] segColors = { TwinTheme.StatusNormal, TwinTheme.StatusAlarm, TwinTheme.StatusOffline };
+            for (int i = 0; i < 3; i++)
+                if (_healthDot[i] != null) _healthDot[i].SetFill(segColors[i], segColors[i]);
 
             Color worst = TwinStatusPalette.HealthColor(normal, 0, alarm, offline);
             if (_healthPct != null)

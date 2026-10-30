@@ -236,18 +236,21 @@ namespace SchoolTwin.UI
             if (!full)
             {
                 _root.anchoredPosition = new Vector2(_margin.x, -_margin.y);
+                _root.localScale = Vector3.one;
+                if (_label != null) _label.gameObject.SetActive(true);
                 return;
             }
+
+            // 【P0-3 第三轮】全屏摆到 **3D 左上角**：中心 (260,156)、直径 120 → 左上角 (200,96)。
+            // 窄态它本来就在左上，全屏沿用同一角位；放右下会被右栏挤到画面角上、还压住场景主体。
+            _root.localScale = Vector3.one * (120f / Mathf.Max(1f, _diameter));
+            if (_label != null) _label.gameObject.SetActive(false);
 
             RectTransform parent = _root.parent as RectTransform;
             float canvasW = parent != null ? parent.rect.width : 1000f;
             float drawerLeft = Mathf.Max(0f, (canvasW - 1000f) * 0.5f);
 
-            float h = _diameter + 30f;      // 圆 + 房间名那一行
-            float x = drawerLeft + 800f - 20f - _diameter;
-            float y = 660f - 20f - h;
-
-            _root.anchoredPosition = new Vector2(x, -y);
+            _root.anchoredPosition = new Vector2(drawerLeft + 200f, -96f);
         }
 
         private void Update()

@@ -88,8 +88,21 @@ namespace SchoolTwin.UI
         /// <summary>面板底。最大化时要把它拉实（见 ApplyMaximizedLayout），所以要存引用。</summary>
         private TwinRoundedRect _bg;
 
-        /// <summary>全屏态的不透明实底（垫在 Bg 之下，窄态关闭）。</summary>
-        private Image _backdrop;
+        /// <summary>
+        /// 全屏 L1 的 4 块实底（中间留空让 3D 透出来）。见 BuildShell 里的说明。
+        /// L2 全屏不用它们，走整块 Bg 不透明。
+        ///
+        /// 用 <see cref="TwinRoundedRect"/> 而不是 Image：**圆角是关键**。
+        /// 直角实底拼出来的中间区是一个规规矩矩的矩形窗口，看起来像"3D 被一个边框框住了"；
+        /// 圆角卡片压在 3D 上时，四个角会露出场景，读起来才是"卡片浮在场景之上"。
+        /// </summary>
+        private TwinRoundedRect _bdTop;
+        private TwinRoundedRect _bdLeft;
+        private TwinRoundedRect _bdRight;
+        private TwinRoundedRect _bdBottom;
+
+        /// <summary>当前全屏层是不是 L1（决定"挖洞"还是"整块不透明"）。</summary>
+        private bool _fullIsHome;
 
         /// <summary>内容区当前的水平内缩（最大化时用来居中，非最大化恒为 0）。</summary>
         private float _contentPad = -1f;
@@ -293,24 +306,19 @@ namespace SchoolTwin.UI
             br.offsetMin = Vector2.zero;
             br.offsetMax = new Vector2(TwinTheme.R16, 0f);
 
-            // 全屏态的实底兜底（默认关闭）。
+            // 全屏态的实底 —— **拆成 4 块，中间留空**（见微 P0-1）。
             //
-            // 为什么需要：PanelTop/PanelBottom 的 alpha 是 0.94/0.96，420~640 宽时只盖住
-            // 右缘一条，透出去的 6% 落在暗处看不出来；一点最大化铺满整屏，整片明亮走廊
-            // 都会从那 6% 里透出来，观感就是"面板是透明的"。
-            // 这里铺一块不透明的同色矩形垫在 Bg 之下，**只在最大化时启用** ——
-            // 窄态保持原样（玻璃感不动），全屏态才做实。
-            // 四边内缩 R16 是为了不破坏 Bg 的圆角轮廓。
-            Image backdrop = TwinUIFactory.Block(_root, "Backdrop", Opaque(TwinTheme.PanelBottom), false);
-            RectTransform bk = backdrop.rectTransform;
-            bk.anchorMin = Vector2.zero;
-            bk.anchorMax = Vector2.one;
-            bk.pivot = new Vector2(0.5f, 0.5f);
-            bk.offsetMin = new Vector2(TwinTheme.R16, TwinTheme.R16);
-            bk.offsetMax = new Vector2(-TwinTheme.R16, -TwinTheme.R16);
-            backdrop.transform.SetSiblingIndex(0);      // 压到 Bg 之下
-            _backdrop = backdrop;
-            _backdrop.gameObject.SetActive(false);
+            // 为什么不能铺一块 1000×720 的整底：UGUI 的 Image 是矩形，做不出"挖洞"。
+            // 铺整块会把中间 200…800 × 80…660 的 3D 区一起盖住 ——
+            // L1 全屏的卖点（看场景、点设备）直接没了（主理人 play 实测：中间一片纯色）。
+            //
+            // 拆法：顶带 0…1000×0…80 / 左栏 0…200×80…660 / 右栏 800…1000×80…660 / 底带 0…1000×660…720。
+            // 中间不放任何 Image，让 3D 相机透出来。
+            // 只在 **L1 全屏** 启用；L2 全屏是数据态，用整块 Bg 不透明（两者不共用同一套底）。
+            _bdTop = MakeBackdrop("BdTop", 0f, 0f, 1000f, 80f);
+            _bdLeft = MakeBackdrop("BdLeft", 0f, 80f, 200f, 580f);
+            _bdRight = MakeBackdrop("BdRight", 800f, 80f, 200f, 580f);
+            _bdBottom = MakeBackdrop("BdBottom", 0f, 660f, 1000f, 60f);
 
             // 24 单位网格底纹。**必须紧跟背景、在头部/内容/工具行之前**：
             // ApplyGrid 不抢 sibling 位置（抢了会在"背景也是子节点"的面板里被压到底下），
@@ -643,6 +651,7 @@ namespace SchoolTwin.UI
 
                 _toolLabels[i] = label;
                 _toolUnderlineObjects[i] = ul.gameObject;
+                _toolHits[i] = hr;
             }
 
             SelectTool(0);
@@ -807,12 +816,18 @@ namespace SchoolTwin.UI
         {
             if (_fullLayer == null) return;
 
+            // 全屏 = 逛场景，允许 WASD（TwinUIState.BlocksMovement 会读这个标记）。
+            // 窄态 = 用面板，保持禁走。
+            TwinUIState.FullScreen = _maximized;
+
             if (_maximized)
             {
                 TwinFullLayer.Mode mode = (_stack != null && _stack.Top != null
                                            && !(_stack.Top is TwinHomePage))
                     ? TwinFullLayer.Mode.System
                     : TwinFullLayer.Mode.Home;
+
+                _fullIsHome = mode == TwinFullLayer.Mode.Home;
                 _fullLayer.Show(mode);
             }
             else
@@ -887,9 +902,10 @@ namespace SchoolTwin.UI
             // 头部三处差异：L1 有 3px 色条 + 标题 x=32；L2 让位给返回键，标题右移到 46。
             // （文档写 L2 标题 x=30，但返回键占 22–36，30 会压在箭头上，这里取 46。）
             if (_titleBar != null) _titleBar.gameObject.SetActive(isHome);
-            float titleX = isHome ? 32f : 46f;
-            if (_title != null) TwinUIFactory.Place(_title.rectTransform, titleX, 20f, 300f, 28f);
-            if (_subtitle != null) TwinUIFactory.Place(_subtitle.rectTransform, titleX, 62f, 260f, 16f);
+
+            LayoutHeaderText(isHome);
+            _lastFullForHeader = _maximized;
+
 
             // 【P29-3.5 规格三】摘要按页逐项判定 —— L1 整行隐藏、数据监测只剩受控、其余三项齐全。
             // 显示与否交给 LayoutSummary 统一裁决，这里不再单独 SetActive（两处都管会互相打）。
@@ -953,15 +969,23 @@ namespace SchoolTwin.UI
                 // 而 Expand 下画布宽可能是 1176.9（1069×654 窗口）—— 若让 _root 铺满画布，
                 // 三栏会全部靠左、右侧空出一大块，正是上一版"内容堆在左边"的翻版。
                 // 画布高在 Expand 下恒 ≥720，所以 720 高不会溢出。
+                //
+                // ⚠️ **pivot 必须一起改**。窄态 pivot 是 (1, 0.5)（贴右缘），
+                // 只改 anchor 不改 pivot 的话，"右边缘"会对齐到画布中心，
+                // 面板从中心往左铺 1000 → 左缘跑到画布外，左轨 5 个 Tab 全被裁掉。
+                // 这就是 P0-1 的根因（主理人 play 实测：整体左溢约 200 单位）。
                 _root.anchorMin = new Vector2(0.5f, 0.5f);
                 _root.anchorMax = new Vector2(0.5f, 0.5f);
+                _root.pivot = new Vector2(0.5f, 0.5f);
                 _root.sizeDelta = new Vector2(FullW, FullH);
                 _root.anchoredPosition = Vector2.zero;
             }
             else
             {
+                // 窄态还原：锚点、pivot、尺寸三样都要回原值，缺一个就错位
                 _root.anchorMin = new Vector2(1f, 0f);
                 _root.anchorMax = new Vector2(1f, 1f);
+                _root.pivot = new Vector2(1f, 0.5f);
                 _root.sizeDelta = new Vector2(_widthCur, 0f);
                 _root.anchoredPosition = new Vector2(Mathf.Lerp(hiddenX, 0f, TwinTheme.EaseOutCubic(_slide)), 0f);
             }
@@ -1001,6 +1025,47 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
+        /// 造一块全屏实底卡片。固定坐标（全屏 _root 恒 1000×720），默认关闭。
+        ///
+        /// 用 CardTop→CardBottom 渐变 + R12 圆角 + 1px 描边，而不是纯色直角 Image：
+        /// 圆角会让四个角露出 3D，观感是"卡片浮在场景上"，而不是"3D 被框在一个窗口里"。
+        /// </summary>
+        private TwinRoundedRect MakeBackdrop(string name, float x, float y, float w, float h)
+        {
+            TwinRoundedRect card = TwinUIFactory.Rounded(_root, name, TwinTheme.R12,
+                Opaque(TwinTheme.CardTop), Opaque(TwinTheme.CardBottom),
+                TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(card.rectTransform, x, y, w, h);
+            card.transform.SetSiblingIndex(0);      // 压到 Bg 之下
+            card.gameObject.SetActive(false);
+            return card;
+        }
+
+        private static void SetActiveIfChanged(Component c, bool on)
+        {
+            if (c != null && c.gameObject.activeSelf != on) c.gameObject.SetActive(on);
+        }
+
+        /// <summary>上次给头部定位时是否全屏。两态标题 y 不同（30/56 vs 20/62），只在切换时重排。</summary>
+        private bool _lastFullForHeader;
+
+        /// <summary>
+        /// 标题与副标定位。两态不同（P29-6 §3.1）：
+        ///   窄态 头 96 → 标题 y=20、副标 y=62
+        ///   全屏 头 80 → 标题 y=30、副标 y=56（顶带收窄 16px，标题下移保持视觉居中）
+        /// 左基准：L1 窄态 32（让开 3px 色条）/ 全屏 20（规格：内容左缘 = 20）；L2 恒 46（让开返回键）。
+        /// </summary>
+        private void LayoutHeaderText(bool isHome)
+        {
+            float titleX = isHome ? (_maximized ? 20f : 32f) : 46f;
+            float titleY = _maximized ? 30f : 20f;
+            float subY = _maximized ? 56f : 62f;
+
+            if (_title != null) TwinUIFactory.Place(_title.rectTransform, titleX, titleY, 300f, 28f);
+            if (_subtitle != null) TwinUIFactory.Place(_subtitle.rectTransform, titleX, subY, 260f, 16f);
+        }
+
+        /// <summary>
         /// 最大化（铺满画布）态的收尾。非最大化时逐值回到原样。
         ///
         /// ① **面板底做实。** PanelTop/PanelBottom 的 alpha 是 0.94 / 0.96 ——
@@ -1016,54 +1081,110 @@ namespace SchoolTwin.UI
         /// </summary>
         private void ApplyMaximizedLayout()
         {
+            // 顶带高度变了，标题/副标的 y 要跟着换（只在切换那一下重排，不每帧写）
+            if (_lastFullForHeader != _maximized)
+            {
+                _lastFullForHeader = _maximized;
+                bool isHome = _stack == null || _stack.Top == null || _stack.Top is TwinHomePage;
+                LayoutHeaderText(isHome);
+            }
+
+            // 底分三种形态（见微 P0-1 / P0-2）：
+            //   L1 全屏 → Bg 填充透明（只留描边）+ 4 块实底围出中间 3D 窗口
+            //   L2 全屏 → Bg 整块不透明（数据态，3D 不可见）
+            //   窄态   → Bg 原样 0.94 / 0.96
+            bool hole = _maximized && _fullIsHome;
+            bool solid = _maximized && !_fullIsHome;
+
             if (_bg != null)
             {
                 Color top = TwinTheme.PanelTop;
                 Color bottom = TwinTheme.PanelBottom;
-                if (_maximized)
+                if (solid)
                 {
                     top.a = 1f;
                     bottom.a = 1f;
                 }
+                else if (hole)
+                {
+                    // 填充透明、描边保留 —— 描边只在矩形外框，不会挡住中间的 3D
+                    top = Color.clear;
+                    bottom = Color.clear;
+                }
                 _bg.SetFill(top, bottom);
             }
 
-            if (_backdrop != null && _backdrop.gameObject.activeSelf != _maximized)
-                _backdrop.gameObject.SetActive(_maximized);
+            SetActiveIfChanged(_bdTop, hole);
+            SetActiveIfChanged(_bdLeft, hole);
+            SetActiveIfChanged(_bdRight, hole);
+            SetActiveIfChanged(_bdBottom, hole);
 
             if (_content == null) return;
+
+            // 窄态内容与全屏层必须互斥。这里做成**幂等**的每帧检查（只比 activeSelf，很便宜）：
+            // 只要某处又把 _content 激活了（切页 / Push / 恢复），下一帧就会被重新关掉。
+            // 上一版只在 ApplyFullMode 里切一次，一旦有第二条路径激活它，
+            // 就会出现"窄态 440 页面 + 全屏三栏"叠在一起（见微 P0-3 / P1-2 的橙色段就是这么来的）。
+            if (_content != null && _content.gameObject.activeSelf == _maximized)
+                _content.gameObject.SetActive(!_maximized);
 
             // 全屏态内容交给 FullLayer 的三栏，窄态内容已隐藏 —— 所以全屏时头部**通栏**（pad=0），
             // 不能再按"内容居中"去内缩，否则标题会缩到中间、和左右栏对不齐。
             float pad = _maximized
                 ? 0f
                 : Mathf.Max(0f, (_widthCur - DesignWidth()) * 0.5f);
-            if (Mathf.Abs(_contentPad - pad) < 0.5f) return;
+            // ⚠️ 这里**不能**用「pad 没变就 return」的早退。
+            // L1 的窄态 pad 是 0（420−420），全屏 pad 也是 0 —— pad 永远不变，
+            // 早退会让后面的头部高度、底带高度、工具行 x 全部永不执行：
+            // 表现就是"全屏了但工具行还停在窄态的 34/130/226/322，头部还是 96"。
+            // （见微第三轮 P0-2 的"整体偏右且疏密不均"就是这个）
+            // 改成三块各自做变化检测，互不牵连。
 
-            _contentPad = pad;
-            _content.offsetMin = new Vector2(pad, _footHCur);
-            _content.offsetMax = new Vector2(-pad, -_headHCur);
-
-            // 头部整体内缩同样的量 —— 否则最大化后标题贴屏幕最左、内容在中间，会脱节。
-            // header 的 pivot 在左上、anchor 横跨左右，所以「左右各缩 pad」= sizeDelta.x = -2pad
-            // 且 anchoredPosition.x = pad。pad 为 0 时逐值回到原始状态。
-            if (_header != null)
+            if (Mathf.Abs(_contentPad - pad) >= 0.5f
+                || Mathf.Abs(_lastHeadH - _headHCur) >= 0.01f
+                || Mathf.Abs(_lastFootH - _footHCur) >= 0.01f)
             {
+                _contentPad = pad;
+                _content.offsetMin = new Vector2(pad, _footHCur);
+                _content.offsetMax = new Vector2(-pad, -_headHCur);
+            }
+
+            // 头部：高度或内缩变化才写（pivot 在左上、anchor 横跨左右，
+            // 所以「左右各缩 pad」= sizeDelta.x = −2pad 且 anchoredPosition.x = pad）
+            if (_header != null
+                && (Mathf.Abs(_lastHeadH - _headHCur) >= 0.01f
+                    || Mathf.Abs(_lastHeadPad - pad) >= 0.01f))
+            {
+                _lastHeadH = _headHCur;
+                _lastHeadPad = pad;
                 _header.sizeDelta = new Vector2(-2f * pad, _headHCur);
                 _header.anchoredPosition = new Vector2(pad, 0f);
             }
 
-            // 底部工具行：高度缓动 + 全屏时四项右移到 x=20 起（窄态是 34，规格 §3.1 底带要求 20）
-            if (_toolRow != null)
+            // 底带高度（缓动中每帧都在变，所以要逐帧对齐）
+            if (_toolRow != null && Mathf.Abs(_lastFootH - _footHCur) >= 0.01f)
             {
+                _lastFootH = _footHCur;
                 _toolRow.sizeDelta = new Vector2(0f, _footHCur);
-                ApplyToolXs(_maximized ? 20f : 34f);
             }
+
+            // 工具行四项基准：窄态 34 / 全屏 20（内部有 _toolBaseX 变化检测，不会重复写）
+            ApplyToolXs(_maximized ? 20f : 34f);
         }
 
+        /// <summary>上次写入头部高度 / 内缩 / 底带高度的值，用于变化检测（避免每帧刷布局）。</summary>
+        private float _lastHeadH = -1f;
+        private float _lastFootH = -1f;
+        private float _lastHeadPad = -1f;
+
+        /// <summary>工具行四项的命中区。移动位置要动它，**不是动 label** ——
+        /// label 在命中区内部（相对 8,-8），改它只会让文字在格子内偏移，看起来像"均分"。</summary>
+        private readonly RectTransform[] _toolHits = new RectTransform[4];
+
         /// <summary>
-        /// 工具行四项的起点 x。窄态 34 / 全屏 20（P29-6 §3.1 底带）。
-        /// 只在基准变化时重排，不每帧写 —— 每帧改 RectTransform 会白刷布局。
+        /// 工具行四项的起点 x。窄态 34 / 全屏 20（P29-6 §3.1 底带），间距恒 96。
+        /// **改的是命中区 hr 的 anchoredPosition**，label 在 hr 内部不动。
+        /// 第一版改错成 label，结果四项变成"格子内右移"，肉眼读作间距 250/210/180。
         /// </summary>
         private float _toolBaseX = -1f;
 
@@ -1072,13 +1193,12 @@ namespace SchoolTwin.UI
             if (Mathf.Abs(_toolBaseX - baseX) < 0.01f) return;
             _toolBaseX = baseX;
 
-            if (_toolLabels == null) return;
-            for (int i = 0; i < _toolLabels.Length; i++)
+            for (int i = 0; i < _toolHits.Length; i++)
             {
-                if (_toolLabels[i] == null) continue;
-                RectTransform rt = _toolLabels[i].rectTransform;
-                Vector2 p = rt.anchoredPosition;
-                rt.anchoredPosition = new Vector2(baseX + i * 96f, p.y);
+                if (_toolHits[i] == null) continue;
+                Vector2 p = _toolHits[i].anchoredPosition;
+                // 命中区比文字左移 8（文字 x = 起点），所以 hr.x = baseX + i*96 − 8
+                _toolHits[i].anchoredPosition = new Vector2(baseX + i * 96f - 8f, p.y);
             }
         }
 
