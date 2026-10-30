@@ -1,0 +1,28 @@
+=== Corridor1 ===
+renderers=32
+bounds min=(-27.83,-0.24,17.79)  max=(24.48,5.90,38.82)  size=(52.30,6.15,21.04)
+--- 该房间用到的材质 ---
+  MetallChrome01 x12
+  Radiator01 x9
+  PosterText01b x6
+  PosterInfo01 x6
+  Wood3 x6
+  PosterStickers01 x6
+  ColorChart01 x6
+  Alarm01 x3
+  PosterBulletin01 x3
+  Cork01b x3
+  Default-Material x2
+--- 按 topY 排序前 12 ---
+  topY=5.90 bottomY=4.65 y中心=5.28 x=[16.7,18.5] z=[33.3,33.4] Poster03_1a (3)/Poster03_1 [MetallChrome01,PosterInfo01,MetallChrome01]
+  topY=5.90 bottomY=4.64 y中心=5.27 x=[19.3,20.1] z=[33.3,33.4] Poster03_3a (2)/Poster03_3 [MetallChrome01,PosterInfo01,MetallChrome01]
+  topY=5.90 bottomY=4.64 y中心=5.27 x=[14.8,16.0] z=[33.3,33.4] Poster03_2a (2)/Poster03_2 [MetallChrome01,PosterInfo01,MetallChrome01]
+  topY=5.60 bottomY=4.72 y中心=5.16 x=[16.8,18.5] z=[33.4,33.4] Poster03_1a (3)/Glass [PosterText01b]
+  topY=5.60 bottomY=4.71 y中心=5.16 x=[19.3,20.0] z=[33.4,33.4] Poster03_3a (2)/Glass [PosterText01b]
+  topY=5.60 bottomY=4.71 y中心=5.15 x=[14.9,15.9] z=[33.4,33.4] Poster03_2a (2)/Glass [PosterText01b]
+  topY=3.57 bottomY=1.57 y中心=2.57 x=[-25.0,-23.4] z=[35.2,38.8] Cube [Default-Material]
+  topY=2.99 bottomY=2.60 y中心=2.80 x=[3.2,3.7] z=[33.3,33.4] Alarm01 [Alarm01]
+  topY=2.99 bottomY=2.60 y中心=2.80 x=[-17.2,-16.7] z=[33.3,33.4] Alarm01 (1) [Alarm01]
+  topY=2.99 bottomY=2.60 y中心=2.80 x=[20.8,21.2] z=[33.3,33.4] Alarm01 (2) [Alarm01]
+  topY=2.37 bottomY=1.06 y中心=1.71 x=[-17.3,-16.4] z=[33.3,33.4] Poster04_6a [Wood3,PosterBulletin01,PosterStickers01,ColorChart01]
+  topY=2.36 bottomY=1.05 y中心=1.71 x=[-22.3,-20.5] z=[33.3,33.4] Poster04_4a [Wood3,PosterBulletin01,PosterStickers01,ColorChart01]

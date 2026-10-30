@@ -113,6 +113,28 @@ namespace SchoolTwin.Twin
             "SchoolScene/Exterior/SchoolBuilding/BuildingBottom",
             "SchoolScene/Exterior/SchoolBuilding/Stairs02Concrete",
             "SchoolScene/Exterior/SchoolBuilding/Kitchen",
+
+            // ── 2026-10-30 第四轮（打光《黑色可选中几何清单》§四指认）──────────
+            //
+            // 【此前误判】我以为走廊天花板/计算机教室墙「没有几何」，因为点不中。
+            // 打光用洋红扫描实测推翻了：
+            //   · `Corridor` 是**一个 13 材质槽的巨型单网格**（52.36 × 3.56 × 24.05m），
+            //     走廊的天花板、两侧墙、地面、装饰线全在同一 mesh 的不同材质槽里。
+            //     Unity 点选只能到 Renderer 级 —— 点天花板/墙/地面都选中同一个对象，
+            //     所以"选不中"实际是"没有第二个对象可选"，几何一直都在。
+            //   · 走廊上方沿 X 每 2m 渲染 26 次，洋红占比 **0.0%**（有几何）；
+            //     计算机教室 -Z 墙沿 X 每 1m × 高度 3 档渲染 36 次，**0.0% 洋红**（墙在）。
+            //   · `Corridor` 的 lightmapIndex = 4，仍在走烘焙。
+            //
+            // 【我的检测工具为什么漏了它】黑点占比按**整个 Renderer** 平均，
+            // 而 `Corridor` 只有天花板那部分黑、墙面地面是亮的 → 整块被亮部稀释到 60% 以下。
+            // 大对象会稀释小面积的严重缺陷，这是该指标的已知盲区。
+            //
+            // ⚠️ `Corridor` 的代价比其它条大：它是 52m 长、13 材质的整条走廊，
+            //    设 -1 会让**天花板、墙、地面一起**脱离烘焙明暗。比纯黑好，但会比现在平。
+            "SchoolScene/Exterior/SchoolBuilding/Corridor",
+            "SchoolScene/Exterior/SchoolBuilding/BuildingBottomFloor",   // ≠ BuildingBottom，是两个对象
+            "SchoolScene/Exterior/SchoolBuilding/Border9",
         };
 
         private void Awake()
