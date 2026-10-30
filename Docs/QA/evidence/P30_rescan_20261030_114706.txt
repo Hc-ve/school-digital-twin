@@ -1,0 +1,1096 @@
+===== P30 发黑构件检测 v2（只读）=====
+时间：2026-10-30 11:47:05
+判据：avg < 0.10  **或** 黑点占比 ≥ 50%
+
+---------- 光照图集 ----------
+lightmaps 数量：24
+  图集  0：Lightmap-0_comp_light  均值 0.2215
+  图集  1：Lightmap-1_comp_light  均值 0.3988
+  图集  2：Lightmap-2_comp_light  均值 0.4456
+  图集  3：Lightmap-3_comp_light  均值 0.2656
+  图集  4：Lightmap-4_comp_light  均值 0.2125
+  图集  5：Lightmap-5_comp_light  均值 0.3200
+  图集  6：Lightmap-6_comp_light  均值 0.2557
+  图集  7：Lightmap-7_comp_light  均值 0.3805
+  图集  8：Lightmap-8_comp_light  均值 0.1576
+  图集  9：Lightmap-9_comp_light  均值 0.3041
+  图集 10：Lightmap-10_comp_light  均值 0.1617
+  图集 11：Lightmap-11_comp_light  均值 0.2424
+  图集 12：Lightmap-12_comp_light  均值 0.3232
+  图集 13：Lightmap-13_comp_light  均值 0.2757
+  图集 14：Lightmap-14_comp_light  均值 0.3379
+  图集 15：Lightmap-15_comp_light  均值 0.3151
+  图集 16：Lightmap-16_comp_light  均值 0.3332
+  图集 17：Lightmap-17_comp_light  均值 0.0689
+  图集 18：Lightmap-18_comp_light  均值 0.0554
+  图集 19：Lightmap-19_comp_light  均值 0.0516
+  图集 20：Lightmap-20_comp_light  均值 0.1135
+  图集 21：Lightmap-21_comp_light  均值 0.2410
+  图集 22：Lightmap-22_comp_light  均值 0.1439
+  图集 23：Lightmap-23_comp_light  均值 0.2681
+
+场景 Renderer 总数：2103
+
+---------- 总账 ----------
+真·全黑（avg < 0.10 或 黑点占比 ≥ 50%）：506
+偏暗（0.10 ~ 0.25）：309
+正常：1007
+无烘焙 lightmap：111
+无 UV2：170
+
+---------- 命中按类别 ----------
+  其他          436 处
+  门           23 处
+  玻璃          19 处
+  灯           15 处
+  路灯          7 处
+  吊顶          4 处
+  边条          2 处
+
+---------- 按房间分组（每房间最黑 8 个）----------
+[Interior/Kitchen]  42 处
+    96%  0.0142  其他        MetallChrome03          SchoolScene/Interior/Kitchen/KitchenTable02 (2)
+    87%  0.0323  其他        PosterFood01            SchoolScene/Interior/Kitchen/Poster02_2a
+    63%  0.1719  其他        FlowerRoom4             SchoolScene/Interior/Kitchen/FlowerRoom4b (2)
+    63%  0.3499  门         GlassClear              SchoolScene/Interior/Kitchen/Door02_OpenedWood1 (1)/door02_glass
+    62%  0.1447  其他        Leather01Black          SchoolScene/Interior/Kitchen/SchoolKitchenSeats (10)/Chair05 (6)
+    62%  0.1447  其他        Leather01Black          SchoolScene/Interior/Kitchen/SchoolKitchenSeats (14)/Chair05 (6)
+    62%  0.1447  其他        Leather01Black          SchoolScene/Interior/Kitchen/SchoolKitchenSeats (8)/Chair05 (6)
+    62%  0.1447  其他        Leather01Black          SchoolScene/Interior/Kitchen/SchoolKitchenSeats (8)/Chair05 (7)
+   … 其余 34 处略
+
+[Interior/Class1-2]  33 处
+    65%  0.0901  其他        Chancellery2            SchoolScene/Interior/Class1-2/Pencil02
+    63%  0.1145  其他        Chancellery3            SchoolScene/Interior/Class1-2/Paper03
+    63%  0.1145  其他        Chancellery1            SchoolScene/Interior/Class1-2/Paper01
+    59%  0.1456  其他        MetallChrome01          SchoolScene/Interior/Class1-2/Poster01_1a (2)
+    58%  0.1822  其他        Fabric05a               SchoolScene/Interior/Class1-2/Chair01b/Chair01Fabric
+    56%  0.1682  其他        PlasticWhite1           SchoolScene/Interior/Class1-2/TableSchool04/TableWood
+    56%  0.1682  其他        PlasticWhite1           SchoolScene/Interior/Class1-2/TableSchool04 (3)/TableWood
+    54%  0.1863  其他        MetallChrome01          SchoolScene/Interior/Class1-2/TableSchool03 (2)/TableChrome
+   … 其余 25 处略
+
+[Interior/Class1-3]  32 处
+    66%  0.1395  其他        PlasticBlack1           SchoolScene/Interior/Class1-3/TableSchool01b (2)/TableMetall
+    66%  0.1395  其他        PlasticBlack1           SchoolScene/Interior/Class1-3/TableSchool01b (3)/TableMetall
+    66%  0.1395  其他        PlasticBlack1           SchoolScene/Interior/Class1-3/TableSchool01b (8)/TableMetall
+    66%  0.1395  其他        PlasticBlack1           SchoolScene/Interior/Class1-3/TableSchool01b (9)/TableMetall
+    65%  0.1247  其他        Electro06               SchoolScene/Interior/Class1-3/Electro06 (2)
+    65%  0.1472  其他        Wood4                   SchoolScene/Interior/Class1-3/Capboard01_03/Capboard01
+    65%  0.1119  其他        Wood4                   SchoolScene/Interior/Class1-3/Table02 (2)
+    65%  0.0901  其他        Chancellery2            SchoolScene/Interior/Class1-3/Pencil02
+   … 其余 24 处略
+
+[Interior/ClassDirector]  32 处
+    65%  0.0901  其他        Chancellery1            SchoolScene/Interior/ClassDirector/Pencil01
+    63%  0.1145  其他        Chancellery1            SchoolScene/Interior/ClassDirector/Paper01
+    63%  0.1145  其他        Chancellery1            SchoolScene/Interior/ClassDirector/Paper01 (2)
+    63%  0.1145  其他        Chancellery2            SchoolScene/Interior/ClassDirector/Paper02 (2)
+    63%  0.1145  其他        Chancellery2            SchoolScene/Interior/ClassDirector/Paper02
+    58%  0.1822  其他        Fabric05c               SchoolScene/Interior/ClassDirector/Chair01 (13)/Chair01Fabric
+    58%  0.1822  其他        Fabric05c               SchoolScene/Interior/ClassDirector/Chair01a/Chair01Fabric
+    58%  0.1822  其他        Fabric05a               SchoolScene/Interior/ClassDirector/Chair01b (1)/Chair01Fabric
+   … 其余 24 处略
+
+[Interior/ClassComputer]  29 处
+    71%  0.0826  其他        Computer06              SchoolScene/Interior/ClassComputer/TableGroup (6)/Computer06
+    64%  0.1210  其他        Computer06              SchoolScene/Interior/ClassComputer/Computer06 (9)
+    64%  0.1210  其他        Computer06              SchoolScene/Interior/ClassComputer/TableGroup (8)/Computer06
+    64%  0.1210  其他        Computer06              SchoolScene/Interior/ClassComputer/Computer06 (8)
+    64%  0.1210  其他        Computer06              SchoolScene/Interior/ClassComputer/Computer06 (7)
+    64%  0.1210  其他        Computer06              SchoolScene/Interior/ClassComputer/TableGroup (1)/Computer06
+    64%  0.1395  其他        SubBuffer02             SchoolScene/Interior/ClassComputer/SubBuffer02 (1)
+    64%  0.1395  其他        SubBuffer02             SchoolScene/Interior/ClassComputer/SubBuffer02
+   … 其余 21 处略
+
+[Interior/Class1-4]  25 处
+    79%  0.0794  其他        Wood4                   SchoolScene/Interior/Class1-4/TableSchool01 (5)/TableWood
+    73%  0.1053  其他        MetallChrome01          SchoolScene/Interior/Class1-4/Poster01_1a (1)
+    70%  0.1319  其他        Wood4                   SchoolScene/Interior/Class1-4/TableSchool01 (9)/TableWood
+    70%  0.1319  其他        Wood4                   SchoolScene/Interior/Class1-4/TableSchool01 (3)/TableWood
+    65%  0.1472  其他        Wood4                   SchoolScene/Interior/Class1-4/Capboard01_03 (1)/Capboard01
+    65%  0.0901  其他        Chancellery2            SchoolScene/Interior/Class1-4/Pencil02
+    64%  0.1262  其他        PlasticWhite1           SchoolScene/Interior/Class1-4/Board01_1a
+    63%  0.1360  其他        Geography01a            SchoolScene/Interior/Class1-4/Poster06_1a
+   … 其余 17 处略
+
+[Interior/ClassTeachers]  24 处
+    86%  0.0920  吊顶        Table_corner1_top       SchoolScene/Interior/ClassTeachers/Table_corner1 (1)/office_desk_top.bmp
+    73%  0.1293  其他        Chair_Office2a          SchoolScene/Interior/ClassTeachers/ChairOffice01 (2)/Leather
+    73%  0.1293  其他        Chair_Office2a          SchoolScene/Interior/ClassTeachers/ChairOffice01 (5)/Leather
+    73%  0.1293  其他        Chair_Office2a          SchoolScene/Interior/ClassTeachers/ChairOffice01 (4)/Leather
+    72%  0.1392  其他        Chair_Office2a          SchoolScene/Interior/ClassTeachers/ChairOffice01 (1)/Leather
+    66%  0.1810  其他        Projector               SchoolScene/Interior/ClassTeachers/Projector01 (1)
+    66%  0.1060  其他        Wood3                   SchoolScene/Interior/ClassTeachers/Poster05_1a
+    64%  0.1232  其他        Monitor01               SchoolScene/Interior/ClassTeachers/Monitor01 (1)
+   … 其余 16 处略
+
+[Interior/SportClassProps]  24 处
+    75%  0.0752  门         DoorsWindowsPlastic     SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_glass
+    75%  0.0752  玻璃        DoorsWindowsPlastic     SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/glass
+    70%  0.1233  其他        SportGates              SchoolScene/Interior/SportClassProps/SportGates01 (1)/Gates002
+    67%  0.1917  门         DoorWindowsWood1        SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_frame
+    64%  0.2162  其他        MetallPainted01Red      SchoolScene/Interior/SportClassProps/SportBasketShit01 (5)/BasketWood
+    60%  0.1837  门         DoorsWindowsPlastic     SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/door02_1
+    57%  0.1695  其他        Radiator01              SchoolScene/Interior/SportClassProps/Radiator01 (1)
+    56%  0.1539  其他        MetallPainted01Red      SchoolScene/Interior/SportClassProps/SportBasketShit01 (5)/BasketMetal
+   … 其余 16 处略
+
+[Interior/Toilets]  22 处
+    67%  0.1517  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01Urinal (2)
+    67%  0.1517  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01Urinal (1)
+    67%  0.1517  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01Urinal (3)
+    67%  0.1073  门         ToiletCabinet01         SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletDoor1
+    66%  0.1585  其他        Sink01                  SchoolScene/Interior/Toilets/Sink01TrashBox (1)
+    65%  0.1432  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01 (7)
+    65%  0.1432  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01 (4)
+    65%  0.1432  其他        Toilet01                SchoolScene/Interior/Toilets/Toilet01 (5)
+   … 其余 14 处略
+
+[Exterior/BordersArea]  19 处
+    97%  0.0069  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c (2)
+    97%  0.0069  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c (3)
+    97%  0.0344  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c (5)
+    97%  0.0344  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c (4)
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1c (1)
+    90%  0.0235  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea/RoadBordure1d (1)
+   … 其余 11 处略
+
+[Exterior/SchoolBuilding]  11 处
+    85%  0.0488  边条        Wood2                   SchoolScene/Exterior/SchoolBuilding/Border011
+    83%  0.0851  吊顶        TileArmstrong01_04      SchoolScene/Exterior/SchoolBuilding/DirectorTop
+    79%  0.1093  吊顶        TileArmstrong01_04      SchoolScene/Exterior/SchoolBuilding/PCClassTop
+    75%  0.0353  吊顶        TileArmstrong01_04      SchoolScene/Exterior/SchoolBuilding/ZalTop
+    70%  0.1046  其他        ConcreteClear01         SchoolScene/Exterior/SchoolBuilding/BuildingBottom
+    63%  0.1666  其他        ConctereWall12          SchoolScene/Exterior/SchoolBuilding/Stairs02Concrete
+    62%  0.1780  其他        ConcreteWall6d          SchoolScene/Exterior/SchoolBuilding/Box001
+    60%  0.1788  其他        ConcreteStucco01b       SchoolScene/Exterior/SchoolBuilding/Kitchen
+   … 其余 3 处略
+
+[Interior/Class2-2]  10 处
+    79%  0.0794  其他        Wood4                   SchoolScene/Interior/Class2-2/TableSchool01 (5)/TableWood
+    79%  0.0794  其他        Wood4                   SchoolScene/Interior/Class2-2/TableSchool01a/TableWood
+    70%  0.1319  其他        Wood4                   SchoolScene/Interior/Class2-2/TableSchool01 (3)/TableWood
+    70%  0.1319  其他        Wood4                   SchoolScene/Interior/Class2-2/TableSchool01 (9)/TableWood
+    70%  0.1319  其他        Wood4                   SchoolScene/Interior/Class2-2/TableSchool01 (2)/TableWood
+    63%  0.1145  其他        Chancellery1            SchoolScene/Interior/Class2-2/Paper01
+    60%  0.1776  其他        MetallPainted01Gray     SchoolScene/Interior/Class2-2/TableSchool01 (3)/TableMetall
+    60%  0.1776  其他        MetallPainted01Gray     SchoolScene/Interior/Class2-2/TableSchool01 (9)/TableMetall
+   … 其余 2 处略
+
+[Interior/SportRoom1]  10 处
+    66%  0.1273  其他        Wood5                   SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Wood
+    62%  0.1578  其他        SportBalls              SchoolScene/Interior/SportRoom1/SportInventar01_02/Balls
+    62%  0.1708  其他        SportBalls              SchoolScene/Interior/SportRoom1/SportInventar01_01/Balls
+    62%  0.1813  其他        SportBalls              SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Balls
+    58%  0.2109  其他        Wood3                   SchoolScene/Interior/SportRoom1/SportTrampline01 (2)
+    57%  0.1951  其他        Leather06               SchoolScene/Interior/SportRoom1/Sportkozel01 (1)/KozelLeather
+    57%  0.1727  其他        Radiator01              SchoolScene/Interior/SportRoom1/Radiator01 (9)
+    56%  0.2040  其他        Wood5                   SchoolScene/Interior/SportRoom1/SportInventar01_01/Wood
+   … 其余 2 处略
+
+[Exterior/Benches]  10 处
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (4)/Concrete
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (3)/Concrete
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (5)/Concrete
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (13)/Concrete
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (2)/Concrete
+    67%  0.1442  其他        ConcreteClear03         SchoolScene/Exterior/Benches/Bench01_1 (12)/Concrete
+    64%  0.1533  其他        Wood2                   SchoolScene/Exterior/Benches/Bench01_1 (9)/Wood
+    64%  0.1533  其他        Wood2                   SchoolScene/Exterior/Benches/Bench01_1 (8)/Wood
+   … 其余 2 处略
+
+[Interior/Class2-1]  10 处
+    66%  0.1395  其他        MetallPainted01Gray     SchoolScene/Interior/Class2-1/TableSchool01 (2)/TableMetall
+    66%  0.1395  其他        MetallPainted01Gray     SchoolScene/Interior/Class2-1/TableSchool01 (1)/TableMetall
+    66%  0.1395  其他        MetallPainted01Gray     SchoolScene/Interior/Class2-1/TableSchool01a/TableMetall
+    65%  0.0901  其他        Chancellery2            SchoolScene/Interior/Class2-1/Pencil02
+    63%  0.1145  其他        Chancellery3            SchoolScene/Interior/Class2-1/Paper03
+    63%  0.1145  其他        Chancellery1            SchoolScene/Interior/Class2-1/Paper01
+    57%  0.1727  其他        Radiator01              SchoolScene/Interior/Class2-1/Radiator01 (5)
+    52%  0.1737  其他        Wood4                   SchoolScene/Interior/Class2-1/Table02
+   … 其余 2 处略
+
+[Interior/Doors]  9 处
+    68%  0.1194  门         DoorsWindowsPlastic     SchoolScene/Interior/Doors/Door01_2R/Door01_2R/door01_2
+    68%  0.1194  门         DoorsWindowsPlastic     SchoolScene/Interior/Doors/Door01_2L/Door01_2L/door01_2
+    58%  0.1329  门         Door07a                 SchoolScene/Interior/Doors/Door07a (10)
+    58%  0.1329  门         Door02                  SchoolScene/Interior/Doors/Door02 (2)
+    58%  0.1329  门         Door07a                 SchoolScene/Interior/Doors/Door07a (1)
+    58%  0.1329  门         Door07a                 SchoolScene/Interior/Doors/Door07a (11)
+    58%  0.1329  门         Door07a                 SchoolScene/Interior/Doors/Door07a
+    56%  0.2571  门         Door07a                 SchoolScene/Interior/Doors/Door07a (5)
+   … 其余 1 处略
+
+[Interior/Corridor1]  9 处
+    66%  0.1159  其他        Wood3                   SchoolScene/Interior/Corridor1/Poster04_1a
+    63%  0.1322  其他        Radiator01              SchoolScene/Interior/Corridor1/Radiator01 (33)
+    63%  0.2349  玻璃        PosterText01b           SchoolScene/Interior/Corridor1/Poster03_3a (1)/Glass
+    58%  0.2015  其他        MetallChrome01          SchoolScene/Interior/Corridor1/Poster03_2a (2)/Poster03_2
+    57%  0.1870  其他        Wood3                   SchoolScene/Interior/Corridor1/Poster04_4a
+    57%  0.1695  其他        Radiator01              SchoolScene/Interior/Corridor1/Radiator01 (14)
+    57%  0.1695  其他        Radiator01              SchoolScene/Interior/Corridor1/Radiator01 (11)
+    56%  0.1668  其他        Wood3                   SchoolScene/Interior/Corridor1/Poster04_5a
+   … 其余 1 处略
+
+[Interior/ActZal]  8 处
+    69%  0.1292  其他        Leather01Red            SchoolScene/Interior/ActZal/Seats01 (18)/ChamferBox002
+    69%  0.1292  其他        Leather01Red            SchoolScene/Interior/ActZal/Seats01 (22)/ChamferBox002
+    69%  0.1292  其他        Leather01Red            SchoolScene/Interior/ActZal/Seats01 (21)/ChamferBox002
+    60%  0.2383  其他        FabricCurtain02b        SchoolScene/Interior/ActZal/Curtain01_1
+    55%  0.1987  其他        MetallChrome01          SchoolScene/Interior/ActZal/Seats01 (17)/Cylinder004
+    55%  0.1987  其他        MetallChrome01          SchoolScene/Interior/ActZal/Seats01 (21)/Cylinder004
+    51%  0.2229  其他        FabricCurtain02b        SchoolScene/Interior/ActZal/Curtain02 (1)
+    51%  0.2229  其他        FabricCurtain02b        SchoolScene/Interior/ActZal/Curtain02_1
+
+[Exterior/BordersArea (2)]  7 处
+    97%  0.0344  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1d (1)
+    97%  0.0344  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+    93%  0.0214  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1e (1)
+    90%  0.0235  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1c
+    69%  0.0626  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1c (1)
+    52%  0.2087  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (2)/RoadBordure1b
+
+[Exterior/BordersArea (1)]  5 处
+    97%  0.0344  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (1)/RoadBordure1d (1)
+    97%  0.0069  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (1)/RoadBordure1c
+    90%  0.0235  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (1)/RoadBordure1d
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (1)/RoadBordure1c (1)
+    72%  0.1903  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (1)/RoadBordure1e
+
+[TreeShadows/Tree2(Clone)]  5 处
+    72%  0.1339  其他        Optimized Bark Material  TreeShadows/Tree2(Clone)
+    72%  0.1357  其他        Optimized Bark Material  TreeShadows/Tree2(Clone)
+    65%  0.1245  其他        Optimized Bark Material  TreeShadows/Tree2(Clone)
+    65%  0.1245  其他        Optimized Bark Material  TreeShadows/Tree2(Clone)
+    62%  0.2140  其他        Optimized Bark Material  TreeShadows/Tree2(Clone)
+
+[Interior/Corridor2]  4 处
+    63%  0.1322  其他        Radiator01              SchoolScene/Interior/Corridor2/Radiator01 (40)
+    63%  0.1322  其他        Radiator01              SchoolScene/Interior/Corridor2/Radiator01 (41)
+    62%  0.1469  其他        Wood3                   SchoolScene/Interior/Corridor2/Poster04_1a (5)
+    57%  0.1695  其他        Radiator01              SchoolScene/Interior/Corridor2/Radiator01 (38)
+
+[Interior/SportRoom2]  3 处
+    77%  0.1020  门         PlasticWhite1           SchoolScene/Interior/SportRoom2/Bath01/Door3
+    64%  0.1585  其他        MetallChrome01          SchoolScene/Interior/SportRoom2/Bath01/BathsShower
+    61%  0.1514  其他        PlasticWhite1           SchoolScene/Interior/SportRoom2/Bath01/002
+
+[DayLightsExterior/RoadLamp1a (1)]  3 处
+    64%  0.1667  路灯        MetallChrome01          SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampMetall
+    54%  0.1807  路灯        ConcretePillar1a        SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampPillar
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampGlass
+
+[TreeShadows/Tree3(Clone)]  3 处
+    72%  0.1351  其他        Optimized Bark Material  TreeShadows/Tree3(Clone)
+    64%  0.1266  其他        Optimized Bark Material  TreeShadows/Tree3(Clone)
+    64%  0.1266  其他        Optimized Bark Material  TreeShadows/Tree3(Clone)
+
+[Exterior/RoadBordure1e (1)]  3 处
+   100%  0.0029  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e (1)
+    93%  0.0214  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e (1)
+    66%  0.2191  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e (1)
+
+[DayLightsExterior/RoadLamp1a (12)]  3 处
+    64%  0.1667  路灯        MetallChrome01          SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampMetall
+    54%  0.1807  路灯        ConcretePillar1a        SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampPillar
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampGlass
+
+[Exterior/RoadBordure1f (2)]  3 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (2)
+    84%  0.0876  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (2)
+    63%  0.1517  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (2)
+
+[Exterior/RoadBordure1f]  3 处
+   100%  0.0067  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f
+    69%  0.1702  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f
+
+[Interior/SportRoom3]  3 处
+    77%  0.1020  门         PlasticWhite1           SchoolScene/Interior/SportRoom3/Bath01 (1)/Door3
+    77%  0.1020  门         PlasticWhite1           SchoolScene/Interior/SportRoom3/Bath01 (1)/Door2
+    77%  0.1020  门         PlasticWhite1           SchoolScene/Interior/SportRoom3/Bath01 (1)/Door01
+
+[Exterior/FenceMetal01_2 (1)]  2 处
+    62%  0.1750  其他        MetallPainted01Green    SchoolScene/Exterior/FenceMetal01_2 (1)/FenceMetal01
+    50%  0.3002  其他        MetalChain01            SchoolScene/Exterior/FenceMetal01_2 (1)/fence
+
+[Exterior/FenceMetal01 (2)]  2 处
+    64%  0.1584  其他        MetallPainted01Green    SchoolScene/Exterior/FenceMetal01 (2)/FenceMetal01
+    50%  0.3002  其他        MetalChain01            SchoolScene/Exterior/FenceMetal01 (2)/fence
+
+[DayLightsInterior/LightLum01_01 (6)]  2 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (6)
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (6)
+
+[DayLightsExterior/RoadLamp1a (3)]  2 处
+    56%  0.2123  路灯        MetallChrome01          SchoolScene/DayLightsExterior/RoadLamp1a (3)/LampMetall
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (3)/LampGlass
+
+[DayLightsInterior/LightLum01_01 (10)]  2 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (10)
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (10)
+
+[Exterior/BordersArea (3)]  2 处
+    90%  0.0235  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (3)/RoadBordure1d (1)
+    55%  0.2548  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (3)/RoadBordure1d
+
+[Exterior/RoadBordure1d]  2 处
+    83%  0.0783  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d
+    79%  0.0769  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d
+
+[Exterior/BordersArea (4)]  2 处
+    90%  0.0235  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (4)/RoadBordure1d (1)
+    72%  0.1903  其他        ConcreteWall5           SchoolScene/Exterior/BordersArea (4)/RoadBordure1e (1)
+
+[Exterior/RoadBordure1f (1)]  2 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (1)
+    66%  0.2257  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (1)
+
+[Exterior/RoadBordure1f (5)]  2 处
+   100%  0.0067  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (5)
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (5)
+
+[Exterior/RoadBordure1f (4)]  2 处
+   100%  0.0067  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (4)
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (4)
+
+[DayLightsExterior/RoadLamp1a (10)]  2 处
+    56%  0.2123  路灯        MetallChrome01          SchoolScene/DayLightsExterior/RoadLamp1a (10)/LampMetall
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (10)/LampGlass
+
+[Exterior/RoadBordure1e]  2 处
+    76%  0.1376  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e
+    76%  0.1376  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e
+
+[DayLightsInterior/LightLum01_01 (5)]  2 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (5)
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (5)
+
+[Exterior/RoadBordure1c]  2 处
+    97%  0.0069  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1c
+    90%  0.0384  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1c
+
+[DayLightsExterior/RoadLamp1a (14)]  2 处
+    56%  0.2123  路灯        MetallChrome01          SchoolScene/DayLightsExterior/RoadLamp1a (14)/LampMetall
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (14)/LampGlass
+
+[Exterior/RoadBordure1d (2)]  2 处
+    79%  0.0769  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d (2)
+    55%  0.2745  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d (2)
+
+[Exterior/BuildingKPP2]  2 处
+    87%  0.0440  门         ModelBuildingKPP2       SchoolScene/Exterior/BuildingKPP2/Door
+    57%  0.1865  其他        ModelBuildingKPP2       SchoolScene/Exterior/BuildingKPP2/Budka1
+
+[Exterior/FenceConcrete1_5 (2)]  1 处
+    58%  0.1827  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_5 (2)
+
+[DayLightsInterior/LightLum01_01 (2)]  1 处
+    53%  0.2135  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (2)
+
+[DayLightsExterior/RoadLamp1a (6)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (6)/LampGlass
+
+[DayLightsInterior/LightLum01_01 (13)]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (13)
+
+[DayLightsInterior/LightLum01_03 (5)]  1 处
+    63%  0.1721  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_03 (5)
+
+[DayLightsExterior/RoadLamp1a (7)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (7)/LampGlass
+
+[Exterior/ConcreteBox01 (24)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (24)
+
+[Exterior/FenceMetal01_1 (3)]  1 处
+    50%  0.2733  其他        MetalChain01            SchoolScene/Exterior/FenceMetal01_1 (3)/fence
+
+[Exterior/ConcreteBox01 (15)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (15)
+
+[DayLightsExterior/RoadLamp1a (8)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (8)/LampGlass
+
+[Exterior/RoadBordure1e (3)]  1 处
+    72%  0.1903  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e (3)
+
+[Exterior/ConcreteBox01 (12)]  1 处
+    56%  0.2298  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (12)
+
+[DayLightsExterior/RoadLamp1a (11)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (11)/LampGlass
+
+[Exterior/RoadBordure1a (3)]  1 处
+    55%  0.2261  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1a (3)
+
+[Exterior/FenceConcrete1_1]  1 处
+    51%  0.1874  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_1
+
+[Exterior/BuildingBig02b (4)]  1 处
+    53%  0.1817  其他        ConcreteWall6g          SchoolScene/Exterior/BuildingBig02b (4)
+
+[Exterior/ConcreteBox01 (23)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (23)
+
+[Exterior/ConcreteBox01 (36)]  1 处
+    55%  0.1922  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (36)
+
+[Exterior/FenceMetal01_1 (6)]  1 处
+    50%  0.3002  其他        MetalChain01            SchoolScene/Exterior/FenceMetal01_1 (6)/fence
+
+[DayLightsExterior/RoadLamp1a (9)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (9)/LampGlass
+
+[Exterior/SportField01]  1 处
+    96%  0.0289  其他        Default-Material        SchoolScene/Exterior/SportField01
+
+[Exterior/FenceMetal02_R]  1 处
+    71%  0.0916  其他        MetalFence01            SchoolScene/Exterior/FenceMetal02_R/Anchor/FenceMetal02_L
+
+[DayLightsInterior/LightLum01_01]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01
+
+[DayLightsInterior/LightLum01_01 (4)]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (4)
+
+[Exterior/FenceConcrete1_5 (3)]  1 处
+    75%  0.1233  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_5 (3)
+
+[Exterior/RoadBordure1f (12)]  1 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (12)
+
+[Exterior/ConcreteBox01 (16)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (16)
+
+[Exterior/FenceConcrete1_5 (1)]  1 处
+    74%  0.1341  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_5 (1)
+
+[Exterior/RoadBordure1f (15)]  1 处
+    63%  0.1517  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (15)
+
+[DayLightsExterior/RoadLamp1a]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a/LampGlass
+
+[Exterior/RoadBordure1f (17)]  1 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (17)
+
+[Exterior/FenceMetal01_3 (3)]  1 处
+    57%  0.1740  其他        MetallPainted01Green    SchoolScene/Exterior/FenceMetal01_3 (3)/FenceMetal01
+
+[Exterior/FenceConcrete1_5 (4)]  1 处
+    56%  0.2176  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_5 (4)
+
+[Exterior/FenceMetal01_3]  1 处
+    57%  0.1740  其他        MetallPainted01Green    SchoolScene/Exterior/FenceMetal01_3/FenceMetal01
+
+[Exterior/FenceConcrete1_5]  1 处
+    72%  0.1399  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_5
+
+[Exterior/RoadBordure1f (10)]  1 处
+   100%  0.0067  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (10)
+
+[Exterior/RoadBordure1c (1)]  1 处
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1c (1)
+
+[Exterior/RoadBordure1e (2)]  1 处
+   100%  0.0029  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1e (2)
+
+[DayLightsExterior/RoadLamp1a (13)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (13)/LampGlass
+
+[Exterior/RoadBordure1d (3)]  1 处
+    66%  0.2687  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d (3)
+
+[DayLightsInterior/LightLum01_01 (3)]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (3)
+
+[Exterior/RoadBordure1a (4)]  1 处
+    55%  0.2261  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1a (4)
+
+[DayLightsInterior/LightLum01_03 (4)]  1 处
+    63%  0.1721  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_03 (4)
+
+[Exterior/RoadBordure1f (14)]  1 处
+    91%  0.0788  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (14)
+
+[Exterior/RoadBordure1f (20)]  1 处
+    69%  0.1702  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (20)
+
+[Exterior/RoadBordure1f (18)]  1 处
+    84%  0.0876  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (18)
+
+[Exterior/ConcreteBox01 (14)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (14)
+
+[Exterior/RoadBordure1c (2)]  1 处
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1c (2)
+
+[Exterior/RoadBordure1c (3)]  1 处
+    90%  0.0359  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1c (3)
+
+[DayLightsExterior/RoadLamp1a (5)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (5)/LampGlass
+
+[Exterior/FenceMetal01_1 (1)]  1 处
+    50%  0.3002  其他        MetalChain01            SchoolScene/Exterior/FenceMetal01_1 (1)/fence
+
+[Exterior/Chair06a]  1 处
+    64%  0.1488  其他        PlasticBlack1           SchoolScene/Exterior/Chair06a/Chair06Metal
+
+[Exterior/ConcreteBox01 (25)]  1 处
+    72%  0.1398  其他        ConcreteClear03         SchoolScene/Exterior/ConcreteBox01 (25)
+
+[Exterior/RoadBordure1f (3)]  1 处
+    72%  0.1065  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (3)
+
+[Exterior/RoadBordure1f (9)]  1 处
+    84%  0.0876  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (9)
+
+[Exterior/FenceConcrete1_3 (1)]  1 处
+    79%  0.1092  其他        ConcreteWall2           SchoolScene/Exterior/FenceConcrete1_3 (1)
+
+[Exterior/FenceMetal02_L]  1 处
+    71%  0.0916  其他        MetalFence01            SchoolScene/Exterior/FenceMetal02_L/Anchor/FenceMetal02_L
+
+[Exterior/RoadBordure1d (1)]  1 处
+    55%  0.2548  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1d (1)
+
+[DayLightsExterior/RoadLamp1a (2)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (2)/LampGlass
+
+[Exterior/RoadBordure1f (7)]  1 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (7)
+
+[DayLightsInterior/LightLum01_01 (1)]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (1)
+
+[DayLightsExterior/RoadLamp1a (4)]  1 处
+    50%  0.2307  玻璃        GlassLamp1              SchoolScene/DayLightsExterior/RoadLamp1a (4)/LampGlass
+
+[Exterior/FenceMetal01_4 (1)]  1 处
+    54%  0.1985  其他        MetallPainted01Green    SchoolScene/Exterior/FenceMetal01_4 (1)/FenceMetal01
+
+[Exterior/RoadBordure1f (11)]  1 处
+   100%  0.0067  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (11)
+
+[DayLightsInterior/LightLum01_01 (33)]  1 处
+    52%  0.1975  灯         LightLum01              SchoolScene/DayLightsInterior/LightLum01_01 (33)
+
+[Exterior/RoadBordure1f (6)]  1 处
+    88%  0.0490  其他        ConcreteWall5           SchoolScene/Exterior/RoadBordure1f (6)
+
+---------- 明细（506 条，按黑点占比降序）----------
+序号 | 平均 | 黑点占比 | 采样 | 类别 | 图集 | 材质 | 路径
+  1 | 0.0067 | 100% |   32 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f
+  2 | 0.0029 | 100% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (1)
+  3 | 0.0067 | 100% |   32 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (4)
+  4 | 0.0067 | 100% |   32 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (5)
+  5 | 0.0067 | 100% |   32 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (10)
+  6 | 0.0067 | 100% |   32 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (11)
+  7 | 0.0029 | 100% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (2)
+  8 | 0.0069 |  97% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (2)
+  9 | 0.0344 |  97% |   29 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+ 10 | 0.0344 |  97% |   29 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (5)
+ 11 | 0.0069 |  97% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (3)
+ 12 | 0.0069 |  97% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1c
+ 13 | 0.0344 |  97% |   29 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c
+ 14 | 0.0344 |  97% |   29 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d (1)
+ 15 | 0.0069 |  97% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c
+ 16 | 0.0344 |  97% |   29 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1d (1)
+ 17 | 0.0289 |  96% |  619 | 其他         | 20 | Default-Material         | SchoolScene/Exterior/SportField01
+ 18 | 0.0142 |  96% |  536 | 其他         | 17 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenTable02 (2)
+ 19 | 0.0214 |  93% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1e (1)
+ 20 | 0.0214 |  93% |   29 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (1)
+ 21 | 0.0788 |  91% |   32 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (14)
+ 22 | 0.0235 |  90% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1d
+ 23 | 0.0384 |  90% |   29 | 其他         |  9 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c
+ 24 | 0.0235 |  90% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+ 25 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c
+ 26 | 0.0235 |  90% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (3)/RoadBordure1d (1)
+ 27 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (1)
+ 28 | 0.0235 |  90% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1d (1)
+ 29 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (4)
+ 30 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1c (1)
+ 31 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (3)
+ 32 | 0.0235 |  90% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (4)/RoadBordure1d (1)
+ 33 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (1)
+ 34 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (2)
+ 35 | 0.0359 |  90% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c
+ 36 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f
+ 37 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (5)
+ 38 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (2)
+ 39 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (17)
+ 40 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (7)
+ 41 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (4)
+ 42 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (1)
+ 43 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (6)
+ 44 | 0.0490 |  88% |   32 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (12)
+ 45 | 0.0440 |  87% |  578 | 门          |  8 | ModelBuildingKPP2        | SchoolScene/Exterior/BuildingKPP2/Door
+ 46 | 0.0323 |  87% |   84 | 其他         |  0 | PosterFood01             | SchoolScene/Interior/Kitchen/Poster02_2a
+ 47 | 0.0920 |  86% |   36 | 吊顶         | 10 | Table_corner1_top        | SchoolScene/Interior/ClassTeachers/Table_corner1 (1)/office_desk_top.bmp
+ 48 | 0.0488 |  85% |  675 | 边条         |  9 | Wood2                    | SchoolScene/Exterior/SchoolBuilding/Border011
+ 49 | 0.0876 |  84% |   32 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (18)
+ 50 | 0.0876 |  84% |   32 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (9)
+ 51 | 0.0876 |  84% |   32 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (2)
+ 52 | 0.0851 |  83% |   12 | 吊顶         | 20 | TileArmstrong01_04       | SchoolScene/Exterior/SchoolBuilding/DirectorTop
+ 53 | 0.0783 |  83% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d
+ 54 | 0.0783 |  83% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1d
+ 55 | 0.0769 |  79% |   29 | 其他         | 12 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d (2)
+ 56 | 0.0769 |  79% |   29 | 其他         | 12 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d
+ 57 | 0.0794 |  79% |  164 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01 (5)/TableWood
+ 58 | 0.0794 |  79% |  164 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class1-4/TableSchool01 (5)/TableWood
+ 59 | 0.0794 |  79% |  164 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01a/TableWood
+ 60 | 0.1092 |  79% |  496 | 其他         | 20 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_3 (1)
+ 61 | 0.1093 |  79% |  174 | 吊顶         | 10 | TileArmstrong01_04       | SchoolScene/Exterior/SchoolBuilding/PCClassTop
+ 62 | 0.1020 |  77% |  172 | 门          | 12 | PlasticWhite1            | SchoolScene/Interior/SportRoom2/Bath01/Door3
+ 63 | 0.1020 |  77% |  172 | 门          | 12 | PlasticWhite1            | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door2
+ 64 | 0.1020 |  77% |  172 | 门          | 12 | PlasticWhite1            | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door3
+ 65 | 0.1020 |  77% |  172 | 门          | 12 | PlasticWhite1            | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door01
+ 66 | 0.1376 |  76% |   29 | 其他         | 13 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e
+ 67 | 0.1376 |  76% |   29 | 其他         | 13 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e
+ 68 | 0.1233 |  75% |  630 | 其他         | 18 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_5 (3)
+ 69 | 0.0752 |  75% |    8 | 玻璃         |  3 | DoorsWindowsPlastic      | SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/glass
+ 70 | 0.0353 |  75% |    4 | 吊顶         | 15 | TileArmstrong01_04       | SchoolScene/Exterior/SchoolBuilding/ZalTop
+ 71 | 0.0752 |  75% |    8 | 门          |  3 | DoorsWindowsPlastic      | SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_glass
+ 72 | 0.1341 |  74% |  630 | 其他         | 19 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_5 (1)
+ 73 | 0.1293 |  73% |  544 | 其他         | 10 | Chair_Office2a           | SchoolScene/Interior/ClassTeachers/ChairOffice01 (4)/Leather
+ 74 | 0.1293 |  73% |  544 | 其他         | 10 | Chair_Office2a           | SchoolScene/Interior/ClassTeachers/ChairOffice01 (2)/Leather
+ 75 | 0.1293 |  73% |  544 | 其他         | 10 | Chair_Office2a           | SchoolScene/Interior/ClassTeachers/ChairOffice01 (5)/Leather
+ 76 | 0.1053 |  73% |  259 | 其他         |  3 | MetallChrome01           | SchoolScene/Interior/Class1-4/Poster01_1a (1)
+ 77 | 0.1339 |  72% |  573 | 其他         | 10 | Optimized Bark Material  | TreeShadows/Tree2(Clone)
+ 78 | 0.1357 |  72% |  573 | 其他         |  8 | Optimized Bark Material  | TreeShadows/Tree2(Clone)
+ 79 | 0.1903 |  72% |   29 | 其他         |  8 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1e
+ 80 | 0.1903 |  72% |   29 | 其他         |  8 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (4)/RoadBordure1e (1)
+ 81 | 0.1903 |  72% |   29 | 其他         |  8 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (3)
+ 82 | 0.1351 |  72% |  570 | 其他         |  8 | Optimized Bark Material  | TreeShadows/Tree3(Clone)
+ 83 | 0.1392 |  72% |  544 | 其他         |  8 | Chair_Office2a           | SchoolScene/Interior/ClassTeachers/ChairOffice01 (1)/Leather
+ 84 | 0.1399 |  72% |  630 | 其他         | 17 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_5
+ 85 | 0.1065 |  72% |   32 | 其他         | 12 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (3)
+ 86 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (14)
+ 87 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (24)
+ 88 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (15)
+ 89 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (23)
+ 90 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (25)
+ 91 | 0.1398 |  72% |  120 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (16)
+ 92 | 0.0826 |  71% |   80 | 其他         |  8 | Computer06               | SchoolScene/Interior/ClassComputer/TableGroup (6)/Computer06
+ 93 | 0.0916 |  71% |   24 | 其他         |  0 | MetalFence01             | SchoolScene/Exterior/FenceMetal02_L/Anchor/FenceMetal02_L
+ 94 | 0.0916 |  71% |   24 | 其他         |  0 | MetalFence01             | SchoolScene/Exterior/FenceMetal02_R/Anchor/FenceMetal02_L
+ 95 | 0.1233 |  70% |  602 | 其他         |  8 | SportGates               | SchoolScene/Interior/SportClassProps/SportGates01 (1)/Gates002
+ 96 | 0.1046 |  70% |  103 | 其他         |  9 | ConcreteClear01          | SchoolScene/Exterior/SchoolBuilding/BuildingBottom
+ 97 | 0.1319 |  70% |  164 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01 (3)/TableWood
+ 98 | 0.1319 |  70% |  164 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-4/TableSchool01 (9)/TableWood
+ 99 | 0.1319 |  70% |  164 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01 (2)/TableWood
+100 | 0.1319 |  70% |  164 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-4/TableSchool01 (3)/TableWood
+101 | 0.1319 |  70% |  164 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01 (9)/TableWood
+102 | 0.1292 |  69% |  591 | 其他         |  8 | Leather01Red             | SchoolScene/Interior/ActZal/Seats01 (22)/ChamferBox002
+103 | 0.1292 |  69% |  591 | 其他         |  8 | Leather01Red             | SchoolScene/Interior/ActZal/Seats01 (21)/ChamferBox002
+104 | 0.1292 |  69% |  591 | 其他         |  8 | Leather01Red             | SchoolScene/Interior/ActZal/Seats01 (18)/ChamferBox002
+105 | 0.0626 |  69% |   29 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c (1)
+106 | 0.1702 |  69% |   32 | 其他         |  2 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f
+107 | 0.1702 |  69% |   32 | 其他         |  2 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (20)
+108 | 0.1194 |  68% |  887 | 门          |  9 | DoorsWindowsPlastic      | SchoolScene/Interior/Doors/Door01_2L/Door01_2L/door01_2
+109 | 0.1194 |  68% |  887 | 门          |  9 | DoorsWindowsPlastic      | SchoolScene/Interior/Doors/Door01_2R/Door01_2R/door01_2
+110 | 0.1517 |  67% |  709 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Urinal (1)
+111 | 0.1517 |  67% |  709 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Urinal (3)
+112 | 0.1517 |  67% |  709 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Urinal (2)
+113 | 0.1073 |  67% |  533 | 门          | 10 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletDoor1
+114 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (2)/Concrete
+115 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (13)/Concrete
+116 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (5)/Concrete
+117 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (3)/Concrete
+118 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (12)/Concrete
+119 | 0.1442 |  67% |  204 | 其他         |  8 | ConcreteClear03          | SchoolScene/Exterior/Benches/Bench01_1 (4)/Concrete
+120 | 0.1917 |  67% |  278 | 门          |  8 | DoorWindowsWood1         | SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_frame
+121 | 0.1810 |  66% |  348 | 其他         | 10 | Projector                | SchoolScene/Interior/ClassTeachers/Projector01 (1)
+122 | 0.1060 |  66% |  560 | 其他         | 13 | Wood3                    | SchoolScene/Interior/ClassTeachers/Poster05_1a
+123 | 0.1585 |  66% |  301 | 其他         | 10 | Sink01                   | SchoolScene/Interior/Toilets/Sink01TrashBox (1)
+124 | 0.1273 |  66% |  590 | 其他         |  8 | Wood5                    | SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Wood
+125 | 0.1395 |  66% |  848 | 其他         | 10 | MetallPainted01Gray      | SchoolScene/Interior/Class2-1/TableSchool01 (2)/TableMetall
+126 | 0.1395 |  66% |  848 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/Class1-3/TableSchool01b (3)/TableMetall
+127 | 0.1395 |  66% |  848 | 其他         | 10 | MetallPainted01Gray      | SchoolScene/Interior/Class2-1/TableSchool01a/TableMetall
+128 | 0.1395 |  66% |  848 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/Class1-3/TableSchool01b (2)/TableMetall
+129 | 0.1395 |  66% |  848 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/Class1-3/TableSchool01b (8)/TableMetall
+130 | 0.1395 |  66% |  848 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/Class1-3/TableSchool01b (9)/TableMetall
+131 | 0.1395 |  66% |  848 | 其他         | 10 | MetallPainted01Gray      | SchoolScene/Interior/Class2-1/TableSchool01 (1)/TableMetall
+132 | 0.2257 |  66% |   32 | 其他         |  1 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (1)
+133 | 0.1159 |  66% |  561 | 其他         | 11 | Wood3                    | SchoolScene/Interior/Corridor1/Poster04_1a
+134 | 0.2687 |  66% |   29 | 其他         |  1 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d (3)
+135 | 0.2191 |  66% |   29 | 其他         |  1 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (1)
+136 | 0.1432 |  65% |  579 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01 (5)
+137 | 0.1432 |  65% |  579 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01 (4)
+138 | 0.1432 |  65% |  579 | 其他         | 10 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01 (7)
+139 | 0.1247 |  65% |  574 | 其他         | 13 | Electro06                | SchoolScene/Interior/Class1-3/Electro06 (2)
+140 | 0.1245 |  65% |  573 | 其他         |  0 | Optimized Bark Material  | TreeShadows/Tree2(Clone)
+141 | 0.1245 |  65% |  573 | 其他         |  0 | Optimized Bark Material  | TreeShadows/Tree2(Clone)
+142 | 0.1472 |  65% |  173 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-3/Capboard01_03/Capboard01
+143 | 0.1472 |  65% |  173 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-4/Capboard01_03 (1)/Capboard01
+144 | 0.0901 |  65% |   48 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-3/Pencil02
+145 | 0.0901 |  65% |   48 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassDirector/Pencil01
+146 | 0.0901 |  65% |   48 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-4/Pencil02
+147 | 0.0901 |  65% |   48 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-2/Pencil02
+148 | 0.0901 |  65% |   48 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class2-1/Pencil02
+149 | 0.1119 |  65% |   96 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class1-3/Table02 (2)
+150 | 0.2162 |  64% |  166 | 其他         |  8 | MetallPainted01Red       | SchoolScene/Interior/SportClassProps/SportBasketShit01 (5)/BasketWood
+151 | 0.1695 |  64% |  537 | 其他         | 10 | FlowerRoom4              | SchoolScene/Interior/Class1-3/FlowerGroup2 (2)/FlowerRoom4a
+152 | 0.1266 |  64% |  570 | 其他         |  0 | Optimized Bark Material  | TreeShadows/Tree3(Clone)
+153 | 0.1266 |  64% |  570 | 其他         |  0 | Optimized Bark Material  | TreeShadows/Tree3(Clone)
+154 | 0.1488 |  64% |  926 | 其他         |  8 | PlasticBlack1            | SchoolScene/Exterior/Chair06a/Chair06Metal
+155 | 0.1262 |  64% |  982 | 其他         | 13 | PlasticWhite1            | SchoolScene/Interior/Class1-4/Board01_1a
+156 | 0.1232 |  64% |  178 | 其他         | 10 | Monitor01                | SchoolScene/Interior/ClassTeachers/Monitor01 (3)
+157 | 0.1232 |  64% |  178 | 其他         | 10 | Monitor01                | SchoolScene/Interior/ClassTeachers/Monitor01 (1)
+158 | 0.1584 |  64% |  348 | 其他         | 13 | MetallPainted01Green     | SchoolScene/Exterior/FenceMetal01 (2)/FenceMetal01
+159 | 0.1533 |  64% |  933 | 其他         |  5 | Wood2                    | SchoolScene/Exterior/Benches/Bench01_1 (9)/Wood
+160 | 0.1533 |  64% |  933 | 其他         |  5 | Wood2                    | SchoolScene/Exterior/Benches/Bench01_1 (8)/Wood
+161 | 0.1210 |  64% |   80 | 其他         | 10 | Computer06               | SchoolScene/Interior/ClassComputer/Computer06 (8)
+162 | 0.1210 |  64% |   80 | 其他         | 10 | Computer06               | SchoolScene/Interior/ClassComputer/TableGroup (8)/Computer06
+163 | 0.1210 |  64% |   80 | 其他         | 10 | Computer06               | SchoolScene/Interior/ClassComputer/Computer06 (7)
+164 | 0.1210 |  64% |   80 | 其他         | 10 | Computer06               | SchoolScene/Interior/ClassComputer/TableGroup (1)/Computer06
+165 | 0.1210 |  64% |   80 | 其他         | 10 | Computer06               | SchoolScene/Interior/ClassComputer/Computer06 (9)
+166 | 0.1585 |  64% |  554 | 其他         | 10 | MetallChrome01           | SchoolScene/Interior/SportRoom2/Bath01/BathsShower
+167 | 0.1667 |  64% |  410 | 路灯         | 10 | MetallChrome01           | SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampMetall
+168 | 0.1667 |  64% |  410 | 路灯         | 10 | MetallChrome01           | SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampMetall
+169 | 0.1395 |  64% |  409 | 其他         |  0 | SubBuffer02              | SchoolScene/Interior/ClassComputer/SubBuffer02
+170 | 0.1395 |  64% |  409 | 其他         |  0 | SubBuffer02              | SchoolScene/Interior/ClassComputer/SubBuffer02 (1)
+171 | 0.1322 |  63% |  668 | 其他         |  3 | Radiator01               | SchoolScene/Interior/Corridor1/Radiator01 (33)
+172 | 0.1322 |  63% |  668 | 其他         |  3 | Radiator01               | SchoolScene/Interior/Corridor2/Radiator01 (40)
+173 | 0.1322 |  63% |  668 | 其他         |  3 | Radiator01               | SchoolScene/Interior/Corridor2/Radiator01 (41)
+174 | 0.1360 |  63% |  670 | 其他         | 13 | Geography01a             | SchoolScene/Interior/Class1-4/Poster06_1a
+175 | 0.1666 |  63% |  328 | 其他         | 10 | ConctereWall12           | SchoolScene/Exterior/SchoolBuilding/Stairs02Concrete
+176 | 0.1719 |  63% |  629 | 其他         |  8 | FlowerRoom4              | SchoolScene/Interior/Kitchen/FlowerRoom4b (2)
+177 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/Class2-2/Paper01
+178 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/ClassDirector/Paper02
+179 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassDirector/Paper01
+180 | 0.1517 |  63% |   32 | 其他         |  9 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (15)
+181 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03 (1)
+182 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/Class1-4/Paper03
+183 | 0.1721 |  63% |   72 | 灯          |  3 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_03 (4)
+184 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03 (5)
+185 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03 (4)
+186 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/ClassDirector/Paper02 (2)
+187 | 0.2349 |  63% |   16 | 玻璃         |  8 | PosterText01b            | SchoolScene/Interior/Corridor1/Poster03_3a (1)/Glass
+188 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03 (3)
+189 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/ClassTeachers/Paper02 (2)
+190 | 0.3499 |  63% |    8 | 门          |  8 | GlassClear               | SchoolScene/Interior/Kitchen/Door02_OpenedWood1 (1)/door02_glass
+191 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/ClassTeachers/Paper02 (1)
+192 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/ClassTeachers/Paper02 (3)
+193 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassTeachers/Paper01 (1)
+194 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/Class1-2/Paper01
+195 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03
+196 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/Class1-3/Paper01
+197 | 0.1721 |  63% |   72 | 灯          |  3 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_03 (5)
+198 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassComputer/Paper03
+199 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassTeachers/Paper03 (2)
+200 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/Class2-1/Paper01
+201 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassTeachers/Paper01 (2)
+202 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/Class1-2/Paper03
+203 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/Class1-3/Paper03
+204 | 0.1517 |  63% |   32 | 其他         |  9 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (2)
+205 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassDirector/Paper01 (2)
+206 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/ClassComputer/Paper03 (1)
+207 | 0.1145 |  63% |    8 | 其他         |  0 | Chancellery3             | SchoolScene/Interior/Class2-1/Paper03
+208 | 0.1578 |  62% |  540 | 其他         | 10 | SportBalls               | SchoolScene/Interior/SportRoom1/SportInventar01_02/Balls
+209 | 0.1708 |  62% |  532 | 其他         | 10 | SportBalls               | SchoolScene/Interior/SportRoom1/SportInventar01_01/Balls
+210 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (14)/Chair05 (4)
+211 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (10)/Chair05 (6)
+212 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (9)/Chair05 (6)
+213 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (8)/Chair05 (6)
+214 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (9)/Chair05 (4)
+215 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (13)/Chair05 (6)
+216 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (11)/Chair05 (6)
+217 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (9)/Chair05 (5)
+218 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (14)/Chair05 (7)
+219 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (14)/Chair05 (6)
+220 | 0.1447 |  62% |  815 | 其他         |  8 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (8)/Chair05 (7)
+221 | 0.1799 |  62% |  629 | 其他         | 10 | FlowerRoom4              | SchoolScene/Interior/Class1-3/FlowerGroup2 (3)/FlowerRoom4b
+222 | 0.1701 |  62% |   29 | 其他         |  9 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1e
+223 | 0.1750 |  62% |  398 | 其他         | 13 | MetallPainted01Green     | SchoolScene/Exterior/FenceMetal01_2 (1)/FenceMetal01
+224 | 0.1469 |  62% |  561 | 其他         | 13 | Wood3                    | SchoolScene/Interior/Corridor2/Poster04_1a (5)
+225 | 0.1813 |  62% |  532 | 其他         |  8 | SportBalls               | SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Balls
+226 | 0.2140 |  62% |  573 | 其他         | 11 | Optimized Bark Material  | TreeShadows/Tree2(Clone)
+227 | 0.1703 |  62% |  553 | 其他         |  8 | FabricCurtain02b         | SchoolScene/Interior/Kitchen/Curtain03_2 (5)
+228 | 0.1703 |  62% |  553 | 其他         |  8 | FabricCurtain02b         | SchoolScene/Interior/Kitchen/Curtain03_2 (4)
+229 | 0.1780 |  62% |  635 | 其他         | 22 | ConcreteWall6d           | SchoolScene/Exterior/SchoolBuilding/Box001
+230 | 0.1902 |  61% |   80 | 其他         | 11 | Computer06               | SchoolScene/Interior/ClassComputer/TableGroup (4)/Computer06
+231 | 0.1902 |  61% |   80 | 其他         | 11 | Computer06               | SchoolScene/Interior/ClassComputer/Computer06 (10)
+232 | 0.1514 |  61% |  735 | 其他         | 10 | PlasticWhite1            | SchoolScene/Interior/SportRoom2/Bath01/002
+233 | 0.1858 |  61% |  536 | 其他         | 10 | Wood4                    | SchoolScene/Interior/Kitchen/FlowerHolder01b (3)
+234 | 0.1820 |  61% |  574 | 其他         | 12 | Electro06                | SchoolScene/Interior/Class1-3/Electro06 (3)
+235 | 0.1621 |  61% |  537 | 其他         |  8 | FlowerRoom4              | SchoolScene/Interior/Kitchen/FlowerRoom4a (1)
+236 | 0.1621 |  61% |  537 | 其他         |  8 | FlowerRoom4              | SchoolScene/Interior/Class1-4/FlowerGroup2 (1)/FlowerRoom4a
+237 | 0.1621 |  61% |  537 | 其他         |  8 | FlowerRoom4              | SchoolScene/Interior/Kitchen/FlowerRoom4a (2)
+238 | 0.1317 |  61% |  533 | 其他         |  3 | Electro07                | SchoolScene/Interior/Class1-3/Electro07
+239 | 0.1450 |  60% |  619 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_2 (1)
+240 | 0.1450 |  60% |  619 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_2
+241 | 0.1815 |  60% |  926 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/ClassComputer/Chair06 (10)/Chair06Metal
+242 | 0.1815 |  60% |  926 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/ClassComputer/TableGroup (6)/Chair06 (2)/Chair06Metal
+243 | 0.1815 |  60% |  926 | 其他         | 10 | PlasticBlack1            | SchoolScene/Interior/ClassComputer/Chair06/Chair06Metal
+244 | 0.1788 |  60% |  607 | 其他         | 21 | ConcreteStucco01b        | SchoolScene/Exterior/SchoolBuilding/Kitchen
+245 | 0.1315 |  60% |  536 | 门          | 10 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletDoor4
+246 | 0.1315 |  60% |  536 | 门          | 10 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletDoor3
+247 | 0.1315 |  60% |  536 | 门          | 10 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletDoor2
+248 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class1-4/TableSchool01 (3)/TableMetall
+249 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class1-4/TableSchool01 (9)/TableMetall
+250 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class2-2/TableSchool01 (2)/TableMetall
+251 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class2-2/TableSchool01 (9)/TableMetall
+252 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class2-2/TableSchool01 (3)/TableMetall
+253 | 0.1776 |  60% |  848 | 其他         |  8 | MetallPainted01Gray      | SchoolScene/Interior/Class1-4/TableSchool01 (12)/TableMetall
+254 | 0.2383 |  60% |  720 | 其他         | 16 | FabricCurtain02b         | SchoolScene/Interior/ActZal/Curtain01_1
+255 | 0.1596 |  60% |  607 | 其他         | 10 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01 (1)/ToiletCabinet01
+256 | 0.1837 |  60% |  542 | 门          |  7 | DoorsWindowsPlastic      | SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/door02_1
+257 | 0.1573 |  59% |   96 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-3/Table02
+258 | 0.1741 |  59% |  576 | 其他         | 10 | Sink01                   | SchoolScene/Interior/Toilets/Sink01 (1)
+259 | 0.1456 |  59% |  259 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/Poster01_1a (2)
+260 | 0.1841 |  59% |  553 | 其他         |  3 | FabricCurtain02b         | SchoolScene/Interior/Kitchen/Curtain03_2
+261 | 0.1771 |  58% |  621 | 其他         |  8 | Wood4                    | SchoolScene/Interior/Class1-3/Chair01b/Chair01Wood
+262 | 0.1775 |  58% |  546 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class1-4/FlowerGroup (1)/FlowerHolder01a
+263 | 0.2015 |  58% |  594 | 其他         |  3 | MetallChrome01           | SchoolScene/Interior/Corridor1/Poster03_2a (2)/Poster03_2
+264 | 0.1719 |  58% |   24 | 其他         |  1 | Wood3                    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/TableSimple01_02/TableWood
+265 | 0.1719 |  58% |   24 | 其他         |  1 | Wood3                    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/TableSimple01_02/TableWood
+266 | 0.1719 |  58% |   24 | 其他         |  1 | Wood3                    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (13)/TableSimple01_02/TableWood
+267 | 0.1802 |  58% |  645 | 其他         |  8 | Geography01b             | SchoolScene/Interior/Class1-4/Blueprints04
+268 | 0.2109 |  58% |  360 | 其他         | 10 | Wood3                    | SchoolScene/Interior/SportRoom1/SportTrampline01 (2)
+269 | 0.1329 |  58% |  488 | 门          | 12 | Door07a                  | SchoolScene/Interior/Doors/Door07a
+270 | 0.1329 |  58% |  488 | 门          | 12 | Door07a                  | SchoolScene/Interior/Doors/Door07a (10)
+271 | 0.1329 |  58% |  488 | 门          | 12 | Door02                   | SchoolScene/Interior/Doors/Door02 (2)
+272 | 0.1329 |  58% |  488 | 门          | 12 | Door07a                  | SchoolScene/Interior/Doors/Door07a (1)
+273 | 0.1329 |  58% |  488 | 门          | 12 | Door07a                  | SchoolScene/Interior/Doors/Door07a (11)
+274 | 0.1827 |  58% |  630 | 其他         |  8 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_5 (2)
+275 | 0.1884 |  58% |  180 | 其他         | 10 | Monitor04                | SchoolScene/Interior/ClassComputer/Monitor04 (5)
+276 | 0.1884 |  58% |  180 | 其他         | 10 | Monitor04                | SchoolScene/Interior/ClassComputer/Monitor04
+277 | 0.1884 |  58% |  180 | 其他         | 10 | Monitor04                | SchoolScene/Interior/ClassComputer/Monitor04 (6)
+278 | 0.1884 |  58% |  180 | 其他         | 10 | Monitor04                | SchoolScene/Interior/ClassComputer/TableGroup (6)/Monitor04 (4)
+279 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01a/Chair01Fabric
+280 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05a                | SchoolScene/Interior/Class1-2/Chair01b/Chair01Fabric
+281 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (13)/Chair01Fabric
+282 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05a                | SchoolScene/Interior/ClassDirector/Chair01b (1)/Chair01Fabric
+283 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (2)/Chair01Fabric
+284 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (8)/Chair01Fabric
+285 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (12)/Chair01Fabric
+286 | 0.1822 |  58% |  215 | 其他         |  0 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01a (1)/Chair01Fabric
+287 | 0.1730 |  57% |  322 | 其他         |  8 | Notebook01               | SchoolScene/Interior/ClassDirector/Notebook01
+288 | 0.1870 |  57% |  523 | 其他         | 10 | Wood3                    | SchoolScene/Interior/Corridor1/Poster04_4a
+289 | 0.1630 |  57% |  815 | 其他         | 10 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (4)/Chair05 (7)
+290 | 0.1630 |  57% |  815 | 其他         | 10 | Leather01Black           | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (4)/Chair05 (5)
+291 | 0.1740 |  57% |  600 | 其他         | 13 | MetallPainted01Green     | SchoolScene/Exterior/FenceMetal01_3/FenceMetal01
+292 | 0.1740 |  57% |  600 | 其他         | 13 | MetallPainted01Green     | SchoolScene/Exterior/FenceMetal01_3 (3)/FenceMetal01
+293 | 0.2048 |  57% |  259 | 其他         | 13 | MetallChrome01           | SchoolScene/Interior/Class1-3/Poster01_1a
+294 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Class1-4/Radiator01 (5)
+295 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Corridor1/Radiator01 (11)
+296 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Corridor2/Radiator01 (38)
+297 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/SportClassProps/Radiator01 (1)
+298 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Class1-3/Radiator01 (6)
+299 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Class2-2/Radiator01 (5)
+300 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/Corridor1/Radiator01 (14)
+301 | 0.1695 |  57% |  668 | 其他         |  8 | Radiator01               | SchoolScene/Interior/ClassTeachers/Radiator01 (5)
+302 | 0.1435 |  57% |  137 | 其他         |  5 | Wood3                    | SchoolScene/Exterior/SchoolBuilding/ZalStairs
+303 | 0.1951 |  57% |  698 | 其他         | 10 | Leather06                | SchoolScene/Interior/SportRoom1/Sportkozel01 (1)/KozelLeather
+304 | 0.1865 |  57% | 1020 | 其他         | 11 | ModelBuildingKPP2        | SchoolScene/Exterior/BuildingKPP2/Budka1
+305 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/SportRoom1/Radiator01 (9)
+306 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/ClassTeachers/Radiator01 (3)
+307 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/Class2-1/Radiator01 (5)
+308 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/Class1-3/Radiator01 (4)
+309 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/Class1-3/Radiator01 (5)
+310 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/ClassComputer/Radiator01 (8)
+311 | 0.1727 |  57% |  668 | 其他         | 10 | Radiator01               | SchoolScene/Interior/ClassTeachers/Radiator01 (4)
+312 | 0.1539 |  56% |  582 | 其他         |  8 | MetallPainted01Red       | SchoolScene/Interior/SportClassProps/SportBasketShit01 (5)/BasketMetal
+313 | 0.2571 |  56% |  488 | 门          | 15 | Door07a                  | SchoolScene/Interior/Doors/Door07a (5)
+314 | 0.2123 |  56% |  410 | 路灯         |  8 | MetallChrome01           | SchoolScene/DayLightsExterior/RoadLamp1a (3)/LampMetall
+315 | 0.2123 |  56% |  410 | 路灯         |  8 | MetallChrome01           | SchoolScene/DayLightsExterior/RoadLamp1a (10)/LampMetall
+316 | 0.2123 |  56% |  410 | 路灯         |  8 | MetallChrome01           | SchoolScene/DayLightsExterior/RoadLamp1a (14)/LampMetall
+317 | 0.2026 |  56% |  612 | 其他         | 10 | BlindsEmmisive           | SchoolScene/Interior/ClassComputer/Blinds01c (8)
+318 | 0.2176 |  56% |  630 | 其他         | 10 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_5 (4)
+319 | 0.2040 |  56% |  590 | 其他         | 10 | Wood5                    | SchoolScene/Interior/SportRoom1/SportInventar01_02/Wood
+320 | 0.2040 |  56% |  590 | 其他         | 10 | Wood5                    | SchoolScene/Interior/SportRoom1/SportInventar01_01/Wood
+321 | 0.1682 |  56% |  264 | 其他         | 13 | PlasticWhite1            | SchoolScene/Interior/Class1-2/TableSchool04/TableWood
+322 | 0.1682 |  56% |  264 | 其他         | 13 | PlasticWhite1            | SchoolScene/Interior/Class1-2/TableSchool04 (3)/TableWood
+323 | 0.2275 |  56% |  887 | 门          | 16 | DoorsWindowsPlastic      | SchoolScene/Interior/Doors/Door01_2R/Door01_2R/door01_2
+324 | 0.2298 |  56% |  120 | 其他         | 11 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (12)
+325 | 0.1652 |  56% |  621 | 其他         | 10 | Leather06                | SchoolScene/Interior/SportRoom1/SportKozel02 (1)/Kozel2Leather
+326 | 0.1668 |  56% |  556 | 其他         |  9 | Wood3                    | SchoolScene/Interior/Corridor1/Poster04_5a
+327 | 0.1656 |  56% |  526 | 其他         | 13 | Paper01                  | SchoolScene/Interior/Class1-4/Blueprints05 (1)
+328 | 0.2261 |  55% |   29 | 其他         |  8 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1a (3)
+329 | 0.2548 |  55% |   29 | 其他         | 11 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d (1)
+330 | 0.2548 |  55% |   29 | 其他         | 11 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (3)/RoadBordure1d
+331 | 0.2745 |  55% |   29 | 其他         |  3 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1d
+332 | 0.2055 |  55% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1a (1)
+333 | 0.2745 |  55% |   29 | 其他         |  3 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d (2)
+334 | 0.2261 |  55% |   29 | 其他         |  8 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1a (4)
+335 | 0.2185 |  55% |  602 | 其他         |  3 | SportGates               | SchoolScene/Interior/SportClassProps/SportGates02 (2)/Gates002
+336 | 0.1922 |  55% |  120 | 其他         |  3 | ConcreteClear03          | SchoolScene/Exterior/ConcreteBox01 (36)
+337 | 0.2425 |  55% |  604 | 其他         |  0 | MetallPainted01LinesBlack | SchoolScene/Interior/SportClassProps/SportGates02 (3)/Shape01
+338 | 0.2425 |  55% |  604 | 其他         |  0 | MetallPainted01LinesBlack | SchoolScene/Interior/SportClassProps/SportGates01b/Shape01
+339 | 0.2255 |  55% |  215 | 其他         | 10 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (6)/Chair01Fabric
+340 | 0.2585 |  55% |  215 | 其他         |  3 | Fabric05c                | SchoolScene/Interior/Class1-4/Chair01a/Chair01Fabric
+341 | 0.2255 |  55% |  215 | 其他         | 10 | Fabric05c                | SchoolScene/Interior/ClassDirector/Chair01 (4)/Chair01Fabric
+342 | 0.1987 |  55% |  605 | 其他         |  8 | MetallChrome01           | SchoolScene/Interior/ActZal/Seats01 (21)/Cylinder004
+343 | 0.1987 |  55% |  605 | 其他         |  8 | MetallChrome01           | SchoolScene/Interior/ActZal/Seats01 (17)/Cylinder004
+344 | 0.1943 |  55% |  576 | 其他         | 13 | Sink01                   | SchoolScene/Interior/Toilets/Sink01
+345 | 0.1836 |  55% |  520 | 其他         |  8 | Wood3                    | SchoolScene/Interior/SportClassProps/SportLadder01a (2)
+346 | 0.1836 |  55% |  520 | 其他         |  8 | Wood3                    | SchoolScene/Interior/SportClassProps/SportLadder01a (3)
+347 | 0.1885 |  55% |  582 | 其他         |  0 | MetallPainted01Red       | SchoolScene/Interior/SportClassProps/SportBasketShit01 (3)/BasketMetal
+348 | 0.1885 |  55% |  582 | 其他         |  0 | MetallPainted01Red       | SchoolScene/Interior/SportClassProps/SportBasketShit01/BasketMetal
+349 | 0.1922 |  55% |  611 | 其他         | 11 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenRazdacha01_01a (1)
+350 | 0.1985 |  54% |  156 | 其他         |  0 | MetallPainted01Green     | SchoolScene/Exterior/FenceMetal01_4 (1)/FenceMetal01
+351 | 0.2627 |  54% |  173 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class1-4/Capboard01_03/Capboard01
+352 | 0.1807 |  54% |  155 | 路灯         | 10 | ConcretePillar1a         | SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampPillar
+353 | 0.1807 |  54% |  155 | 路灯         | 10 | ConcretePillar1a         | SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampPillar
+354 | 0.2048 |  54% |   24 | 其他         | 16 | Wood3                    | SchoolScene/Interior/Kitchen/TableSimple01_01 (1)/TableWood
+355 | 0.1979 |  54% |  528 | 其他         |  8 | Wood3                    | SchoolScene/Interior/SportClassProps/SportLadder01b (5)
+356 | 0.1979 |  54% |  528 | 其他         |  8 | Wood3                    | SchoolScene/Interior/SportClassProps/SportLadder01b (4)
+357 | 0.1979 |  54% |  528 | 其他         |  8 | Wood3                    | SchoolScene/Interior/SportClassProps/SportLadder01b (6)
+358 | 0.1975 |  54% |  578 | 其他         |  5 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenFurniture02 (1)
+359 | 0.1975 |  54% |  578 | 其他         |  5 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenFurniture02
+360 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (6)/TableChrome
+361 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (5)/TableChrome
+362 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (3)/TableChrome
+363 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (7)/TableChrome
+364 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (4)/TableChrome
+365 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (2)/TableChrome
+366 | 0.1863 |  54% |  523 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/TableSchool03 (1)/TableChrome
+367 | 0.2015 |  54% |  621 | 其他         | 13 | Wood4                    | SchoolScene/Interior/ClassDirector/Chair01 (4)/Chair01Wood
+368 | 0.2015 |  54% |  621 | 其他         | 13 | Wood4                    | SchoolScene/Interior/ClassDirector/Chair01 (5)/Chair01Wood
+369 | 0.1986 |  54% |  607 | 其他         | 13 | ToiletCabinet01          | SchoolScene/Interior/Toilets/ToiletCabinet01/ToiletCabinet01
+370 | 0.1852 |  54% |  515 | 其他         |  8 | MetallPainted01Green     | SchoolScene/Interior/SportClassProps/SportBrus1/SprotBrusMetal
+371 | 0.1852 |  54% |  515 | 其他         |  8 | MetallPainted01Green     | SchoolScene/Interior/SportClassProps/SportBrus1 (1)/SprotBrusMetal
+372 | 0.1872 |  53% |  672 | 其他         |  0 | ElectroWires01           | SchoolScene/Interior/Class1-3/ElectroWires07_2
+373 | 0.2474 |  53% |  933 | 其他         | 16 | Wood2                    | SchoolScene/Exterior/Benches/Bench01_1/Wood
+374 | 0.2474 |  53% |  933 | 其他         | 16 | Wood2                    | SchoolScene/Exterior/Benches/Bench01_1 (1)/Wood
+375 | 0.2135 |  53% |  270 | 灯          |  5 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (2)
+376 | 0.1817 |  53% |  687 | 其他         |  9 | ConcreteWall6g           | SchoolScene/Exterior/BuildingBig02b (4)
+377 | 0.1911 |  53% |  537 | 其他         |  0 | FlowerRoom4              | SchoolScene/Interior/Class1-2/FlowerRoom4a (1)
+378 | 0.1911 |  53% |  537 | 其他         |  0 | FlowerRoom4              | SchoolScene/Interior/Class1-3/FlowerGroup (3)/FlowerRoom4a
+379 | 0.2281 |  53% |  519 | 其他         |  0 | ColorChart01             | SchoolScene/Interior/Class1-2/ChemistryMol02
+380 | 0.2300 |  53% |  111 | 其他         |  3 | Fabric05c                | SchoolScene/Interior/ClassComputer/TableGroup/Chair06 (2)/Chair06Fabric
+381 | 0.2194 |  53% |  111 | 其他         | 10 | Fabric05c                | SchoolScene/Interior/ClassComputer/Chair06 (1)/Chair06Fabric
+382 | 0.2194 |  53% |  111 | 其他         | 10 | Fabric05c                | SchoolScene/Interior/ClassComputer/Chair06 (4)/Chair06Fabric
+383 | 0.2300 |  53% |  111 | 其他         |  3 | Fabric05c                | SchoolScene/Interior/ClassComputer/TableGroup (3)/Chair06 (2)/Chair06Fabric
+384 | 0.2194 |  53% |  111 | 其他         | 10 | Fabric05c                | SchoolScene/Interior/ClassComputer/TableGroup (5)/Chair06 (2)/Chair06Fabric
+385 | 0.1864 |  53% |  561 | 其他         | 12 | Wood3                    | SchoolScene/Interior/Corridor1/Poster04_1a (1)
+386 | 0.1722 |  53% |  563 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_1 (1)
+387 | 0.1722 |  53% |  563 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_1
+388 | 0.2202 |  53% |  604 | 其他         |  8 | MetallPainted01LinesRed  | SchoolScene/Interior/SportClassProps/SportGates01 (1)/Shape01
+389 | 0.2561 |  53% |  370 | 其他         |  0 | Sink01                   | SchoolScene/Interior/Toilets/Sink01Paper (1)
+390 | 0.2561 |  53% |  370 | 其他         |  0 | Sink01                   | SchoolScene/Interior/Toilets/Sink01Paper
+391 | 0.2467 |  53% |  537 | 其他         |  3 | FlowerRoom4              | SchoolScene/Interior/Class1-4/FlowerGroup (1)/FlowerRoom4a (1)
+392 | 0.2467 |  53% |  537 | 其他         |  3 | FlowerRoom4              | SchoolScene/Interior/Class1-4/FlowerRoom4a (2)
+393 | 0.2177 |  53% |  579 | 其他         | 11 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01 (6)
+394 | 0.2044 |  53% |  583 | 其他         |  0 | ColorChart01             | SchoolScene/Interior/Class1-2/ChemistryMol01
+395 | 0.2266 |  52% |  612 | 其他         | 13 | BlindsEmmisive           | SchoolScene/Interior/ClassComputer/Blinds01c (7)
+396 | 0.1701 |  52% |  538 | 其他         | 11 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenRazdacha01_02b
+397 | 0.1701 |  52% |  538 | 其他         | 11 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenRazdacha01_02b (1)
+398 | 0.2029 |  52% |  230 | 其他         |  0 | Wood4                    | SchoolScene/Interior/ClassDirector/Capboard01_02/Capboard01
+399 | 0.1737 |  52% |   96 | 其他         |  0 | Wood4                    | SchoolScene/Interior/Class2-1/Table02
+400 | 0.1987 |  52% |  668 | 其他         | 13 | Radiator01               | SchoolScene/Interior/SportClassProps/Radiator01 (7)
+401 | 0.1987 |  52% |  668 | 其他         | 13 | Radiator01               | SchoolScene/Interior/Class2-1/Radiator01 (4)
+402 | 0.1987 |  52% |  668 | 其他         | 13 | Radiator01               | SchoolScene/Interior/ClassComputer/Radiator01 (7)
+403 | 0.1987 |  52% |  668 | 其他         | 13 | Radiator01               | SchoolScene/Interior/SportClassProps/Radiator01 (2)
+404 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01
+405 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (3)
+406 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (1)
+407 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (33)
+408 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (4)
+409 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (6)
+410 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (10)
+411 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (5)
+412 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (5)
+413 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (6)
+414 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (13)
+415 | 0.1975 |  52% |  270 | 灯          |  0 | LightLum01               | SchoolScene/DayLightsInterior/LightLum01_01 (10)
+416 | 0.2503 |  52% |  344 | 其他         |  5 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (8)/TableSimple01_02/TableMetall
+417 | 0.2503 |  52% |  344 | 其他         |  5 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (9)/TableSimple01_02/TableMetall
+418 | 0.2503 |  52% |  344 | 其他         |  5 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (14)/TableSimple01_02/TableMetall
+419 | 0.2087 |  52% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b
+420 | 0.2831 |  52% |   29 | 其他         |  2 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1a
+421 | 0.2087 |  52% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (10)
+422 | 0.2087 |  52% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1b
+423 | 0.2087 |  52% |   29 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (24)
+424 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01 (12)/Chair01Wood
+425 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01 (2)/Chair01Wood
+426 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01a (1)/Chair01Wood
+427 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01 (8)/Chair01Wood
+428 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01 (13)/Chair01Wood
+429 | 0.2164 |  52% |  621 | 其他         |  0 | WoodOak                  | SchoolScene/Interior/ClassDirector/Chair01a/Chair01Wood
+430 | 0.2164 |  52% |  621 | 其他         |  0 | Wood4                    | SchoolScene/Interior/ClassDirector/Chair01b (1)/Chair01Wood
+431 | 0.2164 |  52% |  621 | 其他         |  0 | Wood4                    | SchoolScene/Interior/Class1-2/Chair01b/Chair01Wood
+432 | 0.2378 |  51% |  544 | 其他         | 11 | Chair_Office2a           | SchoolScene/Interior/ClassDirector/ChairOffice01 (1)/Leather
+433 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/TableSimple01_02/TableMetall
+434 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (18)/TableSimple01_02/TableMetall
+435 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (10)/TableSimple01_02/TableMetall
+436 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (19)/TableSimple01_02/TableMetall
+437 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (11)/TableSimple01_02/TableMetall
+438 | 0.1876 |  51% |  344 | 其他         |  3 | MetallPainted01Gray      | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (17)/TableSimple01_02/TableMetall
+439 | 0.2205 |  51% |  848 | 其他         | 11 | MetallPainted01Gray      | SchoolScene/Interior/Class2-1/TableSchool01 (12)/TableMetall
+440 | 0.2229 |  51% |  544 | 其他         |  0 | FabricCurtain02b         | SchoolScene/Interior/ActZal/Curtain02_1
+441 | 0.2229 |  51% |  544 | 其他         |  0 | FabricCurtain02b         | SchoolScene/Interior/ActZal/Curtain02 (1)
+442 | 0.1370 |  51% |   43 | 其他         |  5 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenFurniture07
+443 | 0.2080 |  51% |  746 | 其他         |  0 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Brush (2)
+444 | 0.2080 |  51% |  746 | 其他         |  0 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Brush
+445 | 0.2080 |  51% |  746 | 其他         |  0 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Brush (3)
+446 | 0.2080 |  51% |  746 | 其他         |  0 | Toilet01                 | SchoolScene/Interior/Toilets/Toilet01Brush (1)
+447 | 0.1991 |  51% |  542 | 门          |  8 | DoorWindowsWood1         | SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/door02_1
+448 | 0.2363 |  51% |  635 | 其他         |  9 | PlasticBlack1            | SchoolScene/Interior/ClassDirector/ChairOffice01 (1)/Plastic
+449 | 0.2545 |  51% |  276 | 边条         | 10 | Wood2                    | SchoolScene/Exterior/SchoolBuilding/Border010
+450 | 0.1874 |  51% |  148 | 其他         |  0 | ConcreteWall2            | SchoolScene/Exterior/FenceConcrete1_1
+451 | 0.2222 |  51% |  786 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_3
+452 | 0.2222 |  51% |  786 | 其他         |  0 | Electro05                | SchoolScene/Interior/Class1-3/Electro05_3 (1)
+453 | 0.2331 |  50% |  446 | 其他         |  0 | GlassClear               | SchoolScene/Interior/Class1-2/ChemistryProp01 (3)
+454 | 0.2331 |  50% |  446 | 其他         |  0 | GlassClear               | SchoolScene/Interior/Class1-2/ChemistryProp01
+455 | 0.2331 |  50% |  446 | 其他         |  0 | GlassClear               | SchoolScene/Interior/Class1-2/ChemistryProp01 (1)
+456 | 0.2331 |  50% |  446 | 其他         |  0 | GlassClear               | SchoolScene/Interior/Class1-2/ChemistryProp01 (2)
+457 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-3/Capboard01_01/CapboardChrome
+458 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-4/Capboard01_01 (2)/CapboardChrome
+459 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/ClassDirector/Capboard01_02/CapboardChrome
+460 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-3/Capboard01_01 (1)/CapboardChrome
+461 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/ClassDirector/Capboard01_01 (1)/CapboardChrome
+462 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-4/Capboard01_01/CapboardChrome
+463 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-3/Capboard01_02 (1)/CapboardChrome
+464 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/ClassDirector/Capboard01_01/CapboardChrome
+465 | 0.2137 |  50% |  238 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-3/Capboard01_02/CapboardChrome
+466 | 0.1950 |  50% |  720 | 其他         |  0 | PlasticWhite1            | SchoolScene/Interior/Class1-2/ChemistryProp05 (3)
+467 | 0.1950 |  50% |  720 | 其他         |  0 | PlasticWhite1            | SchoolScene/Interior/Class1-2/ChemistryProp05 (2)
+468 | 0.1950 |  50% |  720 | 其他         |  0 | PlasticWhite1            | SchoolScene/Interior/Class1-2/ChemistryProp05
+469 | 0.1950 |  50% |  720 | 其他         |  0 | PlasticWhite1            | SchoolScene/Interior/Class1-2/ChemistryProp05 (1)
+470 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03 (3)
+471 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03 (1)
+472 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03 (5)
+473 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03
+474 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03 (2)
+475 | 0.2051 |  50% |  590 | 其他         |  0 | MetallChrome01           | SchoolScene/Interior/Class1-2/ChemistryProp03 (4)
+476 | 0.1964 |  50% |   48 | 玻璃         |  0 | GlassClear               | SchoolScene/Interior/ClassDirector/Capboard01_05 (1)/GlassPart1
+477 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a/LampGlass
+478 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (3)/LampGlass
+479 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (6)/LampGlass
+480 | 0.3002 |  50% |   24 | 其他         | 15 | MetalChain01             | SchoolScene/Exterior/FenceMetal01 (2)/fence
+481 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (9)/LampGlass
+482 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (1)/LampGlass
+483 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (13)/LampGlass
+484 | 0.2733 |  50% |   24 | 其他         | 13 | MetalChain01             | SchoolScene/Exterior/FenceMetal01_1 (3)/fence
+485 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (8)/LampGlass
+486 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (12)/LampGlass
+487 | 0.2200 |  50% |  168 | 其他         | 10 | Table_corner1_left       | SchoolScene/Interior/ClassTeachers/Table_corner1 (1)/office_desk_var2.bmp
+488 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (5)/LampGlass
+489 | 0.3002 |  50% |   24 | 其他         | 15 | MetalChain01             | SchoolScene/Exterior/FenceMetal01_1 (1)/fence
+490 | 0.2248 |  50% |  178 | 其他         | 12 | Monitor01                | SchoolScene/Interior/ClassDirector/Monitor01 (2)
+491 | 0.1964 |  50% |   48 | 玻璃         |  0 | GlassClear               | SchoolScene/Interior/Class1-2/Capboard01_05 (1)/GlassPart1
+492 | 0.3002 |  50% |   24 | 其他         | 15 | MetalChain01             | SchoolScene/Exterior/FenceMetal01_1 (6)/fence
+493 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (11)/LampGlass
+494 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (10)/LampGlass
+495 | 0.2236 |  50% |  322 | 其他         |  9 | Geography01b             | SchoolScene/Interior/Class1-4/Blueprints02 (1)
+496 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (14)/LampGlass
+497 | 0.3002 |  50% |   24 | 其他         | 15 | MetalChain01             | SchoolScene/Exterior/FenceMetal01_2 (1)/fence
+498 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (4)/LampGlass
+499 | 0.2125 |  50% |  348 | 其他         | 11 | Projector                | SchoolScene/Interior/ClassComputer/Projector01
+500 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (2)/LampGlass
+501 | 0.3089 |  50% |   18 | 其他         |  3 | ConctereWall14           | SchoolScene/Exterior/SchoolBuilding/BuildingBottomFloor
+502 | 0.2236 |  50% |  322 | 其他         |  9 | Geography02b             | SchoolScene/Interior/Class1-4/Blueprints02
+503 | 0.2307 |  50% |   20 | 玻璃         |  0 | GlassLamp1               | SchoolScene/DayLightsExterior/RoadLamp1a (7)/LampGlass
+504 | 0.0878 |  31% |   29 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (19)
+505 | 0.0878 |  31% |   29 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (18)
+506 | 0.0878 |  31% |   29 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (17)
+
+===== 结束 =====

@@ -1,0 +1,126 @@
+===== P30 发黑构件检测（只读）=====
+时间：2026-10-30 11:33:02
+判据：UV 采样区平均亮度 < 0.10 记为真·全黑
+
+---------- 光照图集 ----------
+lightmaps 数量：24
+  图集  0：Lightmap-0_comp_light  均值 0.2215
+  图集  1：Lightmap-1_comp_light  均值 0.3988
+  图集  2：Lightmap-2_comp_light  均值 0.4456
+  图集  3：Lightmap-3_comp_light  均值 0.2656
+  图集  4：Lightmap-4_comp_light  均值 0.2125
+  图集  5：Lightmap-5_comp_light  均值 0.3200
+  图集  6：Lightmap-6_comp_light  均值 0.2557
+  图集  7：Lightmap-7_comp_light  均值 0.3805
+  图集  8：Lightmap-8_comp_light  均值 0.1576
+  图集  9：Lightmap-9_comp_light  均值 0.3041
+  图集 10：Lightmap-10_comp_light  均值 0.1617
+  图集 11：Lightmap-11_comp_light  均值 0.2424
+  图集 12：Lightmap-12_comp_light  均值 0.3232
+  图集 13：Lightmap-13_comp_light  均值 0.2757
+  图集 14：Lightmap-14_comp_light  均值 0.3379
+  图集 15：Lightmap-15_comp_light  均值 0.3151
+  图集 16：Lightmap-16_comp_light  均值 0.3332
+  图集 17：Lightmap-17_comp_light  均值 0.0689
+  图集 18：Lightmap-18_comp_light  均值 0.0554
+  图集 19：Lightmap-19_comp_light  均值 0.0516
+  图集 20：Lightmap-20_comp_light  均值 0.1135
+  图集 21：Lightmap-21_comp_light  均值 0.2410
+  图集 22：Lightmap-22_comp_light  均值 0.1439
+  图集 23：Lightmap-23_comp_light  均值 0.2681
+
+场景 Renderer 总数：2103
+
+---------- 总账 ----------
+真·全黑（< 0.10）：74
+偏暗（0.10 ~ 0.25）：719
+正常（≥ 0.25）：1029
+无烘焙 lightmap：111
+无 UV2：170
+不可测：0
+
+---------- 全黑按类别 ----------
+  其他          67 处
+  吊顶          3 处
+  门           2 处
+  玻璃          1 处
+  边条          1 处
+
+---------- 全黑明细（74 条，按亮度升序）----------
+序号 | 亮度 | 类别 | 图集 | 材质 | 路径
+  1 | 0.0029 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (1)
+  2 | 0.0029 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (2)
+  3 | 0.0067 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (11)
+  4 | 0.0067 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (10)
+  5 | 0.0067 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f
+  6 | 0.0067 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (4)
+  7 | 0.0067 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (5)
+  8 | 0.0069 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c
+  9 | 0.0069 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (3)
+ 10 | 0.0069 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1c
+ 11 | 0.0069 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (2)
+ 12 | 0.0142 | 其他         | 17 | MetallChrome03           | SchoolScene/Interior/Kitchen/KitchenTable02 (2)
+ 13 | 0.0214 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1e (1)
+ 14 | 0.0214 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1e (1)
+ 15 | 0.0235 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (4)/RoadBordure1d (1)
+ 16 | 0.0235 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+ 17 | 0.0235 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (3)/RoadBordure1d (1)
+ 18 | 0.0235 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1d
+ 19 | 0.0235 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1d (1)
+ 20 | 0.0289 | 其他         | 20 | Default-Material         | SchoolScene/Exterior/SportField01
+ 21 | 0.0323 | 其他         |  0 | PosterFood01             | SchoolScene/Interior/Kitchen/Poster02_2a
+ 22 | 0.0344 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1d (1)
+ 23 | 0.0344 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (5)
+ 24 | 0.0344 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c
+ 25 | 0.0344 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+ 26 | 0.0344 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d (1)
+ 27 | 0.0353 | 吊顶         | 15 | TileArmstrong01_04       | SchoolScene/Exterior/SchoolBuilding/ZalTop
+ 28 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (1)
+ 29 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c
+ 30 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c
+ 31 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1c (4)
+ 32 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (2)
+ 33 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (3)
+ 34 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (1)/RoadBordure1c (1)
+ 35 | 0.0359 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c (1)
+ 36 | 0.0384 | 其他         |  9 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1c
+ 37 | 0.0440 | 门          |  8 | ModelBuildingKPP2        | SchoolScene/Exterior/BuildingKPP2/Door
+ 38 | 0.0488 | 边条         |  9 | Wood2                    | SchoolScene/Exterior/SchoolBuilding/Border011
+ 39 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (6)
+ 40 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (1)
+ 41 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (7)
+ 42 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (12)
+ 43 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f
+ 44 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (5)
+ 45 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (17)
+ 46 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (2)
+ 47 | 0.0490 | 其他         | 16 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (4)
+ 48 | 0.0626 | 其他         |  0 | ConcreteWall5            | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c (1)
+ 49 | 0.0752 | 玻璃         |  3 | DoorsWindowsPlastic      | SchoolScene/Interior/SportClassProps/Door02Wood1/DoorAnchor/glass
+ 50 | 0.0752 | 门          |  3 | DoorsWindowsPlastic      | SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_glass
+ 51 | 0.0769 | 其他         | 12 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d
+ 52 | 0.0769 | 其他         | 12 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d (2)
+ 53 | 0.0783 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1d
+ 54 | 0.0783 | 其他         |  5 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1d
+ 55 | 0.0788 | 其他         |  7 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (14)
+ 56 | 0.0794 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01 (5)/TableWood
+ 57 | 0.0794 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class2-2/TableSchool01a/TableWood
+ 58 | 0.0794 | 其他         |  3 | Wood4                    | SchoolScene/Interior/Class1-4/TableSchool01 (5)/TableWood
+ 59 | 0.0826 | 其他         |  8 | Computer06               | SchoolScene/Interior/ClassComputer/TableGroup (6)/Computer06
+ 60 | 0.0851 | 吊顶         | 20 | TileArmstrong01_04       | SchoolScene/Exterior/SchoolBuilding/DirectorTop
+ 61 | 0.0876 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (9)
+ 62 | 0.0876 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (18)
+ 63 | 0.0876 | 其他         | 17 | ConcreteWall5            | SchoolScene/Exterior/RoadBordure1f (2)
+ 64 | 0.0878 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (18)
+ 65 | 0.0878 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (19)
+ 66 | 0.0878 | 其他         | 15 | ConcreteWall5            | SchoolScene/Exterior/BordersArea/RoadBordure1b (17)
+ 67 | 0.0901 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-3/Pencil02
+ 68 | 0.0901 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-4/Pencil02
+ 69 | 0.0901 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class2-1/Pencil02
+ 70 | 0.0901 | 其他         |  0 | Chancellery1             | SchoolScene/Interior/ClassDirector/Pencil01
+ 71 | 0.0901 | 其他         |  0 | Chancellery2             | SchoolScene/Interior/Class1-2/Pencil02
+ 72 | 0.0916 | 其他         |  0 | MetalFence01             | SchoolScene/Exterior/FenceMetal02_R/Anchor/FenceMetal02_L
+ 73 | 0.0916 | 其他         |  0 | MetalFence01             | SchoolScene/Exterior/FenceMetal02_L/Anchor/FenceMetal02_L
+ 74 | 0.0920 | 吊顶         | 10 | Table_corner1_top        | SchoolScene/Interior/ClassTeachers/Table_corner1 (1)/office_desk_top.bmp
+
+===== 结束 =====
