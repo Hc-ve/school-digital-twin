@@ -1,0 +1,41 @@
+# 验收判据清单（看板自检的数据源）
+
+> 本文件是 `Tools/status.py` 的输入，**不是给人读的规范**。
+> 每个任务包派出去时，负责人在这里加几条**可机器验证**的判据；
+> 看板自动跑一遍，告诉你「这条活到底做完没有」。
+>
+> 为什么不写"任务 A 完成了 80%"：
+> 那种百分比只能人填，人填的一定滞后、一定美化。
+> 而 `grep -c "_nTypeCount"` 是 0 还是 6，改不了。
+>
+> 格式（三字段，`|` 分隔，`#` 开头是注释）：
+>   ID | 人类可读的判据 | 检查命令与期望
+>
+> 检查命令用下面四种前缀之一：
+>   `grep:N:文件:模式`   —— 文件中匹配**行数**应等于 N
+>   `grep+:N:文件:模式`  —— 文件中匹配行数**至少** N（用在一处声明多处使用的字段）
+>   `grep0:文件:模式`    —— 文件中**不得出现**该模式（期望 0）
+>   `has:文件`           —— 文件存在
+>   `hasnot:文件`        —— 文件不存在
+>
+> 文件路径相对仓库根。模式按**正则**处理（注意 Windows 下用 / 分隔）。
+
+## P5 统计页施工（2026-11-02 · 目标：窄态滚动版 + 曲线真实历史）
+
+# --- P5-1 P0-1 窄态图例四段式 ---
+P5-01 | 新增台数列字段 _nTypeCount | grep+:3:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nTypeCount
+P5-02 | 图例名称宽 88（旧值 170 已消失） | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:146f, y, 170f
+
+# --- P5-1 P0-2 曲线读真实历史（禁伪造回填）---
+P5-03 | 全楼总功率聚合环已实现 | grep+:1:Assets/_Project/Scripts/UI/TwinMetricHistory.cs:FillAggregatePower
+P5-04 | 旧的 60 点伪造回填已删除 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:for \(int k = 60; k > 0; k--\)
+P5-05 | 窄态旧伪造回填已删除 | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:for \(int k = 60; k > 0; k--\)
+
+# --- P5-1 P1-4 底部时间戳去重 ---
+P5-06 | 版本号不再带时间 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.cs:v0\.9 · 
+
+# --- P5-1 P2-2 两态格式统一（合并列）---
+P5-07 | 窄态房间行已合并数值+占比 | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nFloorPct
+
+## 待办：房间能耗按 Zone 聚合（尚未派工）
+# P5-08 | 聚合键从 FloorOf 换成 Zone | grep:N:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:RoomLabel
