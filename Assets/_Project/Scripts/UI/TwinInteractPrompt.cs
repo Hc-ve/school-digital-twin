@@ -126,6 +126,21 @@ namespace SchoolTwin.UI
                 _items.Add(new TwinInteractMenu.Item(c.Label,
                     c.IsDoor ? TwinInteractMenu.IconKind.Door : TwinInteractMenu.IconKind.Power,
                     () => Use(c)));
+
+                // 【P3-5】断电的灯不给操作入口。
+                //
+                // 主理人 play 实测：整栋楼断电后走近灯，菜单仍显示「关灯」并可点 ——
+                // 因为这里只看"设备状态"（仍记为开），不看"有没有电"。
+                // 现在改成：没电就显示一条不可点的提示，说清原因。
+                //
+                // 门不受影响（`TwinCircuit.IsPowered` 对 Door 已豁免），
+                // 所以这行对门是恒真的，不会误伤。
+                if (!TwinCircuit.IsPowered(c.TwinId))
+                {
+                    _items[_items.Count - 1] = new TwinInteractMenu.Item(
+                        c.Label + " · 已断电",
+                        TwinInteractMenu.IconKind.PowerOff, null, false);
+                }
             }
 
             if (_items.Count == 0) { menu.Hide(); return; }

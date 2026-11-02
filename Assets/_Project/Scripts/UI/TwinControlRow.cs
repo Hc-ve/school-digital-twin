@@ -466,10 +466,39 @@ namespace SchoolTwin.UI
         }
 
         private void Send(CommandAction action, float value)
-        {            if (_anchor == null || _center == null) return;
+        {
+            if (_anchor == null || _center == null) return;
+
+            // 【P3】单台座位关机：先播关机视频，播完再真正断电。
+            //
+            // 「全部关机」走 `BeginShutdown`，屏幕会播 Windows 关机画面；
+            // 单点一台如果直接发 `SetPower(0)`，就是"啪一下黑掉"，
+            // 两套观感不一致（主理人 2026-11-01 要求"单台也要一样"）。
+            //
+            // 放在这里而不是命令中心：命令中心是同步接口，塞不下"等视频播完"；
+            // 而且"关机要不要播动画"是表现层的决定，不该污染命令语义。
+            if (action == CommandAction.SetPower && value < 0.5f &&
+                _anchor.TwinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal))
+            {
+                SchoolTwin.Present.TwinDevicePresenter pres =
+                    SchoolTwin.Present.TwinDevicePresenter.Instance;
+                if (pres != null)
+                {
+                    string id = _anchor.TwinId;
+                    pres.BeginSeatShutdown(id, () => SendNow(id, action, value));
+                    return;
+                }
+            }
+
+            SendNow(_anchor.TwinId, action, value);
+        }
+
+        private void SendNow(string twinId, CommandAction action, float value)
+        {
+            if (_center == null) return;
 
             string reject;
-            if (!_center.TrySend(_anchor.TwinId, action, value, out reject))
+            if (!_center.TrySend(twinId, action, value, out reject))
             {
                 _rejectText = string.IsNullOrEmpty(reject) ? "操作被拒绝" : reject;
                 _rejectUntil = Time.unscaledTime + 3f;

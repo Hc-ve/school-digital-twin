@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -29,7 +29,7 @@ MonoBehaviour:
     - Metric: Temperature
       Unit: "\xB0C"
       Min: 10
-      Max: 35
+      Max: 40
       WarnLow: 16
       WarnHigh: 28
       AlarmLow: 10
@@ -86,7 +86,7 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 0
+      WarnLow: 20
       WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
@@ -119,8 +119,8 @@ MonoBehaviour:
       Unit: "\xB0C"
       Min: 16
       Max: 30
-      WarnLow: 16
-      WarnHigh: 30
+      WarnLow: 18
+      WarnHigh: 26
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
@@ -218,8 +218,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -273,7 +273,7 @@ MonoBehaviour:
     - Metric: Temperature
       Unit: "\xB0C"
       Min: 10
-      Max: 35
+      Max: 40
       WarnLow: 16
       WarnHigh: 28
       AlarmLow: 10
@@ -350,8 +350,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -449,8 +449,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -548,8 +548,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -614,8 +614,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -636,21 +636,21 @@ MonoBehaviour:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 3000
+      Max: 3600
       WarnLow: 0
-      WarnHigh: 2600
+      WarnHigh: 3200
       AlarmLow: 0
-      AlarmHigh: 2900
+      AlarmHigh: 3500
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: OnCount
       Unit: "\u53F0"
       Min: 0
-      Max: 30
+      Max: 18
       WarnLow: 0
-      WarnHigh: 30
+      WarnHigh: 18
       AlarmLow: 0
-      AlarmHigh: 30
+      AlarmHigh: 18
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: CPULoad
@@ -679,7 +679,7 @@ MonoBehaviour:
     - Metric: Temperature
       Unit: "\xB0C"
       Min: 10
-      Max: 35
+      Max: 40
       WarnLow: 16
       WarnHigh: 28
       AlarmLow: 10
@@ -756,8 +756,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -778,21 +778,21 @@ MonoBehaviour:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 3000
+      Max: 300
       WarnLow: 0
-      WarnHigh: 2600
+      WarnHigh: 260
       AlarmLow: 0
-      AlarmHigh: 2900
+      AlarmHigh: 290
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: OnCount
       Unit: "\u53F0"
       Min: 0
-      Max: 30
+      Max: 1
       WarnLow: 0
-      WarnHigh: 30
+      WarnHigh: 1
       AlarmLow: 0
-      AlarmHigh: 30
+      AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: CPULoad
@@ -865,8 +865,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -964,8 +964,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -988,9 +988,9 @@ MonoBehaviour:
       Min: 0
       Max: 100
       WarnLow: 0
-      WarnHigh: 25
+      WarnHigh: 20
       AlarmLow: 0
-      AlarmHigh: 60
+      AlarmHigh: 40
       Epsilon: 0.05
       Hysteresis: 0
   - TwinId: Corridor2/Light/Main_01
@@ -1053,8 +1053,8 @@ MonoBehaviour:
       Unit: '%'
       Min: 0
       Max: 100
-      WarnLow: 5
-      WarnHigh: 95
+      WarnLow: 0
+      WarnHigh: 100
       AlarmLow: 0
       AlarmHigh: 100
       Epsilon: 0.05
@@ -1348,11 +1348,11 @@ MonoBehaviour:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 400
+      Max: 500
       WarnLow: 0
-      WarnHigh: 380
+      WarnHigh: 450
       AlarmLow: 0
-      AlarmHigh: 400
+      AlarmHigh: 480
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: LampHours
@@ -1381,11 +1381,11 @@ MonoBehaviour:
     - Metric: Power
       Unit: W
       Min: 0
-      Max: 400
+      Max: 500
       WarnLow: 0
-      WarnHigh: 380
+      WarnHigh: 450
       AlarmLow: 0
-      AlarmHigh: 400
+      AlarmHigh: 480
       Epsilon: 0.05
       Hysteresis: 0
     - Metric: LampHours
@@ -1611,6 +1611,780 @@ MonoBehaviour:
       Hysteresis: 0
   - TwinId: ClassComputer/PC/Master_01
     DisplayName: "\u673A\u623F\u4E3B\u8111"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_01
+    DisplayName: "\u673A\u623F 01 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_02
+    DisplayName: "\u673A\u623F 02 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_03
+    DisplayName: "\u673A\u623F 03 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_04
+    DisplayName: "\u673A\u623F 04 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_05
+    DisplayName: "\u673A\u623F 05 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_06
+    DisplayName: "\u673A\u623F 06 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_07
+    DisplayName: "\u673A\u623F 07 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_08
+    DisplayName: "\u673A\u623F 08 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_09
+    DisplayName: "\u673A\u623F 09 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_10
+    DisplayName: "\u673A\u623F 10 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_11
+    DisplayName: "\u673A\u623F 11 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_12
+    DisplayName: "\u673A\u623F 12 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_13
+    DisplayName: "\u673A\u623F 13 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_14
+    DisplayName: "\u673A\u623F 14 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_15
+    DisplayName: "\u673A\u623F 15 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_16
+    DisplayName: "\u673A\u623F 16 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_17
+    DisplayName: "\u673A\u623F 17 \u53F7\u673A"
+    Zone: ClassComputer
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 300
+      WarnLow: 0
+      WarnHigh: 260
+      AlarmLow: 0
+      AlarmHigh: 290
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: "\u53F0"
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/PC/Seat_18
+    DisplayName: "\u673A\u623F 18 \u53F7\u673A"
     Zone: ClassComputer
     Category: PC
     SourceTopic: 

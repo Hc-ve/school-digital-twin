@@ -91,3 +91,6 @@ video/_backup/
 
 # P26 素材源文件（转码后的成品在 Assets/StreamingAssets/PC/master/）
 video/*.mp4
+
+# Unity 目录监控临时文件（编辑器异常退出残留，不该进仓库）
+~UnityDirMonSyncFile~*

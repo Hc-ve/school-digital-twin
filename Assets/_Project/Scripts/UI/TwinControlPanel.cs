@@ -980,8 +980,33 @@ namespace SchoolTwin.UI
             TwinCommandCenter center = EnsureCenter();
             if (center == null) return;
 
+            string twinId = e.Anchor.TwinId;
+
+            // 【P3】单台座位关机：先播关机视频，播完再断电（和「全部关机」一致）
+            if (!on && twinId.StartsWith("ClassComputer/PC/Seat_", System.StringComparison.Ordinal))
+            {
+                SchoolTwin.Present.TwinDevicePresenter pres =
+                    SchoolTwin.Present.TwinDevicePresenter.Instance;
+                if (pres != null)
+                {
+                    DevEntry captured = e;
+                    pres.BeginSeatShutdown(twinId, () => SendPowerNow(captured, twinId, false));
+                    return;
+                }
+            }
+
+            SendPowerNow(e, twinId, on);
+        }
+
+        private void SendPowerNow(DevEntry e, string twinId, bool on)
+        {
+            if (e == null) return;
+
+            TwinCommandCenter center = EnsureCenter();
+            if (center == null) return;
+
             string reject;
-            if (!center.TrySend(e.Anchor.TwinId, SwitchActionOf(e), on ? 1f : 0f, out reject))
+            if (!center.TrySend(twinId, SwitchActionOf(e), on ? 1f : 0f, out reject))
             {
                 // 被拒的原因直接写在这一行上，不要只丢进 Console
                 e.RejectText = string.IsNullOrEmpty(reject) ? "操作被拒绝" : reject;

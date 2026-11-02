@@ -137,13 +137,17 @@ namespace SchoolTwin.UI
         private const float BtnGap = 10f;
         private const int FontSize = 15;
 
-        // ---- 颜色：未选中（旧规范）与选中（异环式粉渐变）----
+        // ---- 颜色：未选中（旧规范）与选中（**主色系**，P3 改）----
+        //
+        // 【P3 变更】原来选中态是粉色 #E64D73（0.90, 0.30, 0.45），
+        // 与全项目"青蓝科技风"完全脱节 —— 主理人 play 截图里那一块粉红浮层就是它。
+        // 现在统一走 TwinTheme.Accent，交互菜单和面板是同一个色系。
         private static readonly Color IdleTop = new Color(0.13f, 0.14f, 0.16f, 0.92f);
         private static readonly Color IdleBottom = new Color(0.13f, 0.14f, 0.16f, 0.92f);
         private static readonly Color IdleBorder = new Color(1f, 1f, 1f, 0.22f);
-        private static readonly Color SelTop = new Color(0.90f, 0.30f, 0.45f, 0.95f);
-        private static readonly Color SelBottom = new Color(0.75f, 0.18f, 0.35f, 0.95f);
-        private static readonly Color SelBorder = new Color(1f, 1f, 1f, 0.85f);
+        private static readonly Color SelTop = TwinTheme.Accent;
+        private static readonly Color SelBottom = TwinTheme.AccentDeep;
+        private static readonly Color SelBorder = TwinTheme.AccentLine;
         private static readonly Color IconGreen = new Color(0.16f, 0.72f, 0.52f, 1f);
         private static readonly Color IconIdle = new Color(0.30f, 0.33f, 0.38f, 1f);
         private static readonly Color TextColor = Color.white;
@@ -259,6 +263,29 @@ namespace SchoolTwin.UI
             // 故意留空：见上面的说明。真正的收起在 LateUpdate 里按"本帧有没有 Show"裁决。
         }
 
+        /// <summary>
+        /// 按"抽屉开没开"调整本节点在同级里的层级。
+        ///
+        /// ── 为什么必须动 sibling，光调 alpha 不够 ────────────────────────
+        /// 抽屉打开时如果只把 alpha 拉低，残留的透明节点仍会吃掉 GraphicRaycaster 的
+        /// 命中（`CanvasGroup.blocksRaycasts` 要等淡出结束才置 false），
+        /// 表现为「面板上的 chip 点不动」。压到最底才是干净的。
+        ///
+        /// ── 为什么还要能还原 ────────────────────────────────────────────
+        /// 只做一次 `SetAsFirstSibling` 的话，抽屉关掉之后菜单永久留在最底，
+        /// 会被全屏层 / 提示条盖住，同样点不动。所以做成**跟随状态**：
+        /// 打开 → 沉底；关闭 → 抬回最上。只在状态翻转那一帧动一次。
+        /// </summary>
+        private bool _sunk;
+        private void SyncSibling(bool drawerOpen)
+        {
+            if (_sunk == drawerOpen) return;
+            _sunk = drawerOpen;
+
+            if (drawerOpen) transform.SetAsFirstSibling();
+            else transform.SetAsLastSibling();
+        }
+
         // ================================================================ 生命周期
 
         private void Awake()
@@ -273,11 +300,36 @@ namespace SchoolTwin.UI
 
         private void LateUpdate()
         {
+            // ── 抽屉打开时让位 ──────────────────────────────────────────
+            //
+            // 【2026-10-31 主理人 play 实测】「交互按钮浮于面板上」——
+            // 本菜单和抽屉挂在**同一个** Overlay Canvas 下，谁在上面纯看代码里
+            // 谁先 Bootstrap 挂上去（Unity 不保证 RuntimeInitializeOnLoadMethod 的顺序）。
+            // 现在菜单排在后 → 盖住抽屉右栏的楼层筛选 chip，而且它还在吃指针事件。
+            //
+            // 处理：抽屉一打开就整块收起，并把 sibling 压到抽屉之下 ——
+            // 双保险，因为 sibling 顺序还会被别的地方（全屏层）改动。
+            // 面板打开时用户看的是抽屉，交互菜单本来也没有存在意义。
+            bool blockedByDrawer = SchoolTwin.UI.TwinDrawer.IsOpen;
+
+            if (blockedByDrawer && _visible)
+            {
+                _visible = false;
+                _alphaTarget = 0f;
+                IsBlocking = false;
+            }
+            if (blockedByDrawer) _shownThisFrame = false;
+            SyncSibling(blockedByDrawer);
+
             // ── 可见性裁决 ──
             // 驱动器必须在 Update 里**每帧**调一次 Show 或 Hide（二选一）。
             // 本帧有 Show → 显示；一个 Show 都没有 → 收起（Hide 调用者/驱动器被销毁
             // 都属于这一类）。这样两个驱动器交替 Update 也不会互相覆盖。
-            bool shownThisFrame = (_lastFrame == Time.frameCount);
+            //
+            // 【注意别在这里 return】抽屉打开时如果直接 return，会跳过下面的
+            // TwinPlayerFade.Update —— 角色停在上一帧的半透明状态，关掉抽屉也回不来。
+            // 收起靠 _visible = false 表达就够了，后面的流程照走。
+            bool shownThisFrame = (_lastFrame == Time.frameCount) && !blockedByDrawer;
 
             if (!shownThisFrame && _visible)
             {

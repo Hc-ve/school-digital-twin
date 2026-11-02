@@ -171,6 +171,14 @@ namespace SchoolTwin.Command
             for (int i = 0; i < SeedOnlyIds.Length; i++)
                 SeedOne(SeedOnlyIds[i], ref seeded, ref unresolved);
 
+            // 【P3】机房座位（Seat_XX）：**不在硬编码白名单里，必须单独补一轮**。
+            //
+            // 不补的后果（2026-11-01 实测）：Seat 没有初始状态 → 走正弦波 →
+            // Power 在 0~300W 之间自由摆动 → 面板按"功率 > 0.5"判断开关，
+            // 于是**明明是关着的机器，卡片上写「已开」**，而且数值每帧都在跳。
+            // 点开机后命令中心回读对不上，判 Failed（设备状态与期望不一致）。
+            SeedSeatAnchors(ref seeded, ref unresolved);
+
             Debug.Log("[TwinCmd] 已给 " + seeded + " 台受控设备定下初始状态（白名单共 " +
                       ids.Count + " 个点位，另有 " + SeedOnlyIds.Length + " 个只定状态不开放控制）。" +
                       "状态由设备代理负责，模拟波形不再改它。");
@@ -220,6 +228,72 @@ namespace SchoolTwin.Command
                 if (string.Equals(DoorsClosedByDefault[i], twinId, StringComparison.Ordinal)) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 给场景里所有机房座位（`ClassComputer/PC/Seat_XX`）压初始状态。
+        ///
+        /// 这些点位是批量生成的，不在 `TwinControlScope.Ids` 那张硬编码表里，
+        /// 所以 `SeedInitialState` 的主循环遍历不到它们。
+        /// 不压的话它们会走正弦波 —— 关机状态功率也在 0~300W 之间摆，
+        /// 面板判断"开关"就永远不可信，点开机的回读判据也会失败。
+        /// </summary>
+        /// <summary>机房整间聚合点位（18 个座位的"总闸"）。</summary>
+        private const string RoomPcTwinId = "ClassComputer/PC/Room_01";
+
+        /// <summary>座位 TwinId 前缀。</summary>
+        private const string SeatPcPrefix = "ClassComputer/PC/Seat_";
+
+        /// <summary>缓存座位 TwinId（首次扫描后固定，场景运行期不会增减座位）。</summary>
+        private readonly List<string> _seatIds = new List<string>(32);
+        private bool _seatIdsScanned;
+
+        /// <summary>
+        /// 整间开机 / 关机 → 逐个下发给 18 个座位点位。
+        ///
+        /// 用 `SetState` 而不是发命令：`SetState` 直接写 override，
+        /// 和"用户亲手点这台"走的是同一条数据出口，表现层不需要区分来源。
+        /// 走 `TwinCommandCenter` 反而会多出 18 条命令日志、18 次回读判定，
+        /// 而且联动本来就是设备侧的行为（真实机房里是配电箱合闸），
+        /// 不该表现成"上位机逐台点名"。
+        /// </summary>
+        private void ApplyRoomToSeats(bool on)
+        {
+            if (!_seatIdsScanned)
+            {
+                _seatIdsScanned = true;
+
+                TwinAnchor[] anchors = FindObjectsOfType<TwinAnchor>(true);
+                for (int i = 0; i < anchors.Length; i++)
+                {
+                    TwinAnchor a = anchors[i];
+                    if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                    if (!a.TwinId.StartsWith(SeatPcPrefix, StringComparison.Ordinal)) continue;
+                    _seatIds.Add(a.TwinId);
+                }
+            }
+
+            for (int i = 0; i < _seatIds.Count; i++)
+            {
+                SetState(_seatIds[i], "Power", on ? 180f : 0f);
+                SetState(_seatIds[i], "OnCount", on ? 1f : 0f);
+            }
+
+            Debug.Log("[TwinCmd] 机房联动：" + (on ? "开机" : "关机") +
+                      " → " + _seatIds.Count + " 个座位点位已同步" +
+                      (on ? "（每台 180W）" : "（0W）"));
+        }
+
+        private void SeedSeatAnchors(ref int seeded, ref int unresolved)
+        {
+            TwinAnchor[] anchors = FindObjectsOfType<TwinAnchor>(true);
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                TwinAnchor a = anchors[i];
+                if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                if (!a.TwinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal)) continue;
+                SeedOne(a.TwinId, ref seeded, ref unresolved);
+            }
         }
 
         private void SeedOne(string twinId, ref int seeded, ref int unresolved)
@@ -425,27 +499,59 @@ namespace SchoolTwin.Command
         /// 【P26】这个 PC 点位代表几台电脑。
         ///
         /// 判据：**量程 ≤ 600W 视为「单台机器」**，按 `Power.Max / 180` 向下取整推台数。
-        ///   · 主脑（量程 300W）→ **1 台**，开 = 180W
-        ///   · 机房整间（量程 3000W）→ 走下面的历史分支，仍是 **10 台 / 1800W**
+        ///   · 主脑 / 机房座位（量程 300W）→ **1 台**，开 = 180W
+        ///   · 机房整间（量程 3000W+）→ **10 台 / 1800W**（沿用历史值）
         ///
-        /// 【为什么不给整间也按量程推】3000W / 180 = 16 台 = 2880W，
+        /// 【为什么不给整间按量程推】3000W / 180 = 16 台 = 2880W，
         /// 而 `PC/Room_01` 的警告线是 **2600W** —— 一进 Play 就会报假警。
         /// 要改成 16 台，得同时把该点位的 WarnHigh / AlarmHigh 一起抬上去，
-        /// 那是另一个改动，不混在这里。取不到量程同样退回 10 台。
+        /// 那是另一个改动，不混在这里。
+        ///
+        /// ── 为什么必须读 catalog 而不是 model（2026-11-01 拆座位后暴露）────
+        /// 第一版只读 `TwinDeviceModel` 的 `Power.Max`。但 model 是**按 Category 定义**的
+        /// （PC 一律 3000W），不看单个点位的实际配置。
+        /// 于是拆出来的 `Seat_01..18`（catalog 里明明是 300W 单台）
+        /// 全被当成"整间"，详情页显示 **1800W / 开机 10 台** —— 单台电脑不可能有这数据。
+        ///
+        /// 现在优先读 catalog 里这个点位自己的 `Power.Max`，取不到才退回 model。
+        /// 数据生成本来就该以"这个点位的真实配置"为准，model 只是类型默认值。
         /// </summary>
-        private static float PcUnitCount(TwinDeviceModel model)
+        private static float PcUnitCount(string twinId, TwinDeviceModel model)
         {
-            if (model == null) return 10f;
-            TwinPropertyDefinition prop = model.FindProperty("Power");
-            if (prop == null || prop.Max <= 1f) return 10f;
-            if (prop.Max > 600f) return 10f;                 // 整间点位：沿用历史值
-            return Mathf.Max(1f, Mathf.FloorToInt(prop.Max / 180f));
+            float max = -1f;
+
+            // ① 优先：catalog 里这个点位自己的量程
+            TwinRuntime rt = TwinRuntime.Instance;
+            TwinPointDefinition point = (rt != null && rt.Catalog != null)
+                ? rt.Catalog.Find(twinId) : null;
+            if (point != null)
+            {
+                TwinMetricDefinition pm = point.FindMetric("Power");
+                if (pm != null) max = pm.Max;
+            }
+
+            // ② 退回：model 的类型默认量程
+            if (max <= 1f && model != null)
+            {
+                TwinPropertyDefinition prop = model.FindProperty("Power");
+                if (prop != null) max = prop.Max;
+            }
+
+            if (max <= 1f) return 10f;        // 两处都取不到，沿用历史值
+            if (max > 600f) return 10f;       // 整间点位
+            return Mathf.Max(1f, Mathf.FloorToInt(max / 180f));
         }
 
         private void ApplyState(string twinId, CommandAction action, float value)
         {
             TwinDeviceModel model = ResolveModel(twinId);
             string type = model != null ? model.Type : "";
+
+            // 【诊断】2026-11-01 拆座位后出现"点开机命令 Failed、Power 停在波形值"，
+            // 加这一行用来确认 type 是否被正确识别成 PC（走错分支 watt 就只有 1W）。
+            Debug.Log("[Mock] ApplyState " + twinId + " action=" + action +
+                      " value=" + value.ToString("0.##") + " type=「" + type + "」" +
+                      " model=" + (model != null ? model.Type : "null"));
 
             switch (action)
             {
@@ -460,7 +566,7 @@ namespace SchoolTwin.Command
                         // 量程 0~3000W（整间 10 台 × 300W）。开 = 10 台 × 180W = 1800W，
                         // 与 SeedInitialState 的初值必须一致，否则「点开」会看起来像跳变。
                         // 【P26】台数按点位自己的功率量程推，见 PcUnitCount
-                        case "PC": watt = on ? PcUnitCount(model) * 180f : 0f; break;
+                        case "PC": watt = on ? PcUnitCount(twinId, model) * 180f : 0f; break;
                         // 【P19】投影仪：量程 0~400W，开 = 310W（灯泡 + 风扇 + 信号板）
                         case "Projector": watt = on ? 310f : 0f; break;
                         default: watt = on ? 1f : 0f; break;
@@ -475,7 +581,21 @@ namespace SchoolTwin.Command
 
                     // 电脑同理：只改总功率不改开机台数，卡片上会写「已关」而「开机 10 台」。
                     if (string.Equals(type, "PC", StringComparison.Ordinal))
-                        SetState(twinId, "OnCount", on ? PcUnitCount(model) : 0f);
+                        SetState(twinId, "OnCount", on ? PcUnitCount(twinId, model) : 0f);
+
+                    // 【P3】机房整间（`PC/Room_01`）→ **联动 18 个座位点位**。
+                    //
+                    // ── 为什么必须在这里做 ────────────────────────────────────
+                    // 拆出 `Seat_01..18` 之后，`Room_01` 不再是"那 18 台的代表"，
+                    // 它只是一个聚合点位。如果只改 `Room_01` 自己的 Power，
+                    // 18 个 Seat 的 Power 纹丝不动 → 表现层按各自 Power 判断亮灭，
+                    // 屏幕一台都不亮 —— 就是主理人 2026-11-01 反馈的
+                    // 「联动开机 / 全部关机 无法控制子电脑」。
+                    //
+                    // 放在数据层而不是表现层：这样 18 个座位各自的详情页、告警、
+                    // 用电统计会同步变化，不会出现"屏幕亮了但数据没变"。
+                    if (string.Equals(twinId, RoomPcTwinId, StringComparison.Ordinal))
+                        ApplyRoomToSeats(on);
                     break;
                 }
 

@@ -97,6 +97,32 @@ namespace SchoolTwin.UI
         /// <summary>入口图标底（56×56 R14）：Accent @0.050，实测 Δ20.4（目标 18–24）。</summary>
         public static readonly Color EntryIconFill = WithAlpha(Accent, 0.050f);
 
+        // ================================================================ 图表色序（P5 大屏）
+        //
+        // 【为什么是单色相 4 级而不是彩虹色】
+        // 见微图纸 §4.2：donut 原来用蓝/绿/橙/紫四色，和告警色（红）、状态色（绿/橙）
+        // 撞语义 —— 一段 22.9% 的"灯具"用了绿色，读起来像"正常/通过"。
+        // 改成同一色相（Accent 青蓝）的 4 级明度，靠明暗区分序列，不占语义色。
+        //
+        // 值照抄图纸 §4.2，**不要自己调**：4 级之间的 Δ 是按深色卡底标定过的，
+        // 调一格就会和相邻段糊在一起（P00 §C6：8bit 只能按 1/255 跳档）。
+        public static readonly Color ChartSeq1 = Accent;                            // (0.20, 0.75, 1.00)
+        public static readonly Color ChartSeq2 = new Color(0.16f, 0.60f, 0.80f, 1f);
+        public static readonly Color ChartSeq3 = new Color(0.13f, 0.47f, 0.63f, 1f);
+        public static readonly Color ChartSeq4 = new Color(0.10f, 0.35f, 0.47f, 1f);
+
+        /// <summary>
+        /// 曲线下方填充：Accent @0.012。
+        ///
+        /// 【为什么这么淡】Linear 色彩空间会把半透明 alpha 的视觉重量抬高 2–4 倍（P00 §C5），
+        /// 0.012 在 sRGB 直觉里"几乎看不见"，实际屏幕上是 Δ10–14 的一层薄雾 ——
+        /// 刚好托住曲线又不抢网格线。
+        ///
+        /// 若截图取色 Δ 落在 10–14 之外，按 **1/255 档** 跳到 0.008 或 0.016，
+        /// 不要做 0.010/0.014 这种连续微调（P00 §C6：8bit 表达不出来，改了也是白改）。
+        /// </summary>
+        public static readonly Color ChartFill = WithAlpha(Accent, 0.012f);
+
         // ---- 状态色（与 TwinStatusPalette 同值，那边后续改为转发到这里）----
         public static readonly Color StatusUnknown = new Color(0.35f, 0.38f, 0.45f, 1f);
         public static readonly Color StatusNormal = new Color(0.20f, 0.80f, 0.35f, 1f);

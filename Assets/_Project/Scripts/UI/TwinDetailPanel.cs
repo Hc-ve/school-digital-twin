@@ -2141,11 +2141,23 @@ namespace SchoolTwin.UI
 
             SetCached(row.Name, ref row.LastNameText, MetricLabel(def.Metric));
 
-            // 趋势线的纵轴跟量程条一致；换了指标就清空历史（否则会拿旧指标的数据画新线）
+            // 趋势线的纵轴跟量程条一致。
+            //
+            // 【P3】换指标时不再 `Clear()` —— 改为从时序缓冲回填。
+            // 原来清空是为了"别拿旧指标的数据画新线"，现在缓冲是按 (设备, 指标) 分开存的，
+            // 回填天然不会串数据；而且打开即有完整 60s 曲线，不用等它长出来。
+            // 缓冲里没有这个指标（冷启动）时，Fill 内部会退回 Clear，行为和以前一致。
             if (row.Spark != null)
             {
                 row.Spark.SetRange(def.Min, def.Max);
-                if (!keepSparkHistory) row.Spark.Clear();
+                if (!keepSparkHistory)
+                {
+                    TwinMetricHistory.Fill(_selected, def.Metric, row.Spark);
+
+                    // 回填的点时间戳已接近当前时刻，把 LastPushTime 拨到"现在"，
+                    // 避免下一帧立刻再推一个几乎重合的点。
+                    row.LastPushTime = Time.unscaledTime;
+                }
             }
 
             BuildBands(row);

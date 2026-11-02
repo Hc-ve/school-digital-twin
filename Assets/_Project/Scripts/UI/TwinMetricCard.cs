@@ -32,7 +32,15 @@ namespace SchoolTwin.UI
             Normal,
             Alarm,
             NoData,
-            Stale
+            Stale,
+            /// <summary>
+            /// 【C-28】估算态：有数、但数不是实测量出来的。
+            ///
+            /// 与 NoData 的区别是**必须有数** —— 原先「总功率 / 今日用电」恒走 NoData
+            /// （显示「—」+「数据源未接入」），而同一个面板的统计页却在给 ≈ 4.6 kW，
+            /// 一处有数一处未接入，读的人只会认为其中一处是错的。现在两边同源同口径。
+            /// </summary>
+            Estimate
         }
 
         /// <summary>
@@ -49,6 +57,7 @@ namespace SchoolTwin.UI
         private Text _value;
         private Text _unit;
         private Text _noDataNote;           // 无数据态说明：「数据源未接入」
+        private Text _estimateNote;         // 估算态副标：「按额定功率 × 台数」
         private CanvasGroup _group;
 
         private int _valueSize = TwinTheme.FsDisplay;
@@ -124,6 +133,15 @@ namespace SchoolTwin.UI
             _noDataNote.text = "数据源未接入";
             _noDataNote.gameObject.SetActive(false);
 
+            // 【C-28】估算态副标：说清"这个数怎么来的"。
+            // 放在同一位置（左下角），与 NoData 说明互斥 —— 一张卡同时出现
+            // 「按额定功率 × 台数」和「数据源未接入」会自相矛盾。
+            _estimateNote = TwinUIFactory.Label(Rect, "EstimateNote", TwinTheme.FsMicro,
+                TextAnchor.LowerLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_estimateNote.rectTransform, 12f, h - 16f, w - 24f, 12f);
+            _estimateNote.text = "按额定功率 × 台数";
+            _estimateNote.gameObject.SetActive(false);
+
             // 告警顶部条：2px 高、**横向**「红 100% → 红 0%」（规格四要求横向线性，不是垂直）。
             // x 从 12 起 —— 卡片 R12 的圆角在 0–12 这一段是弧线，条子从 0 起会从弧口探出去。
             // 右端用 WithAlpha(StatusAlarm, 0) 而不是 Color.clear：后者是 (0,0,0,0)，
@@ -154,6 +172,17 @@ namespace SchoolTwin.UI
             if (_state == state) return;
             _state = state;
             ApplyState();
+        }
+
+        /// <summary>
+        /// 【C-28】改估算态副标文案。默认「按额定功率 × 台数」；
+        /// 电量卡要写「按额定功率 × 台数 × 运行时长」—— 两张卡的推算链不一样，
+        /// 副标必须各自说清，否则看的人算不对账。
+        /// </summary>
+        public void SetEstimateNote(string note)
+        {
+            if (_estimateNote == null) return;
+            _estimateNote.text = note;
         }
 
         /// <summary>呼吸由页面统一开关：有未确认告警时告警卡呼吸，其它卡片一律不动。</summary>
@@ -193,6 +222,7 @@ namespace SchoolTwin.UI
             // 而不是"出事了"。改用四个信号叠加：色条加粗、顶部红条、数值变红、呼吸。
             bool alarm = _state == CardState.Alarm;
             bool noData = _state == CardState.NoData;
+            bool estimate = _state == CardState.Estimate;
 
             switch (_state)
             {
@@ -205,6 +235,12 @@ namespace SchoolTwin.UI
                     barColor = TwinTheme.TextMuted;
                     if (_value != null && !string.Equals(_value.text, NoDataText, System.StringComparison.Ordinal))
                         _value.text = NoDataText;
+                    break;
+
+                case CardState.Estimate:
+                    // 估算态色条走 TextSecondary 而非 Muted：Muted 是"没有"，
+                    // 这里是有数但精度低，两者不该一个亮度。
+                    barColor = TwinTheme.TextSecondary;
                     break;
 
                 default:
@@ -234,10 +270,16 @@ namespace SchoolTwin.UI
             if (_noDataNote != null && _noDataNote.gameObject.activeSelf != noData)
                 _noDataNote.gameObject.SetActive(noData);
 
-            // 只有告警卡允许数值染色；无数据态用 Muted（规格 §5.2 #75859C）
+            // 估算说明：「按额定功率 × 台数」只在估算态出现（与上一条互斥）
+            if (_estimateNote != null && _estimateNote.gameObject.activeSelf != estimate)
+                _estimateNote.gameObject.SetActive(estimate);
+
+            // 只有告警卡允许数值染色；无数据态用 Muted（规格 §5.2 #75859C），
+            // 估算态用 TextSecondary —— 数值仍然是"数"，不能压到 Muted 那个"没有"的亮度。
             if (_value != null)
                 _value.color = alarm ? TwinTheme.StatusAlarm
                              : noData ? TwinTheme.TextMuted
+                             : estimate ? TwinTheme.TextSecondary
                              : TwinTheme.TextPrimary;
 
             LayoutUnit();

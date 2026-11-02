@@ -151,6 +151,14 @@ namespace SchoolTwin.Present
         }
 
         private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
+        /// <summary>`_EmissionMap` 的属性 id（座位单台开机要换回白色遮罩，见 ApplyScreen）。</summary>
+        private static readonly int EmissionMapId = Shader.PropertyToID("_EmissionMap");
+
+        /// <summary>主脑点位：只管自己那 1 台屏（「开机 / 关闭主脑」）。</summary>
+        private const string MasterPcTwinId = "ClassComputer/PC/Master_01";
+
+        /// <summary>机房聚合点位：管 18 个座位屏（「联动开机 / 全部关机」的逐个动画）。</summary>
+        private const string RoomPcTwinId = "ClassComputer/PC/Room_01";
 
         /// <summary>
         /// 一扇门的可视化：绕**门轴**转一个角度。
@@ -332,6 +340,28 @@ namespace SchoolTwin.Present
             }
         }
 
+        /// <summary>
+        /// 退出 Play / 对象被禁用时**先掐掉所有协程**。
+        ///
+        /// 【为什么必须有】关机协程里有等待循环。Unity 退出 Play 时会等
+        /// 正在跑的协程收尾，如果循环里靠 `Time.*` 推进而时间已经冻结，
+        /// 就永远收不了尾 —— 表现为卡在 `Application.Shutdown.CleanupEngine`，
+        /// 实测 1 分 39 秒（主理人 2026-11-01）。循环内部已经加了退出判断，
+        /// 这里是第二道保险，也顺手处理"运行期禁用组件"的情况。
+        /// </summary>
+        private void OnDisable()
+        {
+            StopAllCoroutines();
+            _shutdownRoutine = null;
+
+            // 座位快照是运行时 new 的 Texture2D，不销毁会随每次进出 PPT 累积
+            if (_seatSnapshot != null)
+            {
+                Destroy(_seatSnapshot);
+                _seatSnapshot = null;
+            }
+        }
+
         private void OnDestroy()
         {
             TwinCommandCenter center = TwinCommandCenter.Instance;
@@ -417,9 +447,81 @@ namespace SchoolTwin.Present
                 }
             }
 
+            // 【P3】【顺序是硬要求】座位索引必须在白名单同步**之前**建好。
+            //
+            // 实测（2026-11-01 日志）：18 个 Seat 全部报「附近找不到 Monitor 材质的 Renderer」。
+            // 原因是 `PC/Room_01` 的 `SyncOne` 排在前面，它先把 18 块显示器材质名
+            // 从 `Monitor04` 改成了 `TwinScreen_ClassComputer`；
+            // 之后 `SyncSeats` 才去拍快照 —— 按材质名筛，一块都抓不到。
+            // 快照必须发生在任何材质改动之前，这是唯一的正确时机。
+            EnsureSeatIndex();
+
             IReadOnlyList<string> ids = TwinControlScope.All;
             for (int i = 0; i < ids.Count; i++) SyncOne(ids[i]);
+
+            // 【P3】机房播放器提前建好。
+            //
+            // 等到第一个座位开机才建的话，那一刻要同步加载 `desktop.jpg` + Blit，
+            // 首次会有几十毫秒卡顿，而且 RT 在被赋值前是空的。
+            // 放在这里（主脑的 `ScreenVisual` 已建好、模板材质可用）最合适。
+            RoomScreenPlayer();
+
+            // 【P3】机房座位（Seat_XX）不在硬编码白名单里，单独补一轮。
+            //
+            // 为什么不能直接往 `TwinControlScope.Ids` 里加 18 个字符串：
+            // 那张表是 `All` 的唯一来源，`All` 又被表现层逐个遍历。
+            // 展开写死既冗长，又会让"以后增删座位要改两处"（表 + 场景）。
+            // 这里改成**从场景实际存在的锚点里扫**，座位数量变化自动跟随。
+            SyncSeats();
         }
+
+        /// <summary>
+        /// 把场景里所有 Seat 点位同步一遍（材质绑定 / 状态刷新）。
+        ///
+        /// ── 为什么缓存 id 列表 ──────────────────────────────────────────
+        /// 本方法在 `Update` 的 0.1s 轮询里调。第一版每次都 `FindObjectsOfType<TwinAnchor>`
+        /// 全场景扫一遍 —— 那是几百个对象的遍历，10Hz 下直接拖帧。
+        /// 现在只在首次扫一次、缓存 id，之后只遍历这 18 个字符串。
+        ///
+        /// 座位数量变化（增删点位）需要重启 Play 才会重新扫 —— 场景是固定的，
+        /// 运行期不会动态加减座位，这个取舍可以接受。
+        /// </summary>
+        /// <summary>
+        /// 一次性建好座位索引：显示器快照 + 座位 TwinId 列表。
+        ///
+        /// 必须在 `PC/Room_01` 的 `SyncOne` 之前调用 —— 见 `Update` 里的说明。
+        /// </summary>
+        private void EnsureSeatIndex()
+        {
+            if (_seatsScanned) return;
+            _seatsScanned = true;
+
+            SnapshotMonitorRenderers();
+
+            TwinAnchor[] anchors = FindObjectsOfType<TwinAnchor>(true);
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                TwinAnchor a = anchors[i];
+                if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                if (!IsSeatPoint(a.TwinId)) continue;
+                _seatIds.Add(a.TwinId);
+            }
+
+            Debug.Log("[TwinPresent] 座位点位扫描：" + _seatIds.Count + " 个" +
+                      (_seatIds.Count == 0
+                          ? "（没扫到 —— 检查点位是否挂在 Monitor 上、TwinId 是否以 ClassComputer/PC/Seat_ 开头）"
+                          : ""));
+        }
+
+        private void SyncSeats()
+        {
+            if (_runtime == null) return;
+            for (int i = 0; i < _seatIds.Count; i++) SyncOne(_seatIds[i]);
+        }
+
+        /// <summary>缓存的座位 TwinId（首次扫描后固定）。</summary>
+        private readonly List<string> _seatIds = new List<string>(32);
+        private bool _seatsScanned;
 
         // ---------------------------------------------------------------- 同步
 
@@ -1953,6 +2055,28 @@ namespace SchoolTwin.Present
             /// <summary>见 `LampVisual.HasApplied`：不能只判 IsOn，否则「第一次就是关」会早退（99 号清单第 20 条）。</summary>
             public bool HasApplied;
             public bool IsOn;
+
+            // ---- 【P3】座位屏的单台渐变（见 ApplyScreen 的 Seat 分支）----
+            //
+            // 联动开机时 18 个 Seat 同帧收到开机，如果立刻设色就会"啪一下全亮"，
+            // 把 `Master_01` 的逐个点亮节奏压掉。所以 Seat 在自己做过渡之前
+            // 先判断 Master_01 是否正在播放节奏，正在播就让位。
+            /// <summary>渐变开始时刻（`Time.time`）。</summary>
+            public float FadeAt;
+            /// <summary>渐变时长（秒）；0 = 没有进行中的渐变。</summary>
+            public float FadeDur;
+            /// <summary>起始亮度（0~1）。</summary>
+            public float FadeFrom;
+            /// <summary>目标亮度（0~1）。</summary>
+            public float FadeTo;
+
+            /// <summary>【P3】逐个熄灭的起点时间；&lt;0 表示没有正在进行的熄灭。</summary>
+            public float UnlitAt = -1f;
+            /// <summary>【P3】已经熄灭了几台。</summary>
+            public int UnlitCount;
+
+            /// <summary>该屏所属 TwinId（算错开延迟用）。</summary>
+            public string TwinId;
         }
 
         private readonly Dictionary<string, ScreenVisual> _screens =
@@ -1979,20 +2103,264 @@ namespace SchoolTwin.Present
             {
                 v = BuildScreen(anchor);
                 if (v == null) { _noVisual.Add(twinId); return; }
+                v.TwinId = twinId;      // 座位错开延迟要用它算序号
                 _screens[twinId] = v;
             }
 
             TwinValue power;
-            bool on = anchor.TryGetValue("Power", out power) && power.Value > 0.5f;
+            bool hasPower = anchor.TryGetValue("Power", out power);
+            bool on = hasPower && power.Value > 0.5f;
 
             // 断电时屏幕必须是黑的 —— 和灯同一条理由（见 SyncLamp）
-            if (!TwinCircuit.IsPowered(twinId)) on = false;
+            bool powered = TwinCircuit.IsPowered(twinId);
+            if (!powered) on = false;
+
+            // 【诊断】座位屏"数据是开、画面是暗"这类问题，光看 `on` 值分辨不出来：
+            // 要区分是 Power 真的为 0、还是被电力回路强制压成 false。
+            // 只在状态翻转时打一条，不会刷屏。
+            if (IsSeatPoint(twinId) && (!v.HasApplied || v.IsOn != on))
+            {
+                Debug.Log("[TwinPresent] Seat 判定 " + twinId +
+                          " Power=" + (hasPower ? power.Value.ToString("0.0") : "取不到") +
+                          " 有电=" + powered + " → on=" + on);
+            }
 
             ApplyScreen(v, on);
         }
 
+        /// <summary>该点位是否是机房座位（`ClassComputer/PC/Seat_XX`）。</summary>
+        private static bool IsSeatPoint(string twinId)
+        {
+            return !string.IsNullOrEmpty(twinId) &&
+                   twinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal);
+        }
+
+        private static bool HasSeatAnchor(Renderer r)
+        {
+            if (r == null) return false;
+
+            // 【必须往父级找，不能只查自身】
+            // 实测（2026-11-01）：`Monitor04 (4)` 这类显示器是"空根节点 + 子 mesh"的结构，
+            // 我的点位锚点挂在**根节点**上，而 Renderer 在**子节点**。
+            // 只 `GetComponent<TwinAnchor>()` 会返回 null → 这条判断失效 →
+            // `PC/Room_01` 把 18 块座位屏全部当成自己的抢走，材质名也一并改掉，
+            // 后续 Seat 按材质名找屏时一块都找不到（就是那 18 条「附近找不到」）。
+            TwinAnchor a = r.GetComponent<TwinAnchor>();
+            if (a == null) a = r.GetComponentInParent<TwinAnchor>(true);
+
+            return a != null && IsSeatPoint(a.TwinId);
+        }
+
+        /// <summary>
+        /// 给一个座位点位找到它对应的那块显示器。**三层兜底，任一层命中即可。**
+        ///
+        /// ── 为什么需要三层 ────────────────────────────────────────────────
+        /// 2026-11-01 实测：18 个 Seat 全部报「附近找不到 Monitor 材质的 Renderer」。
+        /// 根因是 `PC/Room_01` 抢先接管了 18 块屏并改掉材质名，快照拍到 0 块。
+        /// 单靠"材质名 + 快照"这一个依据，只要前面有人改过材质就全盘失效。
+        /// 所以改成：**锚点自身优先**（不依赖材质名和时机），
+        /// 快照次之，实时扫描兜底。
+        /// </summary>
+        private Renderer ResolveSeatScreen(TwinAnchor anchor, out float dist, out string how)
+        {
+            dist = 0f;
+            how = "";
+
+            // ---- ① 锚点自身 / 子级 ----
+            // 点位是建在显示器模型上的，这是最准的来源：不用猜、不用比距离、不看材质名。
+            // 仍要校验材质，挡住"锚点挂错对象（比如挂到桌子上）"的情况。
+            Renderer own = anchor.GetComponent<Renderer>();
+            if (own == null) own = anchor.GetComponentInChildren<Renderer>(true);
+
+            if (own != null && IsScreenMaterial(own) && !_claimedRenderers.Contains(own))
+            {
+                _claimedRenderers.Add(own);
+                how = "锚点自身";
+                return own;
+            }
+
+            // ---- ② 快照 + 水平距离最近 ----
+            Renderer near = FindNearestMonitorRenderer(anchor.transform.position, out dist);
+            if (near != null) { how = "快照最近"; return near; }
+
+            // ---- ③ 兜底：快照为空时实时扫一遍 ----
+            // 走到这里说明材质名已被别处改过、快照里一块都没有。
+            // 直接在全场景 MeshRenderer 里按「屏幕材质 + 水平距离最近」找。
+            Renderer[] all = FindObjectsOfType<MeshRenderer>(true);
+            Renderer best = null;
+            float bestDist = 2.0f;      // 2m 之外不可能是"自己那台"
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || _claimedRenderers.Contains(r)) continue;
+                if (!IsScreenMaterial(r)) continue;
+
+                // 已被**别的**座位认领的跳过；自己那台要放行（否则 ① 失败时永远找不到自己）
+                TwinAnchor pa = r.GetComponentInParent<TwinAnchor>(true);
+                if (pa != null && IsSeatPoint(pa.TwinId) &&
+                    !string.Equals(pa.TwinId, anchor.TwinId, StringComparison.Ordinal)) continue;
+
+                float dx = r.transform.position.x - anchor.transform.position.x;
+                float dz = r.transform.position.z - anchor.transform.position.z;
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                if (d < bestDist) { bestDist = d; best = r; }
+            }
+
+            if (best != null)
+            {
+                _claimedRenderers.Add(best);
+                dist = bestDist;
+                how = "实时扫描";
+            }
+
+            return best;
+        }
+
+        /// <summary>是不是一块显示器（原材质名，或被本类改过名的座位材质）。</summary>
+        private static bool IsScreenMaterial(Renderer r)
+        {
+            if (r == null || r.sharedMaterial == null) return false;
+            string n = r.sharedMaterial.name;
+            return n.StartsWith("Monitor04", StringComparison.Ordinal)
+                || n.StartsWith("TwinScreen_", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 找离指定位置最近的、**尚未被其他座位认领**的显示器。
+        ///
+        /// ── 为什么不能用"材质名 == Monitor04"现场筛（2026-11-01 实测踩到）────
+        /// 第一版每次都 `FindObjectsOfType<Renderer>` 再筛材质名。
+        /// 但 `BuildScreen` 会给绑定的那台**换材质**（改成 `TwinScreen_05`），
+        /// 于是第二台 Seat 找的时候，第一台已经"不是 Monitor04 了"，
+        /// 筛选结果越来越少 —— 最后大部分 Seat 找不到，静默返回 null，
+        /// 表现就是"点了没反应"，而且日志里只有一行不起眼的失败提示。
+        ///
+        /// 现在改成：首次同步时把**所有** Monitor 材质 Renderer 收进快照，
+        /// 之后从这个固定列表里找，谁被认领了就跳过谁。
+        /// 材质怎么改都不影响筛选依据。
+        /// </summary>
+        private Renderer FindNearestMonitorRenderer(Vector3 pos, out float bestDist)
+        {
+            bestDist = float.MaxValue;
+            Renderer best = null;
+
+            for (int i = 0; i < _monitorRenderers.Count; i++)
+            {
+                Renderer r = _monitorRenderers[i];
+                if (r == null) continue;
+                if (_claimedRenderers.Contains(r)) continue;   // 已被别的座位认领
+
+                float dx = r.transform.position.x - pos.x;
+                float dz = r.transform.position.z - pos.z;
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+
+                if (d < bestDist) { bestDist = d; best = r; }
+            }
+
+            if (best != null) _claimedRenderers.Add(best);
+            return best;
+        }
+
+        /// <summary>场景里所有显示器 Renderer 的快照（首次同步时收集，之后不再扫）。</summary>
+        private readonly List<Renderer> _monitorRenderers = new List<Renderer>(24);
+
+        /// <summary>已被某个座位认领的 Renderer（防止两台座位抢同一块屏）。</summary>
+        private readonly HashSet<Renderer> _claimedRenderers = new HashSet<Renderer>();
+
+        /// <summary>收集显示器快照。**必须在任何材质被改动之前调用**。</summary>
+        private void SnapshotMonitorRenderers()
+        {
+            _monitorRenderers.Clear();
+
+            Renderer[] all = FindObjectsOfType<Renderer>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || r.sharedMaterial == null) continue;
+                if (!IsScreenMaterial(r)) continue;
+                _monitorRenderers.Add(r);
+            }
+
+            Debug.Log("[TwinPresent] 显示器快照：" + _monitorRenderers.Count + " 块（材质名 Monitor04* / TwinScreen_*）");
+        }
+
+        /// <summary>TwinId 最后一段（`ClassComputer/PC/Seat_05` → `05`），用作材质名后缀。</summary>
+        private static string TailOf(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return "any";
+            int i = twinId.LastIndexOf('_');
+            return i >= 0 && i < twinId.Length - 1 ? twinId.Substring(i + 1) : twinId;
+        }
+
         private ScreenVisual BuildScreen(TwinAnchor anchor)
         {
+            // 【P3】机房座位（Seat_XX）：**只接管锚点所在的那一台显示器**。
+            //
+            // ── 为什么要单独一条分支 ────────────────────────────────────
+            // 下面的通用逻辑按「材质名 Monitor04 + 分区包围盒」收集**一整批** Renderer，
+            // 那是给 `PC/Room_01`（18 台聚合）用的 —— 它本来就该一次点亮一片。
+            // 但拆出 `Seat_01..18` 之后，每个 Seat 代表**单台**，
+            // 再走批量收集就会 18 个点位抢同一批显示器，点哪台都全亮。
+            //
+            // Seat 的锚点是我在 `TwinP3SplitPcSeats` 里直接挂在 Monitor 模型上的，
+            // 所以「自己那台」就是锚点身上的 Renderer，不需要再按材质名去猜。
+            if (IsSeatPoint(anchor.TwinId))
+            {
+                // 【为什么按"最近的 Monitor 材质 Renderer"找，而不是 GetComponent】
+                //
+                // 实测日志（2026-11-01）暴露：Seat_06..13 这 8 个全部绑到了同一个
+                // `Monitor04 (4)` —— `GetComponent<Renderer>()` / `GetComponentInChildren`
+                // 在部分显示器上拿到的是共享的/父级的 Renderer，不是各自那台。
+                // 结果就是 8 个座位共用一个材质，点哪台都改同一个，画面上看不出变化。
+                //
+                // 位置是唯一不会串的依据：锚点是我按显示器位置挂的，最近的显示器就是它。
+                Renderer self = ResolveSeatScreen(anchor, out float dist, out string how);
+
+                if (self == null)
+                {
+                    Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」附近找不到 Monitor 材质的 Renderer，" +
+                              "这台座位不会有屏幕反应。");
+                    return null;
+                }
+
+                Material seatMat = new Material(self.sharedMaterial);
+
+                // ── 座位屏必须有自己的材质 ──────────────────────────────────
+                //
+                // 曾经试过"复用 `Room_01` 建的 unit"，理由是省 draw call。
+                // 但实测场景里**根本没有 `Room_01` 这个锚点**（2026-11-02 grep 计数为 0），
+                // 于是 18 台拿到的是同一个原始 `Monitor04` 材质 ——
+                // 点一台 18 台全亮，联动开机也没有任何一台会亮。
+                //
+                // 现在每台自建一份：独立材质 = 单台可控，不依赖任何别的点位存在。
+                // 名字带座位号，避免 Unity 把同名材质合并。
+                seatMat.name = "TwinScreen_" + TailOf(anchor.TwinId);
+                seatMat.SetTexture(EmissionMapId, BuildScreenMask());
+                seatMat.EnableKeyword("_EMISSION");
+                seatMat.SetColor(EmissionId, Color.black);
+
+                if (!seatMat.HasProperty(EmissionId))
+                {
+                    Debug.Log("[TwinPresent] 「" + anchor.TwinId + "」的显示器材质没有 _EmissionColor，" +
+                              "无法做「开机屏幕亮」。");
+                    Destroy(seatMat);
+                    return null;
+                }
+
+                self.sharedMaterial = seatMat;
+
+                // 每个 Seat 只建一次。这条日志用来确认「绑到了哪台、距离多远」——
+                // 如果出现两个座位绑同一个 RendererID，说明位置聚类有问题。
+                Debug.Log("[TwinPresent] Seat 屏幕绑定：" + anchor.TwinId + " → " + self.name +
+                          "  (id=" + self.GetInstanceID() + ", 距锚点 " + dist.ToString("0.00") + "m, 来源=" + how + ")");
+
+                ScreenVisual sv = new ScreenVisual();
+                sv.Renderers = new Renderer[] { self };
+                sv.Material = seatMat;
+                return sv;
+            }
+
             // 【为什么按「材质名 + 分区」找，而不是按名字找】
             // `Monitor04 (7)` 这种编号是 Unity 复制实例时加的，删一个再加一个就全变
             // （99 号清单第 7 条：名字不是身份）。而材质是模型自带的，改不了。
@@ -2002,6 +2370,7 @@ namespace SchoolTwin.Present
             Renderer[] all = FindObjectsOfType<Renderer>(true);
             string zone = anchor.Zone;
             bool hasBounds = !string.IsNullOrEmpty(zone) && TwinRoomBounds.Has(zone);
+            bool isRoom = string.Equals(anchor.TwinId, "ClassComputer/PC/Room_01", StringComparison.Ordinal);
 
             // 【P26】主脑排除：`PC/Room_01` 只接管**除主脑之外**的显示器。
             //
@@ -2035,11 +2404,26 @@ namespace SchoolTwin.Present
             {
                 Renderer r = all[i];
                 if (r == null || r.sharedMaterial == null) continue;
-                if (!r.sharedMaterial.name.StartsWith("Monitor04", StringComparison.Ordinal)) continue;
+                if (!IsScreenMaterial(r)) continue;
 
                 // 主脑那台归 `PC/Master_01` 管，这里跳过
                 if (masterT != null &&
                     (r.transform == masterT || r.transform.IsChildOf(masterT))) continue;
+
+                // 【P3】座位屏归属：**只归 `Room_01`，`Master_01` 不许碰**。
+                //
+                // ── 这条判断写反过一次，代价是两个交互全错 ──────────────────
+                // 2026-11-01 主理人实测：
+                //   · 点「开机」（应只开主脑）→ 19 台全亮
+                //   · 点「关闭主脑」（应只关主脑+投影）→ 19 台全灭
+                // 根因就是 `Master_01` 把 18 个座位屏也收进了自己的 `ScreenVisual`，
+                // 它的开关等于"整间总闸"，和菜单语义完全对不上。
+                //
+                // 正确分工：
+                //   · `Master_01` → **只 1 台**（主脑自己），管「开机 / 关闭主脑」
+                //   · `Room_01`   → **18 台**（座位），管「联动开机 / 全部关机」的逐个动画
+                //   · `Seat_XX`   → 复用 `Room_01` 的 unit，只管自己那一台
+                if (!isRoom && HasSeatAnchor(r)) continue;
 
                 if (hasBounds)
                 {
@@ -2198,6 +2582,11 @@ namespace SchoolTwin.Present
             // 【P26】有独立材质的（多块屏）→ 颜色交给 `TickScreenStagger` 按时间推进
             if (v.Units != null && v.Units.Length > 1)
             {
+                // 诊断：联动开/关机到底有没有走到这里、几台屏
+                Debug.Log("[TwinPresent] 多屏开关 " + v.TwinId + " on=" + on +
+                          " 屏数=" + v.Units.Length + " 播放器=" +
+                          (v.Player != null && v.Player.HasVideo ? "有视频" : "无视频"));
+
                 if (on)
                 {
                     // 上次点亮完已经合并回共享材质了，这里重新拆开
@@ -2209,16 +2598,35 @@ namespace SchoolTwin.Present
                 {
                     v.LitAt = -1f;
                     v.LitCount = 0;
-                    // 关机：直接全灭（不做逐个熄灭，下课时没人看屏幕）。
-                    // 合并期间发光走的是共享材质，只设 Units 是无效的。
-                    if (v.Material != null && v.Material.HasProperty(EmissionId))
-                        v.Material.SetColor(EmissionId, Color.black);
-                    for (int i = 0; i < v.Units.Length; i++)
-                        if (v.Units[i] != null) v.Units[i].SetColor(EmissionId, Color.black);
+
+                    // 【P3】关机也走节奏：从最后一台开始逐个熄灭。
+                    //
+                    // 原来是"直接全灭"（注释：下课时没人看屏幕）。但主理人 2026-11-01
+                    // 明确要"和开机对称的关机动画" —— 开机 19 台一个个亮，
+                    // 关机 19 台一个个灭，观感才是一套东西。
+                    //
+                    // `SplitUnits(v, false)`：先恢复每台的独立材质，但**不设黑**，
+                    // 保持当前亮度，交给 `TickScreenStagger` 按时间一个个灭。
+                    // 如果之前已经合并过（`Merged`），不拆开就只能改共享材质，
+                    // 一改全灭 —— 那样又回到没有动画。
+                    SplitUnits(v, false);
+
+                    v.UnlitAt = Time.time;
+                    v.UnlitCount = 0;
                 }
 
                 // 视频播放仍由播放器管（它作用在模板材质 `Material` 上，不影响 Units 的颜色）
-                if (v.Player != null && v.Player.HasVideo) v.Player.SetOn(on);
+                if (v.Player != null && v.Player.HasVideo)
+                {
+                    v.Player.SetOn(on);
+
+                    // 【P3】RT / 白色遮罩要同步铺到每一台的独立材质上。
+                    //
+                    // 只设 `v.Material`（模板）是没用的：真正挂在 Renderer 上的是 `Units[i]`。
+                    // 不同步的话，整间开机后座位屏要么停在白色遮罩（看不到 PPT），
+                    // 要么停在旧 RT（关机后还留着最后一帧）。
+                    SyncUnitsEmissionMap(v, on);
+                }
                 return;
             }
 
@@ -2233,7 +2641,111 @@ namespace SchoolTwin.Present
             if (v.Material == null) return;
             if (!v.Material.HasProperty(EmissionId)) return;
 
+            // 【P3】座位屏：单台自己的短渐亮 / 渐暗。
+            //
+            // ── 这段踩过两个坑，都记下来 ────────────────────────────────
+            // ① 分支末尾**必须 return**。第一版漏了，于是下面那句
+            //    `v.Material.SetColor(on ? 亮 : 黑)` 又把延迟/渐变覆盖成瞬时设色 ——
+            //    表现就是"点了就亮，没有动画"，而且日志里 on 值全对，很难看出问题。
+            // ② 联动开机时**必须让位**给 `Master_01` 的 `Units` 逐个点亮。
+            //    18 个 Seat 同帧收到开机，各自渐变会把 0.15s/台 的节奏压成"一起亮"。
+            if (IsSeatPoint(v.TwinId))
+            {
+                // 【P3】座位屏用**机房独立播放器**，不再借主脑的。
+                // 借主脑会出现"主脑一换片座位跟着变"、"主脑关了座位没画面"两类问题，
+                // 每修一个就得在"摘下来 / 接回去"之间来回切。独立之后各播各的。
+                PcScreenPlayer roomPlayer = RoomScreenPlayer();
+
+                if (on)
+                {
+                    Texture map = null;
+
+                    if (roomPlayer != null && roomPlayer.HasVideo)
+                    {
+                        roomPlayer.SetOn(true);
+
+                        // 【P3】开机播一次动画，但**只能播一次**。
+                        //
+                        // 踩过的坑（2026-11-02）：一开始这里无条件
+                        // `ShowStill + PlayFile`，联动开机时 18 个 Seat 依次进来，
+                        // 等于把同一段视频 `Prepare` 18 遍 —— 每一遍都打断上一遍，
+                        // 结果画面永远出不来，看起来就是"没有开机动画"。
+                        //
+                        // 现在按批量窗口区分：
+                        //   · 窗口内（联动）：只有**第一个**座位负责起播，其余只接 RT
+                        //   · 窗口外（单台）：自己起播，先把其他开着的座位摘成快照防串台
+                        bool bulk = Time.time < _bulkSeatUntil;
+
+                        if (bulk)
+                        {
+                            if (!_bulkBootStarted)
+                            {
+                                _bulkBootStarted = true;
+                                roomPlayer.PlayFile(_roomVideo);
+                            }
+                        }
+                        else
+                        {
+                            DetachSeatScreens(v.TwinId);
+                            roomPlayer.PlayFile(_roomVideo);
+                        }
+
+                        map = roomPlayer.ScreenRT;
+                    }
+
+                    if (map == null) map = BuildScreenMask();   // 播放器不可用时退回白屏
+
+                    if (v.Material.GetTexture(EmissionMapId) != map)
+                        v.Material.SetTexture(EmissionMapId, map);
+                }
+
+                v.FadeAt = Time.time + (on ? SeatLightDelay(v.TwinId) : 0f);
+                v.FadeDur = on ? 0.25f : 0.18f;
+                v.FadeFrom = on ? 0f : CurrentBrightness(v.Material);
+                v.FadeTo = on ? 1f : 0f;
+
+                // 开机先压黑，等 FadeAt 再往上走（避免"先亮一下再变黑再亮"）
+                if (on) v.Material.SetColor(EmissionId, Color.black);
+
+                Texture mapNow = v.Material.GetTexture(EmissionMapId);
+                Debug.Log("[TwinPresent] Seat 开关 " + v.TwinId + " on=" + on +
+                          " 延迟=" + (v.FadeAt - Time.time).ToString("0.00") + "s" +
+                          " 时长=" + v.FadeDur.ToString("0.00") + "s" +
+                          " 贴图=" + (mapNow != null ? mapNow.name : "null"));
+                return;
+            }
+
             v.Material.SetColor(EmissionId, on ? _screenEmission : Color.black);
+        }
+
+        /// <summary>
+        /// 取材质当前自发光亮度（0~1）。关机渐暗要从"现在的亮度"往下走，
+        /// 直接写死 1 会在屏幕本来就暗的时候先跳亮一下再变暗。
+        /// </summary>
+        private static float CurrentBrightness(Material m)
+        {
+            if (m == null || !m.HasProperty(EmissionId)) return 1f;
+            Color c = m.GetColor(EmissionId);
+            return Mathf.Clamp01(Mathf.Max(c.r, Mathf.Max(c.g, c.b)));
+        }
+
+        /// <summary>
+        /// 座位开机的错开延迟（秒）。`Seat_01` → 0s，`Seat_18` → 1.19s。
+        ///
+        /// 为什么用序号而不是随机数：序号是场景里"从前往后、从左到右"排的，
+        /// 按序号错开，视觉上就是**一排排亮过去**；随机数会让远处先亮、近处后亮，看着乱。
+        /// </summary>
+        private static float SeatLightDelay(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return 0f;
+
+            int i = twinId.LastIndexOf('_');
+            if (i < 0 || i >= twinId.Length - 1) return 0f;
+
+            int idx;
+            if (!int.TryParse(twinId.Substring(i + 1), out idx)) return 0f;
+
+            return Mathf.Clamp(idx - 1, 0, 24) * 0.07f;
         }
 
         /// <summary>
@@ -2257,7 +2769,16 @@ namespace SchoolTwin.Present
 
             for (int i = 0; i < v.Renderers.Length && i < v.Units.Length; i++)
             {
-                if (v.Renderers[i] != null) v.Renderers[i].sharedMaterial = v.Material;
+                if (v.Renderers[i] == null) continue;
+
+                // 【P3】座位屏**不合并** —— 合并会把它的独立材质换成共享材质，
+                // `Seat_XX` 手里那份引用就失效了，单台开关随之失灵。
+                //
+                // 代价只是这几台保持独立材质（本来就是逐台的），
+                // 主脑那台照常合并，不影响原有的合批优化。
+                if (HasSeatAnchor(v.Renderers[i])) continue;
+
+                v.Renderers[i].sharedMaterial = v.Material;
             }
             v.Merged = true;
         }
@@ -2265,14 +2786,44 @@ namespace SchoolTwin.Present
         /// <summary>
         /// 【P26】把共享材质重新拆成每台一份，准备逐个亮。和 `MergeUnits` 配对。
         /// </summary>
-        private void SplitUnits(ScreenVisual v)
+        /// <summary>
+        /// 把"当前该用的发光贴图"铺到每一台的独立材质上。
+        ///
+        /// 开机且播放器有画面 → 用视频 RT（PPT / 开机视频）；
+        /// 否则 → 用白色遮罩（屏幕亮起来就是一块白，和拆座位之前一样）。
+        ///
+        /// 为什么必须逐台设：`Units[i]` 是 `new Material(variant)` 出来的**副本**，
+        /// `variant` 换了 `_EmissionMap` 不会自动传到副本上。
+        /// </summary>
+        private void SyncUnitsEmissionMap(ScreenVisual v, bool on)
         {
-            if (!v.Merged || v.Material == null || v.Units == null) return;
+            if (v == null || v.Units == null) return;
+
+            Texture tex = (on && v.Player != null && v.Player.ScreenRT != null)
+                ? (Texture)v.Player.ScreenRT
+                : BuildScreenMask();
+
+            for (int i = 0; i < v.Units.Length; i++)
+                if (v.Units[i] != null) v.Units[i].SetTexture(EmissionMapId, tex);
+        }
+
+        /// <summary>
+        /// 【P26】把共享材质重新拆成每台一份，准备逐个亮。和 `MergeUnits` 配对。
+        ///
+        /// `blackout`：拆开时要不要顺手把每台设黑。
+        ///   · 开机 → true（拆完从全黑开始一个个亮）
+        ///   · 关机 → **false**（拆完保持当前亮度，再由 `TickScreenStagger` 一个个灭）
+        /// 关机时如果传 true，19 台会在拆开的那一帧全黑 —— 又变回"瞬间全灭"了。
+        /// </summary>
+        private void SplitUnits(ScreenVisual v, bool blackout = true)
+        {
+            if (v.Material == null || v.Units == null) return;
+            if (!v.Merged && !blackout) return;      // 本来就没合并，关机时无需拆
 
             for (int i = 0; i < v.Renderers.Length && i < v.Units.Length; i++)
             {
                 if (v.Renderers[i] == null || v.Units[i] == null) continue;
-                v.Units[i].SetColor(EmissionId, Color.black);
+                if (blackout) v.Units[i].SetColor(EmissionId, Color.black);
                 v.Renderers[i].sharedMaterial = v.Units[i];
             }
             v.Merged = false;
@@ -2292,7 +2843,59 @@ namespace SchoolTwin.Present
             foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
             {
                 ScreenVisual v = kv.Value;
-                if (v == null || v.Units == null || v.Units.Length < 2) continue;
+                if (v == null) continue;
+
+                // 【P3】座位屏的单台渐变（见 ApplyScreen 的 Seat 分支）。
+                // 放在 stagger 之前：到点先推进渐变，后面的多屏逻辑与它互不相干。
+                if (v.FadeDur > 0f && Time.time >= v.FadeAt)
+                {
+                    float p = Mathf.Clamp01((Time.time - v.FadeAt) / v.FadeDur);
+                    float k = Mathf.Lerp(v.FadeFrom, v.FadeTo, p);
+
+                    if (v.Material != null && v.Material.HasProperty(EmissionId))
+                        v.Material.SetColor(EmissionId, Color.Lerp(Color.black, _screenEmission, k));
+
+                    if (p >= 1f) v.FadeDur = 0f;
+                }
+
+                if (v.Units == null || v.Units.Length < 2) continue;
+
+                // 【P3】关机也走节奏：从**最后一台**开始逐个熄灭。
+                // 和开机对称 —— 开机从左扫到右亮，关机从右扫到左灭。
+                if (!v.IsOn && v.UnlitAt >= 0f)
+                {
+                    float elapsedU = Time.time - v.UnlitAt;
+                    int wantU = Mathf.Clamp(
+                        1 + Mathf.FloorToInt(elapsedU / Mathf.Max(0.01f, _screenStagger)),
+                        0, v.Units.Length);
+
+                    if (wantU > v.UnlitCount)
+                    {
+                        for (int i = v.UnlitCount; i < wantU; i++)
+                        {
+                            int idx = v.Units.Length - 1 - i;      // 倒序灭
+                            if (idx < 0 || idx >= v.Renderers.Length) continue;
+
+                            Renderer r = v.Renderers[idx];
+                            if (r != null && r.sharedMaterial != null &&
+                                r.sharedMaterial.HasProperty(EmissionId))
+                                r.sharedMaterial.SetColor(EmissionId, Color.black);
+                        }
+                        v.UnlitCount = wantU;
+
+                        if (v.UnlitCount >= v.Units.Length)
+                        {
+                            v.UnlitAt = -1f;
+                            // 收尾：共享材质也压黑（主脑那台可能还指着它）
+                            if (v.Material != null && v.Material.HasProperty(EmissionId))
+                                v.Material.SetColor(EmissionId, Color.black);
+                            Debug.Log("[TwinPresent] 「" + kv.Key + "」" +
+                                      v.Units.Length + " 台已逐个熄灭");
+                        }
+                    }
+                    continue;
+                }
+
                 if (!v.IsOn || v.LitAt < 0f) continue;
 
                 float elapsed = Time.time - v.LitAt;
@@ -2422,6 +3025,29 @@ namespace SchoolTwin.Present
 
         private System.Collections.IEnumerator ShutdownRoutine(System.Action onComplete, bool includeRoom)
         {
+            PcScreenPlayer mp = MasterPlayer();
+            PcScreenPlayer pp = ProjectorPlayer();
+            PcScreenPlayer rp = includeRoom ? RoomScreenPlayer() : null;
+
+            // 【P3】座位屏的两种处理，按 `includeRoom` 分开：
+            //
+            //   · 只关主脑（false）→ **摘下来**，座位固定成桌面快照。
+            //     否则主脑播关机视频，18 台跟着一起黑，看着像整间都关了。
+            //
+            //   · 全部关机（true）→ **接回去**（用主脑的 RT），但要主脑**还开着**才有画面可接。
+            //     主脑已经被关掉时，它的播放器没有输出 —— 这时接过去只会是黑屏，
+            //     所以保持座位原样，让它们按各自 Power=0 渐暗即可。
+            if (!includeRoom)
+            {
+                DetachSeatScreens();
+            }
+            else
+            {
+                // 全部关机：座位接回**机房自己的** RT。
+                // 不再看主脑状态 —— 主脑关着也能播（机房有独立播放器了）。
+                RestoreSeatScreens();
+            }
+
             bool hasVideo = !string.IsNullOrEmpty(_shutdownVideo)
                             && PcMediaLibrary.Exists(_shutdownVideo);
 
@@ -2437,10 +3063,6 @@ namespace SchoolTwin.Present
             _playMode = PcPlayMode.None;
             if (_slideShow != null) _slideShow.Hide();
 
-            PcScreenPlayer mp = MasterPlayer();
-            PcScreenPlayer pp = ProjectorPlayer();
-            PcScreenPlayer rp = includeRoom ? RoomPlayer() : null;
-
             // 【机房必须先合并材质】18 台在"逐个亮"完成后会合并回共享材质；
             // 但如果在点亮途中就点关机，它们还各用一份 `Units` 材质，
             // 而播放器只操作共享的 `Material` —— 那样 18 台不会显示关机动画。
@@ -2452,9 +3074,24 @@ namespace SchoolTwin.Present
                     MergeUnits(rv);
             }
 
-            if (mp != null) mp.PlayFile(_shutdownVideo);
-            if (pp != null) pp.PlayFile(_shutdownVideo);
-            if (rp != null) rp.PlayFile(_shutdownVideo);
+            // 【P3】只让**还开着**的设备播关机动画。
+            //
+            // 之前这里无条件 `SetOn(true)` + `PlayFile`，结果是：
+            // 先点「关闭主脑」把主脑和投影关掉，再点「全部关机」，
+            // 它们又被点亮播了一遍关机动画 —— 已经关了的设备不该再关一次
+            // （主理人 2026-11-02 指出这是逻辑错误）。
+            if (mp != null && mp.IsOn) mp.PlayFile(_shutdownVideo);
+            if (pp != null && pp.IsOn) pp.PlayFile(_shutdownVideo);
+
+            // 机房播放器**不判 IsOn**：它不是某一块屏，而是 18 台座位的视频源。
+            // 判 IsOn 的话，只要它某次被关过，下一次全部关机就播不出来了。
+            // 这里无条件点亮 + 换片；播完由 `ForceScreensOff` 之后的
+            // `ShowStill(Desktop)` 把 RT 恢复成桌面（播放器本身不关）。
+            if (rp != null)
+            {
+                rp.SetOn(true);
+                rp.PlayFile(_shutdownVideo);
+            }
 
             Debug.Log("[P26] 关机动画开始：" + _shutdownVideo);
 
@@ -2463,19 +3100,30 @@ namespace SchoolTwin.Present
             // 【为什么不能只等主脑】主脑和机房是各自 `Prepare()` 的，
             // 就绪时间可能差几百毫秒。只等主脑会在机房动画放到一半时断电 ——
             // 表现就是"子电脑的关机动画没播完/根本没播"。
-            float t = 0f;
-            while (t < _shutdownTimeout)
+            //
+            // 【为什么用绝对时间】原来累加 `Time.unscaledDeltaTime`，
+            // 退出 Play 时它恒为 0 → 死循环 → Unity 卡在 CleanupEngine
+            // 等这个协程（实测 1 分 39 秒）。换成 realtimeSinceStartup 差值，
+            // 并在退出时直接收手。
+            float start = Time.realtimeSinceStartup;
+
+            while (true)
             {
+                if (!Application.isPlaying) yield break;
+
+                float elapsed = Time.realtimeSinceStartup - start;
+                if (elapsed >= _shutdownTimeout) break;
+
                 bool done = IsNullOrFinished(mp) && IsNullOrFinished(pp) && IsNullOrFinished(rp);
-                if (done && t > 0.5f) break;       // 至少等 0.5 秒，避免"刚播就判完"
-                t += Time.unscaledDeltaTime;
+                if (done && elapsed > 0.5f) break;     // 至少等 0.5 秒，避免"刚播就判完"
+
                 yield return null;
             }
 
             // 最后一帧留一下，不然画面消失得太突然
             yield return new WaitForSecondsRealtime(0.4f);
 
-            Debug.Log("[P26] 关机动画结束（" + t.ToString("0.0") + "s，" +
+            Debug.Log("[P26] 关机动画结束（" + (Time.realtimeSinceStartup - start).ToString("0.0") + "s，" +
                       (includeRoom ? "含机房 18 台" : "仅主脑+投影") + "），断电");
             _shutdownRoutine = null;
 
@@ -2489,6 +3137,14 @@ namespace SchoolTwin.Present
             // `SetOn(false)` 会清屏并把自发光压黑，着色器随即切到"幕布本色"（白布）。
             // 命令真发成功后 `SyncProjector` 还会再设一次，幂等无害。
             ForceScreensOff(includeRoom);
+
+            // 【P3】机房播放器切回桌面图。
+            // 关机动画播完后 RT 停在最后一帧（通常是黑的），
+            // 不恢复的话下次座位开机就会显示那张黑帧。
+            if (_roomPlayer != null && _roomPlayer.HasVideo && _roomPlayer.IsOn)
+            {
+                _roomPlayer.ShowStill(PcMediaLibrary.Desktop);
+            }
 
             if (onComplete != null) onComplete();
         }
@@ -2507,12 +3163,15 @@ namespace SchoolTwin.Present
                 sv.HasApplied = true;
             }
 
-            if (includeRoom && _screens.TryGetValue("ClassComputer/PC/Room_01", out sv) && sv != null)
-            {
-                if (sv.Player != null) sv.Player.SetOn(false);
-                sv.IsOn = false;
-                sv.HasApplied = true;
-            }
+            // 【P3】机房播放器**不关**。
+            //
+            // 它不是"某一块屏"，而是 18 台座位的画面来源。关掉之后：
+            //   · 下次座位开机时 `SetOn(true)` 会走"从待机图切回默认视频"的分支，
+            //     又把 `boot.mp4` 拉起来 → RT 黑 1~2 秒 → 座位黑屏
+            //   · 而且 `SetOn(false)` 会把 RT 清黑，已经亮着的座位也会跟着黑
+            //
+            // 代价是这一路解码常驻。只有 1 路（18 台共用一张 RT），
+            // 比每次开关都重新 Prepare 一次便宜得多。
 
             ProjectorVisual pv;
             if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null)
@@ -2531,6 +3190,133 @@ namespace SchoolTwin.Present
             return p == null || p.IsFinished;
         }
 
+        /// <summary>
+        /// 【P3】单台座位关机：**先播关机视频，播完再真正断电**。
+        ///
+        /// ── 为什么需要这一层 ────────────────────────────────────────────
+        /// 「全部关机」走 `BeginShutdown`，会播 `_shutdownVideo`（Windows 关机画面）。
+        /// 但面板上单点一台关机是直接发 `SetPower(0)` —— 屏幕瞬间黑，
+        /// 和整间关机的观感完全不是一套（主理人 2026-11-01 要求"单台也要一样"）。
+        ///
+        /// ── 为什么借主脑的播放器 ────────────────────────────────────────
+        /// 18 台共用一个视频 RT。给每台单独建 `VideoPlayer` 要 18 份解码资源，
+        /// 对这个规模不划算。借用的代价：播关机视频期间，**其他开着的座位
+        /// 也会显示同一段画面**（它们指向同一个 RT）。演示时通常是"整间开机后
+        /// 单关一台"，看起来就像"这台在关机，别的还在跑" —— 可以接受。
+        ///
+        /// `onComplete` 里发真正的 `SetPower(0)`。视频缺失/解码失败时立即执行，
+        /// 不能把关机卡住（和 `ShutdownRoutine` 同一条原则）。
+        /// </summary>
+        public void BeginSeatShutdown(string twinId, System.Action onComplete)
+        {
+            if (string.IsNullOrEmpty(twinId)) { if (onComplete != null) onComplete(); return; }
+
+            // 同一台重复点关机：忽略第二次。
+            // 不加的话会起两个协程同时 `PlayFile`，播放器状态互相打断，
+            // 表现是"点了没反应"或者关机动画播一半就断。
+            if (!_seatShuttingDown.Add(twinId)) return;
+
+            // 【P3】先把**其他**开着的座位切到桌面快照，只留这一台接机房 RT。
+            //
+            // 18 台共用一张 RT，不摘的话：点一台关机，
+            // 其他开着的座位也会跟着播关机视频（主理人 2026-11-02 要求"交互逻辑不能有漏洞"）。
+            DetachSeatScreens(twinId);
+
+            StartCoroutine(SeatShutdownRoutine(twinId, onComplete));
+        }
+
+        /// <summary>正在播关机动画的座位（防重入）。</summary>
+        private readonly HashSet<string> _seatShuttingDown = new HashSet<string>();
+
+        private System.Collections.IEnumerator SeatShutdownRoutine(string twinId, System.Action onComplete)
+        {
+            // 座位属于机房 → 用机房独立播放器（它的 RT 就是座位屏正在显示的那一份）
+            PcScreenPlayer player = RoomScreenPlayer();
+            if (player == null) player = MasterPlayer();
+
+            bool hasVideo = player != null && player.HasVideo
+                            && !string.IsNullOrEmpty(_shutdownVideo)
+                            && PcMediaLibrary.Exists(_shutdownVideo);
+
+            if (!hasVideo)
+            {
+                Debug.Log("[P3] 没有可用的关机视频，直接断电：" + twinId);
+                _seatShuttingDown.Remove(twinId);
+                if (onComplete != null) onComplete();
+                yield break;
+            }
+
+            // 播放关机视频（和「全部关机」同一段素材）
+            player.PlayFile(_shutdownVideo);
+
+            // 这一台的贴图指向 RT，才能看到画面
+            ScreenVisual seat;
+            if (_screens.TryGetValue(twinId, out seat) && seat != null && seat.Material != null
+                && player.ScreenRT != null)
+            {
+                seat.Material.SetTexture(EmissionMapId, player.ScreenRT);
+            }
+
+            Debug.Log("[P3] 单台关机动画开始：" + twinId + "（" + _shutdownVideo + "）");
+
+            // ── 等待必须用**绝对时间**，不能累加 deltaTime ──────────────────
+            // 第一版写的是 `t += Time.unscaledDeltaTime`，退出 Play 时
+            // `unscaledDeltaTime` 会变成 0，`t` 永远不增长 → 死循环 →
+            // Unity 卡在 `Application.Shutdown.CleanupEngine` 等这个协程结束，
+            // 实测卡了 1 分 39 秒（主理人 2026-11-01 反馈）。
+            // 换成 `realtimeSinceStartup` 差值，并在退出时直接 `yield break`。
+            float start = Time.realtimeSinceStartup;
+
+            while (true)
+            {
+                if (!Application.isPlaying) { _seatShuttingDown.Remove(twinId); yield break; }
+
+                float elapsed = Time.realtimeSinceStartup - start;
+                if (elapsed >= _shutdownTimeout) break;            // 超时保护
+                if (player.IsFinished && elapsed > 0.5f) break;    // 播完（至少留 0.5s）
+
+                yield return null;
+            }
+
+            if (Application.isPlaying)
+                yield return new WaitForSecondsRealtime(0.2f);     // 留最后一帧
+
+            _seatShuttingDown.Remove(twinId);
+
+            // 【P3】机房播放器切回**桌面图**，不是切回开机视频。
+            //
+            // 切 `PlayFile(_roomVideo)` 的话要重新 Prepare，RT 会黑 1~2 秒 ——
+            // 下一台座位在这段时间开机就是黑屏。
+            // 桌面图是同步合成的，立刻有画面。
+            if (player != null && player.HasVideo && player.IsOn)
+            {
+                player.ShowStill(PcMediaLibrary.Desktop);
+            }
+
+            if (onComplete != null) onComplete();
+        }
+
+        /// <summary>联动开机的"批量窗口"截止时间（`Time.time`）。</summary>
+        private float _bulkSeatUntil = -1f;
+
+        /// <summary>本次批量窗口内是否已经起播过开机动画（防止 18 台各播一遍）。</summary>
+        private bool _bulkBootStarted;
+
+        /// <summary>
+        /// 标记"接下来一段时间是批量操作"。
+        ///
+        /// `TwinPcMenuDriver.SendRoom` 在逐个下发 18 条开机命令之前调它。
+        /// 窗口内只有**第一个**座位负责 `PlayFile(boot)`，其余 17 台只接 RT ——
+        /// 18 台共用一张 RT，一次起播就够，重复起播会互相打断。
+        ///
+        /// 窗口外（面板单点一台）则自己起播，并先把其他开着的座位摘成快照。
+        /// </summary>
+        public void BeginBulkSeats(float seconds = 1.5f)
+        {
+            _bulkSeatUntil = Time.time + Mathf.Max(0.1f, seconds);
+            _bulkBootStarted = false;      // 新一轮批量，允许重新起播一次
+        }
+
         /// <summary>取主脑的播放器（换片/暂停都通过它）。</summary>
         private PcScreenPlayer MasterPlayer()
         {
@@ -2538,6 +3324,81 @@ namespace SchoolTwin.Present
             if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
                 return sv.Player;
             return null;
+        }
+
+        /// <summary>机房独立播放器（18 个座位屏共用它的 RT）。</summary>
+        private PcScreenPlayer _roomPlayer;
+
+        /// <summary>机房播放器的输出目标材质（不挂任何 Renderer，只用来接 RT）。</summary>
+        private Material _roomPlayerMat;
+
+        /// <summary>
+        /// 取（必要时创建）机房独立播放器。
+        ///
+        /// ── 为什么必须独立 ──────────────────────────────────────────────
+        /// 之前 18 台座位借的是**主脑的播放器 RT**，于是：
+        ///   · 主脑播 PPT / 视频 → 18 台跟着播
+        ///   · 主脑一关 → 18 台没有任何视频来源，全部关机时只能干等渐暗
+        /// 每修一个现象就得在"摘下来 / 接回去"之间反复横跳，因为两者共用一份资源。
+        ///
+        /// 独立之后各播各的：
+        ///   · 主脑关了，机房照样能播关机动画
+        ///   · 主脑放 PPT，机房不受影响
+        ///
+        /// 成本只有 **1 个 `VideoPlayer` + 1 张 RT**（不是 18 个）——
+        /// 18 台座位都指向同一张 `ScreenRT`。
+        ///
+        /// 素材沿用 `_roomVideo` / `_shutdownVideo`，和主脑同一批文件，不额外占磁盘。
+        /// </summary>
+        private PcScreenPlayer RoomScreenPlayer()
+        {
+            if (_roomPlayer != null) return _roomPlayer;
+
+            // 模板材质：优先复制主脑那份，着色器/贴图配置天然一致
+            Material template = null;
+            ScreenVisual master;
+            if (_screens.TryGetValue(MasterPcTwinId, out master) && master != null)
+                template = master.Material;
+
+            if (template == null) return null;   // 主脑还没建好，下次再试
+
+            Material mat = new Material(template);
+            mat.name = "TwinRoomScreen";
+            mat.SetTexture(EmissionMapId, BuildScreenMask());
+            mat.EnableKeyword("_EMISSION");
+            mat.SetColor(EmissionId, Color.black);
+            _roomPlayerMat = mat;
+
+            Vector2 uvMin, uvMax;
+            ScreenUvRect(out uvMin, out uvMax);
+
+            _roomPlayer = PcScreenPlayer.Create(
+                "RoomScreen", _roomVideo, uvMin, uvMax, mat, _screenEmission, transform,
+                _roomVideoAtlasSize, _screenVideoInset, 0f, _roomVolume, null);
+
+            // 【预热】创建完立刻点亮并**贴桌面图**，让 RT 里马上有画面。
+            //
+            // ── 为什么不播 `boot.mp4` ──────────────────────────────────
+            // `PlayFile` 内部是 `Prepare()` 异步加载，512 图集的视频要 1~2 秒才出第一帧，
+            // 这段时间 RT 是**全黑**的。18 台座位亮起来时正对着这张黑 RT，
+            // 表现就是"联动开机后 18 台保持黑屏"（主理人 2026-11-02 实测）。
+            //
+            // 而且 18 台共用一张 RT，同步播同一个视频时，
+            // 先亮的看到第 0 帧、后亮的看到第 1.2 秒 —— 不像"各自开机"，
+            // 更像"同一段画面被一块块揭开"，观感反而怪。
+            //
+            // 所以机房走"桌面静态图"：开机立刻有画面（就是开机完成后的桌面），
+            // 关机时才换成 `shutdown.mp4` 播动画（那是用户明确要求的）。
+            if (_roomPlayer != null && _roomPlayer.HasVideo)
+            {
+                _roomPlayer.SetOn(true);
+                _roomPlayer.ShowStill(PcMediaLibrary.Desktop);
+            }
+
+            Debug.Log("[P3] 机房播放器已创建（独立于主脑）：" + _roomVideo +
+                      (_roomPlayer != null && _roomPlayer.HasVideo ? "，已贴桌面图" : "，无视频（退回白屏）"));
+
+            return _roomPlayer;
         }
 
         /// <summary>取投影仪的播放器。</summary>
@@ -2599,6 +3460,10 @@ namespace SchoolTwin.Present
 
             _playMode = PcPlayMode.Ppt;
 
+            // 【P3】把座位屏从主脑的 RT 上摘下来。
+            // 「打开 PPT」只针对主脑 + 幕布，18 台学生机不该跟着放同一份幻灯片。
+            DetachSeatScreens();
+
             // 第一次进从第 1 页开始；再次进入保持上次那一页
             if (_slideShow.Index < 0) _slideShow.Show(0);
             else _slideShow.Show(_slideShow.Index);
@@ -2614,10 +3479,10 @@ namespace SchoolTwin.Present
         /// </summary>
         private List<Material> CollectPptTargets()
         {
-            List<Material> mats = new List<Material>(4);
+            List<Material> mats = new List<Material>(24);
 
             ScreenVisual sv;
-            if (_screens.TryGetValue("ClassComputer/PC/Master_01", out sv) && sv != null)
+            if (_screens.TryGetValue(MasterPcTwinId, out sv) && sv != null)
             {
                 if (sv.Material != null) mats.Add(sv.Material);
                 if (sv.Units != null)
@@ -2626,6 +3491,16 @@ namespace SchoolTwin.Present
                         if (sv.Units[i] != null) mats.Add(sv.Units[i]);
                 }
             }
+
+            // 【P3】**机房 18 台不参与 PPT**。
+            //
+            // 2026-11-02 主理人实测：「打开 PPT」后 18 台座位也显示了 PPT 画面，
+            // 退出后它们又停在黑屏（状态还是开机）。这是上一轮我把 Seat 材质
+            // 加进这里造成的 —— 语义上「打开 PPT」是主脑投到幕布，
+            // 学生机不该跟着放同一份幻灯片。
+            //
+            // 所以这里只收主脑 + 投影仪。座位屏由 `RestoreSeatScreens` 在退出时
+            // 恢复成各自的开机画面（见 ExitPptMode）。
 
             ProjectorVisual pv;
             if (_projectors.TryGetValue("ClassComputer/Projector/Main_01", out pv) && pv != null
@@ -2686,7 +3561,59 @@ namespace SchoolTwin.Present
             // 【为什么回待机图而不是重播开机】2026-10-27 用户报"退出 PPT 又开始开机"。
             // 真实电脑退出全屏放映是回到桌面，不会重启。
             RestoreIdleScreen();
+
+            // 【P3】18 个座位屏不在 PPT 的贴图目标里了，但**上一版进过 PPT 的那次**
+            // 可能把它们留在黑屏上。这里按各自状态重新落一次色，
+            // 保证"退出 PPT 后座位还是开机画面"。
+            RestoreSeatScreens();
+
             Debug.Log("[P26] 退出 PPT 模式");
+        }
+
+        /// <summary>
+        /// 把 18 个座位屏恢复成"开机画面"。
+        ///
+        /// `RestoreIdleScreen` 只管主脑和投影仪（PPT 的真实目标）。
+        /// 座位屏要单独处理：开着的恢复亮色 + 正常贴图，关着的保持黑。
+        /// 不处理的话会出现"状态是开机、画面是黑的"（主理人 2026-11-02 反馈）。
+        /// </summary>
+        private void RestoreSeatScreens()
+        {
+            Texture mask = BuildScreenMask();
+
+            // ── 判据只应该是"机房播放器的 RT 还在不在" ─────────────────────
+            // 之前这里读主脑的 RT，还带着 `master.IsOn` 判断 ——
+            // 主脑一关就退回白遮罩，全部关机时座位播不了关机视频。
+            // 现在座位有独立的机房播放器，和主脑状态彻底解耦。
+            Texture shared = null;
+            PcScreenPlayer roomPlayer = RoomScreenPlayer();
+            if (roomPlayer != null && roomPlayer.ScreenRT != null)
+                shared = roomPlayer.ScreenRT;
+
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                if (!IsSeatPoint(kv.Key)) continue;
+
+                ScreenVisual v = kv.Value;
+                if (v == null || v.Material == null || !v.Material.HasProperty(EmissionId)) continue;
+
+                if (!v.IsOn)
+                {
+                    v.Material.SetColor(EmissionId, Color.black);
+                    continue;
+                }
+
+                v.Material.SetTexture(EmissionMapId, shared != null ? shared : mask);
+                v.Material.SetColor(EmissionId, _screenEmission);
+                v.FadeDur = 0f;      // 取消可能残留的渐变，直接落到最终亮度
+            }
+
+            // 座位已经换回主脑的 RT / 白遮罩，快照没用了
+            if (_seatSnapshot != null)
+            {
+                Destroy(_seatSnapshot);
+                _seatSnapshot = null;
+            }
         }
 
         /// <summary>
@@ -2711,6 +3638,10 @@ namespace SchoolTwin.Present
 
             _playMode = PcPlayMode.Video;
             _videoIndex = 0;
+
+            // 【P3】同上：视频播放只针对主脑 + 幕布，座位屏先摘下来
+            DetachSeatScreens();
+
             PlayCurrentVideo();
 
             Debug.Log("[P26] 进入视频模式：" + _videoList.Length + " 个视频，正在播第 " +
@@ -2752,7 +3683,111 @@ namespace SchoolTwin.Present
             if (_playMode != PcPlayMode.Video) return;
             _playMode = PcPlayMode.None;
             RestoreIdleScreen();
+
+            // 【P3】座位屏恢复各自的开机画面（和退出 PPT 走同一条路）
+            RestoreSeatScreens();
+
             Debug.Log("[P26] 退出视频模式");
+        }
+
+        /// <summary>
+        /// 主脑要播 PPT / 视频时，先把座位屏从主脑的 RT 上摘下来。
+        ///
+        /// ── 为什么需要这一步 ────────────────────────────────────────────
+        /// 座位屏的 `_EmissionMap` 指向主脑播放器的 RT（单台开机播开机视频用的），
+        /// 主脑一换片，18 台就跟着变。
+        /// 但「打开 PPT / 视频播放」的语义只针对主脑 + 幕布 ——
+        /// 2026-11-02 主理人实测：打开视频后 18 台也在放同一个视频。
+        ///
+        /// 摘下来 = 贴图换成白色遮罩，亮色保持不变（座位还是"开着"的样子）。
+        /// </summary>
+        private void DetachSeatScreens(string exceptTwinId = null)
+        {
+            // ── 为什么要快照，而不是直接给白色遮罩 ──────────────────────
+            // 第一版给的是 `BuildScreenMask()`（纯白），结果 18 台在放 PPT / 视频
+            // 期间变成一片白 —— 状态是"开机"，画面却像关机前的一瞬间，
+            // 主理人 2026-11-02 反馈"其他电脑出现白色遮罩"。
+            //
+            // 正确做法：**把机房此刻的画面拷一张下来**给座位用。
+            // 那一刻机房播放器显示的是开机视频的末帧（Windows 桌面），
+            // 座位保持"桌面"看起来才是"电脑开着但没在放东西"。
+            //
+            // `exceptTwinId`：单台关机时排除目标那一台 ——
+            // 它要留在机房 RT 上播关机动画，其余座位才切成快照。
+            // 不排除的话，点一台关机，其他开着的座位也跟着播关机视频。
+            Texture tex = null;
+
+            // 用**机房自己的播放器**取快照，完全不碰主脑 ——
+            // 主脑在放 PPT / 视频时也不会影响这张图。
+            PcScreenPlayer roomPlayer = RoomScreenPlayer();
+            if (roomPlayer != null)
+            {
+                // 快照之前先固定成"桌面待机图"：直接拷当前 RT 可能拿到开机视频的中间帧
+                if (roomPlayer.IsOn && roomPlayer.HasVideo)
+                    roomPlayer.ShowStill(PcMediaLibrary.Desktop);
+
+                if (roomPlayer.ScreenRT != null)
+                    tex = SnapshotScreen(roomPlayer.ScreenRT);
+            }
+
+            if (tex == null) tex = BuildScreenMask();   // 拿不到画面时退回白遮罩
+
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                if (!IsSeatPoint(kv.Key)) continue;
+                if (!string.IsNullOrEmpty(exceptTwinId) &&
+                    string.Equals(kv.Key, exceptTwinId, StringComparison.Ordinal)) continue;
+
+                ScreenVisual v = kv.Value;
+                if (v == null || v.Material == null || !v.Material.HasProperty(EmissionId)) continue;
+                if (!v.IsOn) continue;          // 关着的保持黑
+
+                v.Material.SetTexture(EmissionMapId, tex);
+                v.Material.SetColor(EmissionId, _screenEmission);
+            }
+        }
+
+        /// <summary>座位在播放期间用的静态快照（18 台共用一张）。</summary>
+        private Texture2D _seatSnapshot;
+
+        /// <summary>
+        /// 把一张 RenderTexture 拷成普通 Texture2D。
+        ///
+        /// 只在一台设备进 PPT / 视频模式时调一次，18 台共用结果 ——
+        /// 每台拷一次的话 18 次 `ReadPixels` 会明显卡一下。
+        /// </summary>
+        private Texture2D SnapshotScreen(RenderTexture rt)
+        {
+            if (rt == null) return null;
+
+            if (_seatSnapshot != null)
+            {
+                Destroy(_seatSnapshot);
+                _seatSnapshot = null;
+            }
+
+            RenderTexture prev = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = rt;
+
+                Texture2D tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+                tex.Apply(false, false);
+                tex.name = "TwinSeatSnapshot";
+
+                _seatSnapshot = tex;
+                return tex;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[P3] 座位快照失败：" + e.Message);
+                return null;
+            }
+            finally
+            {
+                RenderTexture.active = prev;
+            }
         }
 
         /// <summary>
@@ -2866,6 +3901,17 @@ namespace SchoolTwin.Present
                     if (v != null && v.Player != null) v.Player.Tick();
                 }
             }
+
+            // 【P3】机房独立播放器也必须每帧 Tick。
+            //
+            // ── 这是"18 台没有动画"的真正原因 ────────────────────────────
+            // `PcScreenPlayer.Tick()` 负责把视频帧合成到 `ScreenRT`。
+            // 不 Tick 的话 RT 永远停在最后写入的那一帧（桌面图或黑），
+            // 于是 18 台的表现就是"画面直接跳变、没有过程"。
+            //
+            // 之前只遍历 `_screens` 和 `_projectors`，机房播放器是独立字段，
+            // 从来没进过这两个集合 —— 所以它一次都没被驱动过。
+            if (_roomPlayer != null) _roomPlayer.Tick();
         }
 
         // ---------------------------------------------------------------- 投影仪（P19）

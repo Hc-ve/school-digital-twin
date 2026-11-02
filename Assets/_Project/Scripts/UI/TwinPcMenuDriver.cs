@@ -40,7 +40,11 @@ namespace SchoolTwin.UI
     public sealed class TwinPcMenuDriver : MonoBehaviour
     {
         private const string MasterId = "ClassComputer/PC/Master_01";
-        private const string RoomId = "ClassComputer/PC/Room_01";
+
+        // 【P3】没有 `RoomId` 了：场景里不存在 `ClassComputer/PC/Room_01` 这个锚点，
+        // 机房的 18 台是 `Seat_01..18`。原来发 `Room_01` 的命令会被拒绝，
+        // 联动开机就只剩主脑和投影。现在由 `SendRoom` 逐个下发（见该方法）。
+
         private const string ProjectorId = "ClassComputer/Projector/Main_01";
 
         private const float PanelRange = 2.6f;   // 比交互点的 2.2 略大，走近就能看见
@@ -91,7 +95,7 @@ namespace SchoolTwin.UI
             if (_pendingRoomAt > 0f && Time.unscaledTime >= _pendingRoomAt)
             {
                 _pendingRoomAt = -1f;
-                Send(RoomId, 1f, "联动开机（机房）");
+                SendRoom(true, "联动开机（机房）");
             }
 
             float dist = Vector3.Distance(_player.position, _master.transform.position);
@@ -157,6 +161,22 @@ namespace SchoolTwin.UI
         private IReadOnlyList<TwinInteractMenu.Item> BuildItems()
         {
             _items.Clear();
+
+            // 【P3-5】断电时整个菜单只剩一条提示。
+            //
+            // 主理人 play 实测：把整栋楼断电后走近电脑，菜单仍显示「打开PPT / 视频播放 /
+            // 关闭主脑 / 全部关机」—— 因为下面的六态状态机只看 `IsOn(MasterId)`
+            // （设备状态仍记为开），不看"有没有电"。点了「关闭主脑」还会提示"关机中"，
+            // 而它本来就是断电关机状态，这个反馈是假的。
+            //
+            // 放在状态机之前：断电是**最优先**的事实，它盖过一切设备状态。
+            if (!TwinCircuit.IsPowered(MasterId))
+            {
+                _items.Add(new TwinInteractMenu.Item("电脑已断电 · 无法操作",
+                    TwinInteractMenu.IconKind.PowerOff, null, false));
+                return _items;
+            }
+
             TwinDevicePresenter pres = TwinDevicePresenter.Instance;
             int state;
 
@@ -168,7 +188,7 @@ namespace SchoolTwin.UI
 
                 if (mode == TwinDevicePresenter.PcPlayMode.Ppt) state = 3;
                 else if (mode == TwinDevicePresenter.PcPlayMode.Video) state = 4;
-                else state = IsOn(MasterId) ? 1 : (IsOn(RoomId) || IsOn(ProjectorId) ? 2 : 0);
+                else state = IsOn(MasterId) ? 1 : (AnySeatOn() || IsOn(ProjectorId) ? 2 : 0);
             }
 
             if (state == 0)
@@ -257,7 +277,7 @@ namespace SchoolTwin.UI
                 p.BeginShutdown(() =>
                 {
                     Send(MasterId, 0f, "全部关机（主脑）");
-                    Send(RoomId, 0f, "全部关机（机房）");
+                    SendRoom(false, "全部关机（机房）");
                     Send(ProjectorId, 0f, "全部关机（投影）");
                 }, true);          // includeRoom = true
                 return;
@@ -265,7 +285,7 @@ namespace SchoolTwin.UI
 
             // 没有表现层（极端情况）→ 直接断电，不能因为播不了动画就关不掉
             Send(MasterId, 0f, "全部关机（主脑）");
-            Send(RoomId, 0f, "全部关机（机房）");
+            SendRoom(false, "全部关机（机房）");
             Send(ProjectorId, 0f, "全部关机（投影）");
         }
 
@@ -363,6 +383,73 @@ namespace SchoolTwin.UI
             else if (p.PlayMode == TwinDevicePresenter.PcPlayMode.Video) p.ExitVideoMode();
         }
 
+        /// <summary>
+        /// 机房 18 个座位里有没有任何一台开着。
+        ///
+        /// 原来这里判 `IsOn(Room_01)`，但场景里没有这个锚点，恒为 false ——
+        /// 于是"面板单开了几台座位、主脑还关着"时菜单会停在 state 0，
+        /// 只显示「开机 / 联动开机 / 投影」，**没有「全部关机」入口**，
+        /// 用户没法把开着的座位关掉。
+        /// </summary>
+        private static bool AnySeatOn()
+        {
+            IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+            if (all == null) return false;
+
+            for (int i = 0; i < all.Count; i++)
+            {
+                TwinAnchor a = all[i];
+                if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                if (!a.TwinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal)) continue;
+
+                TwinValue v;
+                if (a.TryGetValue("Power", out v) && v.Value > 0.5f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 给机房 18 个座位批量下发。
+        ///
+        /// ── 为什么不发 `Room_01` ──────────────────────────────────────────
+        /// 场景里**没有** `ClassComputer/PC/Room_01` 这个锚点
+        /// （2026-11-02 核实：只有 `Master_01` + `Seat_01..18`）。
+        /// 往一个不存在的点位发命令，命令中心会拒绝，
+        /// 联动开机就只剩主脑和投影 —— 正是主理人反馈的现象。
+        ///
+        /// 逐个发 18 条确实比一条多，但它是**唯一真实存在**的路径：
+        /// 18 个 Seat 是场景里实际建出来的点位，数据、详情页、告警都挂在它们身上。
+        /// </summary>
+        private void SendRoom(bool on, string what)
+        {
+            IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+            if (all == null) return;
+
+            // 【P3】开机前先打开"批量窗口"：
+            // 窗口内 18 个 Seat 的 ApplyScreen 不互相摘除，
+            // 一起接机房 RT 播同一段开机动画 —— 这就是"联动开机全部启动"的观感。
+            // 不开窗口的话，第一个处理的座位会把其他 17 台摘成静态快照，
+            // 变成"只有一台播动画、其余是桌面"。
+            if (on)
+            {
+                TwinDevicePresenter pres = TwinDevicePresenter.Instance;
+                if (pres != null) pres.BeginBulkSeats();
+            }
+
+            int n = 0;
+            for (int i = 0; i < all.Count; i++)
+            {
+                TwinAnchor a = all[i];
+                if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                if (!a.TwinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal)) continue;
+
+                Send(a.TwinId, on ? 1f : 0f, what);
+                n++;
+            }
+
+            Debug.Log("[P3] " + what + " → " + n + " 个座位");
+        }
+
         private void Send(string twinId, float value, string what)
         {
             TwinCommandCenter center = TwinCommandCenter.Ensure();
@@ -371,7 +458,16 @@ namespace SchoolTwin.UI
             string reject;
             if (!center.TrySend(twinId, CommandAction.SetPower, value, out reject))
             {
+                // 【P3-3】被拒绝时必须让人看见，不能只进 Console。
+                //
+                // 主理人 play 实测：把 1F 断电后点「开机」，屏幕上什么都没有 ——
+                // 因为这里原来只 `Debug.LogWarning`。用户只会认为"按钮是假的"。
+                //
+                // `reject` 本身已经是人话（`CommandText.FailReason` 的输出，
+                // 比如「设备已断电」「上一条命令还没结束」），直接上 Toast 就够，
+                // 不用再拼一层"操作失败："前缀 —— 那样两句话会重复。
                 Debug.LogWarning("[P26] " + what + " → " + twinId + " 被拒绝：" + reject);
+                SchoolTwin.UI.TwinToast.Show(reject);
                 return;
             }
             Debug.Log("[P26] " + what + " → " + twinId + " SetPower(" + value + ")");

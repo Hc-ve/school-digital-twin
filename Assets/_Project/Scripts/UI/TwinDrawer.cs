@@ -738,9 +738,57 @@ namespace SchoolTwin.UI
                 GameObject go = new GameObject("SystemPage", typeof(RectTransform));
                 go.transform.SetParent(_content, false);
                 page = go.AddComponent<TwinSystemPage>();
-                page.OnModulePicked = (key) => TwinToast.Show("「" + ModuleName(key) + "」在 P2~P5 接入");
+
+                // 【P5 收口】不再挂「在 P2~P5 接入」的提示。
+                //
+                // 这条 Toast 是 P2 阶段的占位：那时五个模块只有数据监测有内容，
+                // 点其他 Tab 弹一句"将在后续阶段接入"。现在五个页签都接了真实数据
+                // （监测 KPI/健康条/Top3、设备列表、电力树、告警、统计大屏），
+                // 再弹就是**过期文案** —— 主理人 2026-11-02 截图指出"每点一个都有"。
+                //
+                // `OnModulePicked` 字段保留（默认 null），以后要做埋点或联动再挂。
+                page.OnModulePicked = null;
             }
             _stack.Push(page);
+        }
+
+        // ================================================================ 设备详情页（P3-B）
+
+        /// <summary>
+        /// 【P3-B】打开单台设备详情 —— **页栈深一层**，不是和五个模块平级的第六页。
+        ///
+        /// 主理人裁决：「页面层级不一样，不要所有功能都套在同一页面层级上」。
+        /// 详情是"从列表钻进去"的下一层，所以走 `Push`；返回按钮 `Pop` 回管理系统。
+        ///
+        /// ── 为什么复用同一个页面实例 ────────────────────────────────────
+        /// 每点一台设备就 new 一个页面，会积一堆隐藏的 GameObject，
+        /// 而且趋势线缓存（`TwinSparkline` 的采样点）也会跟着泄漏。
+        /// 复用同一个实例、只换绑定的设备，是这类"钻取页"的标准做法。
+        /// </summary>
+        public static void OpenDeviceDetail(TwinAnchor anchor)
+        {
+            if (_instance == null || anchor == null) return;
+
+            TwinDeviceDetailPage page = _instance.GetComponentInChildren<TwinDeviceDetailPage>(true);
+            if (page == null)
+            {
+                GameObject go = new GameObject("DeviceDetailPage", typeof(RectTransform));
+                go.transform.SetParent(_instance._content, false);
+                page = go.AddComponent<TwinDeviceDetailPage>();
+            }
+
+            page.Bind(anchor);
+
+            // 已经在栈顶就只换绑定，不重复入栈（连点同一台设备时会走到这里）
+            if (_instance._stack.Top == page) return;
+            _instance._stack.Push(page);
+        }
+
+        /// <summary>【P3-B】返回上一页。详情页左上角的返回按钮调它。</summary>
+        public static void PopPage()
+        {
+            if (_instance == null) return;
+            if (_instance._stack.Depth > 1) _instance._stack.Pop();
         }
 
         private static string ModuleName(string key)
@@ -821,6 +869,16 @@ namespace SchoolTwin.UI
         {
             _maximized = !_maximized;
             _widthTarget = ResolveWidthTarget();
+
+            // 【P3】两态切换时楼层筛选复位到「全部」。
+            //
+            // 【为什么必须复位】两套视图（窄态 TwinSystemPage / 全屏 TwinFullLayer）
+            // 本轮不合并状态 —— 全屏读自己的 _chipFilter，窄态读 TwinSystemState.FloorFilter。
+            // 如果带着「1F」切过去，全屏会显示"全部楼层"但窄态还记着 1F，
+            // 切回来时列表突然少了一大半，用户会以为设备丢了。
+            // 复位成「全部」是两边都能对上的一致行为。
+            TwinSystemState.FloorFilter = 0;
+            if (_fullLayer != null) _fullLayer.ResetFloorFilter();
 
             if (_maxGlyph != null) _maxGlyph.text = _maximized ? "▣" : "□";
             ApplyFullMode();

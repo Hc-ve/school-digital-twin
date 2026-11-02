@@ -122,9 +122,12 @@ namespace SchoolTwin.UI
         private Text _sysTitle;
 
         // ---- L2 设备管理页（六列台账）----
-        private const int DevRows = 7;
+        private const int DevRows = 64;   // 【C-31】对象池容量（全场景 53 台，留余量）；原来固定 7 行看不到后面的设备
+        private const float DevRowH = 40f;
         private readonly RectTransform[] _devRow = new RectTransform[DevRows];
         private readonly TwinRoundedRect[] _devRowBg = new TwinRoundedRect[DevRows];
+        /// <summary>【C-31】台账滚动内容容器（刷新时按行数设高度）。</summary>
+        private RectTransform _devContent;
         private readonly Image[] _devBar = new Image[DevRows];
         private readonly Text[] _devId = new Text[DevRows];
         private readonly Text[] _devName = new Text[DevRows];
@@ -553,6 +556,12 @@ namespace SchoolTwin.UI
             if (_powerGroup != null) _powerGroup.gameObject.SetActive(index == 2);
             if (_alarmCenterGroup != null) _alarmCenterGroup.gameObject.SetActive(index == 3);
             if (_statsGroup != null) _statsGroup.gameObject.SetActive(index == 4);
+
+            // 【P5】统计页进**满宽态**：右栏让位，中栏 600 + 右栏 200 合并成 800。
+            // 其余四页保持原布局（负责人裁决：只允许统计页动）。
+            // 切走时这里会把它打开，恢复原样。
+            if (_asideGroup != null && _asideGroup.gameObject.activeSelf == (index == 4))
+                _asideGroup.gameObject.SetActive(index != 4);
             // 空状态组保留但不再使用：五页都有真实内容了（P29-6 收口时接的电力/告警/统计）
             if (_emptyGroup != null) _emptyGroup.gameObject.SetActive(false);
 
@@ -616,6 +625,7 @@ namespace SchoolTwin.UI
                 TwinTheme.FsTitle, "总功率", "kW");
             _sysEnergy = TwinMetricCard.Create(_monitorGroup, "FKpi_Energy", x + kw + 8f, 140f, kw, 88f,
                 TwinTheme.FsTitle, "今日用电", "kWh");
+            _sysEnergy.SetEstimateNote("按额定功率 × 运行时长");   // C-28：与功率卡口径不同，各自说清
             _sysOnline = TwinMetricCard.Create(_monitorGroup, "FKpi_Online", x, 236f, kw, 88f,
                 TwinTheme.FsTitle, "在线", TwinCode.UnitDevice);
             _sysAlarm = TwinMetricCard.Create(_monitorGroup, "FKpi_Alarm", x + kw + 8f, 236f, kw, 88f,
@@ -660,14 +670,53 @@ namespace SchoolTwin.UI
             Image line = TwinUIFactory.Block(_deviceGroup, "FDevLine", TwinTheme.Divider, false);
             TwinUIFactory.Place(line.rectTransform, x, 164f, w, 1f);
 
-            // 7 行 × 40
-            for (int i = 0; i < 7; i++)
-            {
-                float y = 172f + i * 40f;
+            // ---- 【C-31】台账列表：改成可滚动 ----
+            //
+            // 【为什么必须改】原来固定 7 行、没有 ScrollRect ——
+            // 全场景 53 台设备只能看到前 7 台，剩下的永远看不见，也没法滑
+            // （主理人 play 实测"设备不够，无法滑动"）。
+            //
+            // 结构：Scroll(收滚轮) → Viewport(RectMask2D 裁剪) → Content(承载所有行)
+            // 这是 UGUI 标准三件套，和电力页那套一致。
+            GameObject scrollGo = TwinUIFactory.Node("FDevScroll", _deviceGroup);
+            RectTransform scrollRt = (RectTransform)scrollGo.transform;
+            TwinUIFactory.Place(scrollRt, x, 172f, w, 468f);   // 172 → 640，一屏 11 行
 
-                TwinRoundedRect row = TwinUIFactory.Rounded(_deviceGroup, "FDevRow_" + i, TwinTheme.R8,
+            // ScrollRect 的滚轮事件是**沿射线命中的 Graphic 派发**的，
+            // scrollRt 本身没有 Graphic → 必须铺一层全透明垫片，否则滚轮收不到。
+            Image scrollHit = TwinUIFactory.Block(scrollRt, "Hit", new Color(0f, 0f, 0f, 0f), true);
+            TwinUIFactory.Stretch(scrollHit.rectTransform);
+
+            GameObject viewGo = TwinUIFactory.Node("Viewport", scrollRt);
+            RectTransform viewRt = (RectTransform)viewGo.transform;
+            TwinUIFactory.Stretch(viewRt);
+            viewGo.AddComponent<RectMask2D>();
+
+            GameObject contentGo = TwinUIFactory.Node("Content", viewRt);
+            RectTransform contentRt = (RectTransform)contentGo.transform;
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(1f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
+            contentRt.anchoredPosition = Vector2.zero;
+            contentRt.sizeDelta = new Vector2(0f, 0f);
+            _devContent = contentRt;
+
+            ScrollRect sr = scrollGo.AddComponent<ScrollRect>();
+            sr.viewport = viewRt;
+            sr.content = contentRt;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = 24f;
+
+            // 行对象池：一次建满 DevRows 个，刷新时只改文字/显隐，不反复 Instantiate
+            for (int i = 0; i < DevRows; i++)
+            {
+                float y = i * DevRowH;
+
+                TwinRoundedRect row = TwinUIFactory.Rounded(contentRt, "FDevRow_" + i, TwinTheme.R8,
                     Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
-                TwinUIFactory.Place(row.rectTransform, x, y, w, 36f);
+                TwinUIFactory.Place(row.rectTransform, 0f, y, w, 36f);
                 _devRow[i] = row.rectTransform;
                 _devRowBg[i] = row;
 
@@ -805,10 +854,13 @@ namespace SchoolTwin.UI
             for (int i = 0; i < filters.Length; i++)
             {
                 bool on = i == 0;
-                TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinTheme.R8,
+                // 【C-31】这里原来是 `raycast: false` —— 下面虽然加了 Button，但
+// GraphicRaycaster 只命中 raycastTarget=true 的 Graphic，所以 Button 永远收不到点击。
+// 主理人 play 实测「全屏态灰色按钮无法点击」就是这个原因（按钮在，但射线打不到）。
+TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinTheme.R8,
                     on ? TwinTheme.AccentDim : TwinTheme.Track,
                     on ? TwinTheme.AccentDim : TwinTheme.Track,
-                    on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, false);
+                    on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, true);
                 TwinUIFactory.Place(chip.rectTransform, RightInnerX, 112f + i * 30f, ColW, 26f);
                 _chipBg[i] = chip;
 
@@ -909,6 +961,21 @@ namespace SchoolTwin.UI
 
         // ================================================================ 显示与刷新
 
+        /// <summary>
+        /// 【P3】楼层筛选复位到「全部」。
+        ///
+        /// 由 `TwinDrawer.ToggleMaximize` 在两态切换时调用。
+        /// 本轮不合并两套视图的状态，所以靠"切换即复位"保证用户不会看到
+        /// "窄态筛了 1F、切全屏变全部、切回来又只剩 1F" 这种前后不一致。
+        /// </summary>
+        public void ResetFloorFilter()
+        {
+            if (_chipFilter == 0) return;
+            _chipFilter = 0;
+            RefreshChipStyles();
+            _nextRefresh = 0f;
+        }
+
         public void Show(Mode mode)
         {
             _mode = mode;
@@ -927,7 +994,9 @@ namespace SchoolTwin.UI
 
             SetGroupActive(_homeGroup, home);       // L1 左栏：KPI / 入口 / 动态
             SetGroupActive(_railGroup, !home);      // L2 左轨：5 Tab
-            SetGroupActive(_asideGroup, !home);     // L2 辅栏：筛选 / 小结 / 追溯
+
+            // 【P5】统计页满宽态：右栏让位给画布。其余四页照常显示。
+            SetGroupActive(_asideGroup, !home && _tab != 4);     // L2 辅栏：筛选 / 小结 / 追溯
 
             // 主栏五组互斥：数据监测 / 设备管理 / 电力管理 / 告警中心 / 数据统计
             SetGroupActive(_monitorGroup, !home && _tab == 0);
@@ -964,6 +1033,29 @@ namespace SchoolTwin.UI
         {
             if (_group == null || _group.alpha >= 1f) return;
             _group.alpha = Mathf.MoveTowards(_group.alpha, 1f, Time.unscaledDeltaTime / 0.15f);
+        }
+
+        /// <summary>
+        /// 每帧驱动统计页的功率曲线采样（5Hz，内部自带节流）。
+        ///
+        /// 为什么不并进 `Refresh`：它是 0.5s 节流，用它采样 60 秒只有 120 点，
+        /// 曲线会一段一段地"跳"。5Hz 和 `TwinMetricHistory.SampleInterval` 一致。
+        /// 只在统计页激活时跑，切走立刻停。
+        /// </summary>
+        private void Update()
+        {
+            UpdateStatsSpark();
+
+            // 【P5】每帧推进曲线时间轴。
+            //
+            // `UpdateStatsSpark` 是 5Hz 采样，只负责"加新点"；让整条线向左滚是
+            // `TwinSparkline.Tick(time)` 的职责。不调它的话，两次采样之间线是冻住的，
+            // 看起来像"卡了一下又跳一格"。
+            //
+            // 之前的 bug 就在这里：`Tick` 从来没被调用过，`_now` 恒为 0，
+            // 时间跨度被夹到 1 秒，所有点压到同一列 —— 曲线画不出来。
+            if (_statsSpark != null && _mode != Mode.None && _mode != Mode.Home && _tab == 4)
+                _statsSpark.Tick(Time.unscaledTime);
         }
 
         public void Refresh(bool force)
@@ -1250,8 +1342,24 @@ namespace SchoolTwin.UI
                                              : TwinMetricCard.CardState.Normal);
             }
 
-            if (_sysPower != null) _sysPower.SetState(TwinMetricCard.CardState.NoData);
-            if (_sysEnergy != null) _sysEnergy.SetState(TwinMetricCard.CardState.NoData);
+            // 【C-28】总功率 / 今日用电：原来是恒 NoData（「—」+「数据源未接入」），
+            // 而同一个面板的统计页却在给 ≈ 4.6 kW —— 一处有数一处未接入显得自相矛盾。
+            // 现在与统计页**同源同口径**（TwinPowerEstimate），数值一律标 ≈。
+            float watt = TwinPowerEstimate.TotalWatt();
+
+            if (_sysPower != null)
+            {
+                _sysPower.SetValue(total > 0 ? "≈ " + (watt / 1000f).ToString("0.0") : "—");
+                _sysPower.SetState(total > 0 ? TwinMetricCard.CardState.Estimate
+                                             : TwinMetricCard.CardState.NoData);
+            }
+
+            if (_sysEnergy != null)
+            {
+                _sysEnergy.SetValue(total > 0 ? "≈ " + TwinPowerEstimate.TodayKwh().ToString("0.00") : "—");
+                _sysEnergy.SetState(total > 0 ? TwinMetricCard.CardState.Estimate
+                                              : TwinMetricCard.CardState.NoData);
+            }
 
             // 健康条：三段真实计数，颜色按段本色；百分比文字按最严重级别取色
             int normal = Mathf.Max(0, total - alarm - offline);
@@ -1333,9 +1441,11 @@ namespace SchoolTwin.UI
                 }
             }
 
-            TwinAnchor selected = TwinDetailPanel.Instance != null
-                ? TwinDetailPanel.Instance.SelectedAnchor
-                : null;
+            // 【C-31】选中态**直接读 TwinPicker.Selected**，不要读 TwinDetailPanel.SelectedAnchor。
+            // 后者是在它自己的 Update 里同步的 —— 点行的这一帧还没同步过来，
+            // 于是"立即 Refresh(true)"画出来的高亮是上一台设备，
+            // 用户看到的就是"点了没反应"（要等 0.5s 的下一次刷新才对）。
+            TwinAnchor selected = SchoolTwin.Interaction.TwinPicker.Selected;
 
             for (int i = 0; i < DevRows; i++)
             {
@@ -1364,6 +1474,15 @@ namespace SchoolTwin.UI
                 SetText(_devTag[i], TwinStatusPalette.Label(s));
                 if (_devTag[i] != null) _devTag[i].color = c;
                 SetText(_devSwitch[i], "详情 ›");
+            }
+
+            // 【C-31】Content 高度 = 实际行数 × 行距。ScrollRect 靠它算可滚范围，
+            // 不设的话永远停在 0，滚轮滚不动（和窄态电力树同一个道理）。
+            if (_devContent != null)
+            {
+                float contentH = _devBuf.Count * DevRowH;
+                if (!Mathf.Approximately(_devContent.sizeDelta.y, contentH))
+                    _devContent.sizeDelta = new Vector2(0f, contentH);
             }
 
             SetText(_sumTotal, total.ToString());

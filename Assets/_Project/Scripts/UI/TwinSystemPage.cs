@@ -94,7 +94,8 @@ namespace SchoolTwin.UI
         private const float DevHeadY = 134f;
         private const float DevListY = 158f;
         private const float DevRowH = 44f;
-        private const int DevRows = 7;          // 158 + 7×44 = 466，视口 348 内 7 行
+        private const int DevRows = 64;         // 【C-31】对象池容量（53 台设备），原来固定 7 行看不到后面的
+        private const float DevListViewH = 348f; // 可视区高度：158 → 506
 
         // ---- 电力管理（规格 §3.3；下沿 508）----
         private const float PwrTreeY = 60f;
@@ -188,6 +189,23 @@ namespace SchoolTwin.UI
         private readonly Text[] _devName = new Text[DevRows];
         private readonly Text[] _devPos = new Text[DevRows];
         private readonly Text[] _devTag = new Text[DevRows];
+        private readonly TwinRoundedRect[] _devRowBg = new TwinRoundedRect[DevRows];
+        /// <summary>【C-31】台账滚动内容容器（刷新时按行数设高度）。</summary>
+        private RectTransform _devContent;
+
+        // 【C-30】楼层筛选 chip（全部 / 1F / 2F）。状态存在 TwinSystemState，与全屏共用一份。
+        private readonly TwinRoundedRect[] _chipBg = new TwinRoundedRect[3];
+        private readonly Text[] _chipText = new Text[3];
+
+        // 【C-30】电力树的内容容器（合闸后要重画）。原来只有 Build 时跑一次。
+        private RectTransform _pwrContent;
+
+        // 【P3】SBO 弹窗（惰性创建，只在第一次点合闸时建）。
+        private TwinSboDialog _sbo;
+
+        // 【P3-B】设备详情已改为**页栈里更深一层的独立页面**（TwinDeviceDetailPage），
+        // 不再放在本页的容器里 —— 主理人裁决「页面层级不一样，不要所有功能都套在同一层」。
+        // 打开入口见 TwinDrawer.OpenDeviceDetail()。
 
         // ---- 告警中心：6 行列表 ----
         private readonly RectTransform[] _almRow = new RectTransform[AlmRows];
@@ -199,17 +217,50 @@ namespace SchoolTwin.UI
         private Text _almSegOn;
         private Text _almSegHis;
 
+        // 【C-30】告警页签的选中态底色（要在切换时挪位置）
+        private TwinRoundedRect _almSegBg;
+        private TwinRoundedRect _almSegOnBg;
+
         private readonly List<TwinAnchor> _devBuf = new List<TwinAnchor>(64);
 
         private float _nextRefresh;
         private int _selected = -1;
         private bool _built;
 
+        // ================================================================ 统计（P5 窄态精简版）
+        //
+        // 窄态宽度 440（RightX=184），放不下 L2 的四宫格大屏，
+        // 所以这里是**精简版**：KPI 2×2 + 迷你功率曲线 + 类型 Top3。
+        // 完整大屏在 L2 统计页（点左侧「数据统计」进入）。
+        private readonly Text[] _nKpiValue = new Text[4];
+        private readonly Text[] _nKpiLabel = new Text[4];
+        private TwinSparkline _nSpark;
+        private Text _nSparkNow;
+        private readonly Text[] _nTypeName = new Text[3];
+        private readonly Text[] _nTypeVal = new Text[3];
+        private readonly Image[] _nTypeBar = new Image[3];
+        private readonly TwinRoundedRect[] _nTypeTrack = new TwinRoundedRect[3];
+        private Text _nEmpty;
+        private float _nSparkNextAt;
+        private float _nSparkLo = -1f;
+        private float _nSparkHi = -1f;
+        private float _nPowerSum;
+        /// <summary>窄态曲线是否已回填（打开即有数据）。</summary>
+        private bool _nSparkPrefilled;
+
         // ---------------------------------------------------------------- 构建
 
         public override void OnShow()
         {
-            if (_built) return;
+            if (_built)
+            {
+                // 【P3】已建过：从全屏切回来时要把筛选 chip 重画一遍 ——
+                // ToggleMaximize 已把 FloorFilter 复位成 0，但 chip 的底色/描边
+                // 只在 Build 和点击时更新，不重画就会停在"1F 还亮着"的旧样子。
+                RefreshFloorChips();
+                RefreshDevice();
+                return;
+            }
             _built = true;
 
             RectTransform root = transform as RectTransform;
@@ -379,20 +430,252 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// 数据统计（规格 §3.5）：本轮整页空状态，**不出图表**。
+        /// 数据统计（P5 窄态精简版）。
         ///
-        /// 【为什么不出图表】项目无时序存储，kWh 只能按瞬时功率积分估算。
-        /// 画一条「趋势折线」等于在答辩现场展示编造数据 —— 评审一问「这条线哪来的」就崩。
-        /// 空状态反而是诚实且专业的处理（规格原文 §3.5）。
+        /// ── 为什么窄态不是"待接入"了 ──────────────────────────────────
+        /// 原来的文案是"无时序存储，用电量只能按功率积分估算，P5 接入后显示趋势"。
+        /// 现在 P5 已经做完了（`TwinMetricHistory` 常驻采样 + 统计页大屏），
+        /// 窄态再挂"待接入"就是**过期文案**，主理人 2026-11-02 一眼看出来了。
         ///
-        /// 版式：空状态组 y=228、高 132（规格 §4.2），下方留白 168 到 528，把视线压到说明上。
+        /// 窄态宽 440，放不下四宫格，所以给精简版：
+        /// KPI 2×2 + 迷你功率曲线 + 类型 Top3。完整大屏在 L2 统计页。
+        ///
+        /// 版式（RightX=184, RightW=440, y=228 起）：
+        ///   KPI 2×2     216×52 @ (184/408, 228/288)
+        ///   迷你曲线     440×64 @ 366
+        ///   类型 Top3    3 行 × 24 @ 456
         /// </summary>
         private void BuildStats(RectTransform root)
         {
-            TwinEmptyState.Create(root, RightX, 228f, RightW, 132f,
-                "数据统计待接入",
-                "无时序存储，用电量只能按功率积分估算。\nP5 接入 1s 均值聚合后显示趋势、占比与排行。",
-                2, 3);
+            string[] labels = { "设备总数", "在线率", "告警中", "当前总功率" };
+
+            for (int i = 0; i < 4; i++)
+            {
+                float x = RightX + (i % 2) * 224f;
+                float y = 228f + (i / 2) * 60f;
+
+                TwinRoundedRect card = TwinUIFactory.Rounded(root, "NKpi_" + i, TwinTheme.R12,
+                    TwinTheme.CardTop, TwinTheme.CardBottom, Color.clear, 0f, false);
+                TwinUIFactory.Place(card.rectTransform, x, y, 216f, 52f);
+
+                Text v = TwinUIFactory.Label(card.rectTransform, "V", 26,
+                    TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+                TwinUIFactory.Place(v.rectTransform, 12f, 4f, 192f, 28f);
+                v.text = "—";
+                _nKpiValue[i] = v;
+
+                Text l = TwinUIFactory.Label(card.rectTransform, "L", TwinTheme.FsMicro,
+                    TextAnchor.UpperLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(l.rectTransform, 12f, 32f, 192f, 14f);
+                l.text = labels[i];
+                _nKpiLabel[i] = l;
+            }
+
+            // ---- 迷你功率曲线 ----
+            Text sparkTitle = TwinUIFactory.Label(root, "NSparkTitle", TwinTheme.FsBodyStrong,
+                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(sparkTitle.rectTransform, RightX, 350f, 300f, 18f);
+            sparkTitle.text = "全楼实时功率";
+
+            Text sparkSrc = TwinUIFactory.Label(root, "NSparkSrc", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(sparkSrc.rectTransform, RightX + 340f, 353f, 100f, 14f);
+            sparkSrc.text = "实时 · 60s";
+
+            // 同全屏：必须走 `TwinUIFactory.Graphic<T>` 补 CanvasRenderer，
+            // 否则 `OnPopulateMesh()` 永远不跑（Console 会刷 MissingComponentException）。
+            _nSpark = TwinUIFactory.Graphic<TwinSparkline>(root, "NSpark");
+            TwinUIFactory.Place(_nSpark.rectTransform, RightX, 368f, RightW, 62f);
+            _nSpark.SetRange(0f, 30f);
+
+            // 与全屏同一套配色（全屏/窄态本质是一个面板，颜色不能两样）
+            _nSpark.SetColors(
+                TwinTheme.ChartSeq1,
+                TwinTheme.ChartFill,
+                TwinTheme.WithAlpha(Color.white, 0.09f),
+                TwinTheme.WithAlpha(Color.white, 0.22f));
+
+            _nSparkNow = TwinUIFactory.Label(root, "NSparkNow", TwinTheme.FsCaption,
+                TextAnchor.UpperRight, TwinTheme.TextSecondary);
+            TwinUIFactory.Place(_nSparkNow.rectTransform, RightX + 340f, 368f, 100f, 16f);
+            _nSparkNow.text = "";
+
+            // ---- 类型 Top3 ----
+            Text typeTitle = TwinUIFactory.Label(root, "NTypeTitle", TwinTheme.FsBodyStrong,
+                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(typeTitle.rectTransform, RightX, 438f, 300f, 18f);
+            typeTitle.text = "设备类型 Top3";
+
+            Text typeSrc = TwinUIFactory.Label(root, "NTypeSrc", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(typeSrc.rectTransform, RightX + 340f, 441f, 100f, 14f);
+            typeSrc.text = "实时 · 全量";
+
+            for (int i = 0; i < 3; i++)
+            {
+                float y = 460f + i * 24f;
+
+                Text nm = TwinUIFactory.Label(root, "NTypeName_" + i, TwinTheme.FsCaption,
+                    TextAnchor.MiddleLeft, TwinTheme.TextSecondary);
+                TwinUIFactory.Place(nm.rectTransform, RightX, y, 84f, 20f);
+                _nTypeName[i] = nm;
+
+                TwinRoundedRect track = TwinUIFactory.Rounded(root, "NTypeTrack_" + i, 3f,
+                    TwinTheme.Track, TwinTheme.Track, Color.clear, 0f, false);
+                TwinUIFactory.Place(track.rectTransform, RightX + 88f, y + 7f, 270f, 6f);
+                _nTypeTrack[i] = track;
+
+                Image fill = TwinUIFactory.Block(track.rectTransform, "Fill", TwinTheme.Accent, false);
+                TwinUIFactory.Place(fill.rectTransform, 0f, 0f, 270f, 6f);
+                _nTypeBar[i] = fill;
+
+                Text v = TwinUIFactory.Label(root, "NTypeVal_" + i, TwinTheme.FsCaption,
+                    TextAnchor.MiddleRight, TwinTheme.TextMuted);
+                TwinUIFactory.Place(v.rectTransform, RightX + 362f, y, 78f, 20f);
+                _nTypeVal[i] = v;
+            }
+
+            _nEmpty = TwinUIFactory.Label(root, "NEmpty", TwinTheme.FsBody,
+                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_nEmpty.rectTransform, RightX, 232f, RightW, 24f);
+            _nEmpty.text = "暂无数据";
+            _nEmpty.gameObject.SetActive(false);
+
+            RefreshStats();
+        }
+
+        /// <summary>窄态统计刷新（0.5s 一次，由 `Update` 节流调用）。</summary>
+        private void RefreshStats()
+        {
+            int total = TwinDeviceStats.ActiveDeviceCount;
+            bool empty = total <= 0;
+
+            if (_nEmpty != null && _nEmpty.gameObject.activeSelf != empty)
+                _nEmpty.gameObject.SetActive(empty);
+
+            int online = TwinDeviceStats.OnlineDeviceCount;
+            SetText(_nKpiValue[0], empty ? "—" : total.ToString());
+            SetText(_nKpiValue[1], empty ? "—" : (online * 100f / total).ToString("0.#") + "%");
+            int nAlarm = TwinDeviceStats.AlarmDeviceCount;
+            SetText(_nKpiValue[2], nAlarm.ToString());
+            if (_nKpiValue[2] != null)
+                _nKpiValue[2].color = nAlarm > 0 ? TwinTheme.StatusAlarm : TwinTheme.TextPrimary;
+            SetText(_nKpiValue[3], empty ? "—" : (_nPowerSum / 1000f).ToString("0.0") + " kW");
+
+            // 【P1】负载率（与全屏同一口径：实时 / 装机容量）
+            if (_nKpiLabel[3] != null)
+            {
+                float capacity = TwinPowerEstimate.TotalWatt();
+                SetText(_nKpiLabel[3], (!empty && capacity > 0.01f)
+                    ? "当前总功率 · 负载 " + (_nPowerSum / capacity * 100f).ToString("0.#") + "%"
+                    : "当前总功率");
+            }
+
+            SetText(_nSparkNow, empty ? "" : (_nPowerSum / 1000f).ToString("0.0") + " kW");
+
+            // ---- 类型 Top3 ----
+            Dictionary<string, int> byType = new Dictionary<string, int>(16, StringComparer.Ordinal);
+            IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+
+            if (all != null)
+            {
+                for (int i = 0; i < all.Count; i++)
+                {
+                    TwinAnchor a = all[i];
+                    if (!TwinDeviceStats.IsActiveDevice(a)) continue;
+
+                    string type = TwinCode.TypeName(a.Category);
+                    if (string.IsNullOrEmpty(type)) type = "其他";
+
+                    int n;
+                    byType.TryGetValue(type, out n);
+                    byType[type] = n + 1;
+                }
+            }
+
+            List<KeyValuePair<string, int>> list = new List<KeyValuePair<string, int>>(byType);
+            list.Sort(delegate (KeyValuePair<string, int> x, KeyValuePair<string, int> y)
+            {
+                return y.Value.CompareTo(x.Value);
+            });
+
+            int maxType = list.Count > 0 ? Mathf.Max(1, list[0].Value) : 1;
+
+            for (int i = 0; i < 3; i++)
+            {
+                bool on = i < list.Count && !empty;
+                if (_nTypeName[i] != null && _nTypeName[i].gameObject.activeSelf != on)
+                {
+                    _nTypeName[i].gameObject.SetActive(on);
+                    _nTypeVal[i].gameObject.SetActive(on);
+                    _nTypeBar[i].gameObject.SetActive(on);
+                    if (_nTypeTrack[i] != null) _nTypeTrack[i].gameObject.SetActive(on);
+                }
+                if (!on) continue;
+
+                SetText(_nTypeName[i], list[i].Key);
+                SetText(_nTypeVal[i], list[i].Value + " 台");
+
+                float ratio = list[i].Value / (float)maxType;
+                _nTypeBar[i].rectTransform.sizeDelta = new Vector2(Mathf.Max(2f, 270f * ratio), 6f);
+            }
+        }
+
+        /// <summary>
+        /// 窄态统计的 5Hz 采样 + 0.5s 刷新。
+        ///
+        /// 和 L2 大屏同一套口径（实时 `Power` 求和），但**独立缓冲** ——
+        /// 两处可能不同时可见，共享缓冲会让"切页面时曲线跳一下"。
+        /// 只在统计页签激活时跑。
+        /// </summary>
+        private void UpdateNarrowStats()
+        {
+            if (!_built || _selected != 4) return;
+            if (_nSpark == null) return;
+
+            float now = Time.unscaledTime;
+
+            if (now >= _nSparkNextAt)
+            {
+                _nSparkNextAt = now + 0.2f;
+
+                IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
+                float sum = 0f;
+
+                if (all != null)
+                {
+                    for (int i = 0; i < all.Count; i++)
+                    {
+                        TwinAnchor a = all[i];
+                        if (a == null || !TwinDeviceStats.IsActiveDevice(a)) continue;
+                        sum += TwinPowerEstimate.LivePowerOf(a);   // 与全屏同一口径
+                    }
+                }
+
+                _nPowerSum = sum;
+
+                // 【P5】首次回填，打开即有曲线（同全屏逻辑）
+                if (!_nSparkPrefilled)
+                {
+                    _nSparkPrefilled = true;
+                    for (int k = 60; k > 0; k--)
+                        _nSpark.Push(now - k * 0.2f, sum);
+                }
+
+                _nSpark.Push(now, sum);
+
+                if (_nSparkLo < 0f || sum < _nSparkLo) _nSparkLo = sum;
+                if (_nSparkHi < 0f || sum > _nSparkHi) _nSparkHi = sum;
+                _nSparkLo = Mathf.Lerp(_nSparkLo, sum, 0.002f);
+                _nSparkHi = Mathf.Lerp(_nSparkHi, sum, 0.002f);
+
+                float span = Mathf.Max(_nSparkHi - _nSparkLo, Mathf.Max(0.5f, _nSparkHi * 0.15f));
+                float pad = span * 0.25f;
+                _nSpark.SetRange(_nSparkLo - pad, _nSparkHi + pad);
+            }
+
+            // 注意：这里**不碰 `_nextRefresh`**。它是主 `Update` 的 0.5s 节流阀，
+            // 这里再改会让其他页的刷新节奏乱掉。`RefreshStats` 由主 `Update` 的 switch 调。
         }
 
         // ---------------------------------------------------------------- 设备管理
@@ -414,19 +697,27 @@ namespace SchoolTwin.UI
             string[] chips = { "全部", "1F", "2F" };
             for (int i = 0; i < chips.Length; i++)
             {
-                bool on = i == 0;
+                // 【C-30】原来 raycast:false + 无 Button —— 长得像按钮，点了一点反应都没有
+                // （主理人 play 实测）。现在补成真按钮：raycast 打开 + 挂 Button。
                 TwinRoundedRect chip = TwinUIFactory.Rounded(root, "Chip_" + i, 14f,
-                    on ? TwinTheme.AccentDim : TwinTheme.Track,
-                    on ? TwinTheme.AccentDim : TwinTheme.Track,
-                    on ? TwinTheme.AccentLine : Color.clear, TwinTheme.StrokeHair.Width, false);
+                    TwinTheme.Track, TwinTheme.Track,
+                    Color.clear, TwinTheme.StrokeHair.Width, true);
                 TwinUIFactory.Place(chip.rectTransform, RightX + 248f + i * 52f, DevSearchY + 2f, 48f, 28f);
+                _chipBg[i] = chip;
 
                 Text ct = TwinUIFactory.Label(chip.rectTransform, "T", TwinTheme.FsMicro,
-                    TextAnchor.MiddleCenter, on ? TwinTheme.Accent : TwinTheme.TextMuted);
+                    TextAnchor.MiddleCenter, TwinTheme.TextMuted);
                 TwinUIFactory.Stretch(ct.rectTransform);
                 ct.text = chips[i];
                 ct.raycastTarget = false;
+                _chipText[i] = ct;
+
+                int idx = i;
+                Button cb = chip.gameObject.AddComponent<Button>();
+                cb.transition = Selectable.Transition.None;
+                cb.onClick.AddListener(delegate { OnFloorChipClicked(idx); });
             }
+            RefreshFloorChips();
 
             // ---- 计数行 y=108 高 18 ----
             _devCount = TwinUIFactory.Label(root, "DevCount", TwinTheme.FsCaption,
@@ -449,14 +740,58 @@ namespace SchoolTwin.UI
             Image line = TwinUIFactory.Block(root, "ThLine", TwinTheme.Divider, false);
             TwinUIFactory.Place(line.rectTransform, RightX, DevHeadY + 20f, RightW, 1f);
 
-            // ---- 台账列表 y=158 高 348，行高 44，视口 7 行 ----
+            // ---- 【C-31】台账列表：改成可滚动 ----
+            //
+            // 【为什么必须改】原来固定 7 行、没有 ScrollRect ——
+            // 53 台设备只能看到前 7 台，剩下的永远看不见也滑不到
+            // （主理人 2026-10-31 二次反馈"窄态也不能滑动"）。
+            // 结构和电力页 / 全屏台账完全一致：Scroll → Viewport(RectMask2D) → Content。
+            GameObject scrollGo = TwinUIFactory.Node("DevScroll", root);
+            RectTransform scrollRt = (RectTransform)scrollGo.transform;
+            TwinUIFactory.Place(scrollRt, RightX, DevListY, RightW, DevListViewH);
+
+            // ScrollRect 的滚轮事件沿射线命中的 Graphic 派发；scrollRt 没有 Graphic，
+            // 必须铺一层全透明垫片，否则滚轮收不到（和电力树 HitArea 同一个套路）。
+            Image scrollHit = TwinUIFactory.Block(scrollRt, "Hit", new Color(0f, 0f, 0f, 0f), true);
+            TwinUIFactory.Stretch(scrollHit.rectTransform);
+
+            GameObject viewGo = TwinUIFactory.Node("Viewport", scrollRt);
+            RectTransform viewRt = (RectTransform)viewGo.transform;
+            TwinUIFactory.Stretch(viewRt);
+            viewGo.AddComponent<RectMask2D>();
+
+            GameObject contentGo = TwinUIFactory.Node("Content", viewRt);
+            RectTransform contentRt = (RectTransform)contentGo.transform;
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(1f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
+            contentRt.anchoredPosition = Vector2.zero;
+            contentRt.sizeDelta = new Vector2(0f, 0f);
+            _devContent = contentRt;
+
+            ScrollRect dsr = scrollGo.AddComponent<ScrollRect>();
+            dsr.viewport = viewRt;
+            dsr.content = contentRt;
+            dsr.horizontal = false;
+            dsr.vertical = true;
+            dsr.movementType = ScrollRect.MovementType.Clamped;
+            dsr.scrollSensitivity = 20f;
+
             for (int i = 0; i < DevRows; i++)
             {
-                float y = DevListY + i * DevRowH;
+                float y = i * DevRowH;
 
-                RectTransform row = TwinUIFactory.Node("DevRow_" + i, root).transform as RectTransform;
-                TwinUIFactory.Place(row, RightX, y, RightW, DevRowH);
+                RectTransform row = TwinUIFactory.Node("DevRow_" + i, contentRt).transform as RectTransform;
+                TwinUIFactory.Place(row, 0f, y, RightW, DevRowH);
                 _devRow[i] = row;
+
+                // 【C-30】选中高亮层：铺满整行的圆角底，默认全透明。
+                // 必须放在状态条/文字**之前**创建 —— UGUI 靠 sibling 顺序决定遮挡，
+                // 后建的会盖住先建的，铺在文字上面就把字盖没了。
+                TwinRoundedRect rowBg = TwinUIFactory.Rounded(row, "SelBg", TwinTheme.R8,
+                    Color.clear, Color.clear, Color.clear, 0f, false);
+                TwinUIFactory.Stretch(rowBg.rectTransform);
+                _devRowBg[i] = rowBg;
 
                 // 左 3px 状态条
                 Image bar = TwinUIFactory.Block(row, "Bar", TwinTheme.StatusUnknown, false);
@@ -468,6 +803,18 @@ namespace SchoolTwin.UI
                 _devName[i] = MakeCell(row, "Name", 170f, 104f, TwinTheme.FsCaption, TwinTheme.TextSecondary);
                 _devPos[i] = MakeCell(row, "Pos", 274f, 86f, TwinTheme.FsCaption, TwinTheme.TextMuted);
                 _devTag[i] = MakeCell(row, "Tag", 358f, 44f, TwinTheme.FsMicro, TwinTheme.TextMuted);
+
+                // 【C-30】整行可点 → 选中该设备（走 TwinPicker.Select，C-27 转向自然生效）。
+                // 行本身是纯 Node（没有 Graphic），射线打不到它 —— 必须铺一层
+                // **完全透明但 raycastTarget=true** 的垫片，否则 Button 永远收不到点击。
+                // 这和电力页 ScrollRect 的 HitArea 是同一个套路。
+                Image hit = TwinUIFactory.Block(row, "Hit", new Color(0f, 0f, 0f, 0f), true);
+                TwinUIFactory.Stretch(hit.rectTransform);
+
+                int devIdx = i;
+                Button rowBtn = row.gameObject.AddComponent<Button>();
+                rowBtn.transition = Selectable.Transition.None;
+                rowBtn.onClick.AddListener(delegate { OnDeviceRowClicked(devIdx); });
 
                 row.gameObject.SetActive(false);
             }
@@ -527,6 +874,10 @@ namespace SchoolTwin.UI
 
             BuildPowerRows(contentRt);
 
+            // 【C-30】记住 content，供合闸后重画（原来 BuildPowerRows 是 static 且只跑一次，
+            // 点了合闸状态永远不会更新 —— 这是"点了没反应"的另一半原因）
+            _pwrContent = contentRt;
+
             // ---- 影响面卡 y=428 高 80 ----
             TwinRoundedRect card = TwinUIFactory.Rounded(root, "ImpactCard", TwinTheme.R12,
                 TwinTheme.CardTop, TwinTheme.CardBottom, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
@@ -552,12 +903,18 @@ namespace SchoolTwin.UI
         /// <summary>
         /// 电路树行：按 <see cref="TwinCircuitNode.Level"/> 缩进 16/级，
         /// 楼栋 36 / 楼层 32 / 房间 28（规格 §3.3）。数据直接读 <see cref="TwinCircuit.All"/>。
+        ///
+        /// 【C-30 去掉了 static】原来它是静态方法，而合闸回调必须是实例方法
+        /// （要读 `_pwrContent`、调 `RepaintPowerTree`）—— 静态方法里没法挂实例回调。
         /// </summary>
-        private static void BuildPowerRows(RectTransform content)
+        private void BuildPowerRows(RectTransform content)
         {
             IReadOnlyList<TwinCircuitNode> nodes = TwinCircuit.All;
             float y = 0f;
 
+            // 【C-30】把回路 Id 记到行节点上（用 name 携带），点行时反查是哪条回路。
+            // 为什么不用下标：TwinCircuit.All 的顺序将来可能变（增删节点），
+            // 下标一旦错位就会"点了 1F 实际断了 2F"——电力操作错位的代价太大，不能赌。
             for (int i = 0; i < nodes.Count; i++)
             {
                 TwinCircuitNode n = nodes[i];
@@ -581,18 +938,53 @@ namespace SchoolTwin.UI
                 // ⚠️ 不能写行内固定 x —— 行本身有 `Level*16` 缩进，胶囊会跟着右移，
                 // 三层节点看起来就是"一圈按钮歪着排"（P29-4 P0-2 反馈）。
                 float pillX = 440f - n.Level * 16f - 52f - 8f;
-                Color state = n.On ? TwinTheme.StatusNormal : TwinTheme.StatusAlarm;
+
+                // 【P3-2】三态：自己分闸 / 上级断电 / 正常通电。
+                // 原来只读 n.On，1F 断电后子房间仍显示「合闸」—— 面板和场景对不上。
+                bool parentOn = TwinCircuit.ParentPowered(n.Id);
+                bool selfOn = n.On;
+
+                string label;
+                Color state;
+                if (!selfOn)
+                {
+                    label = "分闸";
+                    state = TwinTheme.StatusAlarm;
+                }
+                else if (!parentOn)
+                {
+                    label = "无电";
+                    state = TwinTheme.TextMuted;
+                }
+                else
+                {
+                    label = "合闸";
+                    state = TwinTheme.StatusNormal;
+                }
+
+                // SBO 流程中：整行标警示色（弹窗正在操作这条回路）
+                bool armed = TwinSystemState.IsCircuitBusy(n.Id, _sbo);
+                if (armed) state = TwinTheme.StatusWarning;
+
+                // 【C-30】原来 raycast:false + 无 Button —— 合闸胶囊点不动。
                 TwinRoundedRect pill = TwinUIFactory.Rounded(row, "Pill", 11f,
                     TwinTheme.WithAlpha(state, 0.16f), TwinTheme.WithAlpha(state, 0.16f),
-                    Color.clear, 0f, false);
+                    armed ? TwinTheme.WithAlpha(state, 0.7f) : Color.clear,
+                    armed ? 1f : 0f, true);
                 TwinUIFactory.Place(pill.rectTransform, pillX, (h - 22f) * 0.5f, 52f, 22f);
 
                 Text pt = TwinUIFactory.Label(pill.rectTransform, "P", TwinTheme.FsMicro,
                     TextAnchor.MiddleCenter, state);
                 TwinUIFactory.Stretch(pt.rectTransform);
-                // 文案沿用既有「合闸 / 分闸」——优化单 §5 第 8 条明确列为"做对了不要动"
-                pt.text = n.On ? "合闸" : "分闸";
+                // 文案沿用既有「合闸 / 分闸」——优化单 §5 第 8 条明确列为"做对了不要动"。
+                // 【P3】不再有「确认?」这个中间态：两步确认改由 SBO 弹窗承担。
+                pt.text = label;
                 pt.raycastTarget = false;
+
+                string circuitId = n.Id;
+                Button pb = pill.gameObject.AddComponent<Button>();
+                pb.transition = Selectable.Transition.None;
+                pb.onClick.AddListener(delegate { OnCircuitClicked(circuitId); });
 
                 y += h;
             }
@@ -606,14 +998,18 @@ namespace SchoolTwin.UI
         private void BuildAlarm(RectTransform root)
         {
             // ---- 分段切换 y=60 高 32，两段等分 220 ----
+            // 【C-30】原来 segBox / segOn 都是 raycast:false，两个页签点不动。
+            // segBox 铺满整条、raycast 打开当事件垫；segOn 是"选中态底色"，只是视觉层。
             TwinRoundedRect segBox = TwinUIFactory.Rounded(root, "SegBox", TwinTheme.R8,
-                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
             TwinUIFactory.Place(segBox.rectTransform, RightX, AlmSegY, RightW, AlmSegH);
+            _almSegBg = segBox;
 
             // 选中段：AccentDim 底 + 主色字
             TwinRoundedRect segOn = TwinUIFactory.Rounded(segBox.rectTransform, "On", TwinTheme.R8,
                 TwinTheme.AccentDim, TwinTheme.AccentDim, Color.clear, 0f, false);
             TwinUIFactory.Place(segOn.rectTransform, 0f, 0f, RightW * 0.5f, AlmSegH);
+            _almSegOnBg = segOn;
 
             _almSegOn = TwinUIFactory.Label(segOn.rectTransform, "T", TwinTheme.FsCaption,
                 TextAnchor.MiddleCenter, TwinTheme.Accent);
@@ -626,6 +1022,21 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(_almSegHis.rectTransform, RightW * 0.5f, 0f, RightW * 0.5f, AlmSegH);
             _almSegHis.text = "历史";
             _almSegHis.raycastTarget = false;
+
+            // 两个页签的点击热区：左半 / 右半，各自铺一层透明垫
+            for (int i = 0; i < 2; i++)
+            {
+                Image hit = TwinUIFactory.Block(segBox.rectTransform, "SegHit_" + i,
+                    new Color(0f, 0f, 0f, 0f), true);
+                TwinUIFactory.Place(hit.rectTransform, RightW * 0.5f * i, 0f, RightW * 0.5f, AlmSegH);
+
+                int idx = i;
+                Button sb = hit.gameObject.AddComponent<Button>();
+                sb.transition = Selectable.Transition.None;
+                sb.onClick.AddListener(delegate { OnAlarmTabClicked(idx); });
+            }
+
+            RefreshAlarmTabStyles();
 
             // ---- 告警列表 y=100 高 348，行高 52，视口 6 行 ----
             for (int i = 0; i < AlmRows; i++)
@@ -691,8 +1102,11 @@ namespace SchoolTwin.UI
             // KPI 2×2：216×88，x=184 / 408，y=60 / 156（规格 §1.5 权威预算）
             _kpiPower = TwinMetricCard.Create(root, "Kpi_Power", RightX, KpiY1,
                 CardW, CardH, TwinTheme.FsTitle, "总功率", "kW");
+            // 【P5】总功率已改读实时求和，副标不能再写"按额定功率 × 台数"（会自相矛盾）
+            _kpiPower.SetEstimateNote("实时 · 在运设备");
             _kpiEnergy = TwinMetricCard.Create(root, "Kpi_Energy", RightX + CardW + 8f, KpiY1,
                 CardW, CardH, TwinTheme.FsTitle, "今日用电", "kWh");
+            _kpiEnergy.SetEstimateNote("按额定功率 × 运行时长");   // C-28
             _kpiOnline = TwinMetricCard.Create(root, "Kpi_Online", RightX, KpiY2,
                 CardW, CardH, TwinTheme.FsTitle, "在线", "台");
             _kpiAlarm = TwinMetricCard.Create(root, "Kpi_Alarm", RightX + CardW + 8f, KpiY2,
@@ -971,12 +1385,27 @@ namespace SchoolTwin.UI
 
             IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
             _devBuf.Clear();
+
+            // 【C-30】楼层筛选。状态从 TwinSystemState 读（全屏那套写的是同一个字段），
+            // 所以窄态选 1F、切到全屏还是 1F。
+            int filter = TwinSystemState.FloorFilter;
+
             if (all != null)
             {
                 for (int i = 0; i < all.Count && _devBuf.Count < DevRows; i++)
                 {
                     TwinAnchor a = all[i];
                     if (!TwinDeviceStats.IsActiveDevice(a)) continue;
+
+                    if (filter > 0)
+                    {
+                        TwinRoomInfo info = TwinSiteLayout.Find(a.Zone);
+                        int floor = info != null ? info.Floor : 0;
+                        // filter==3 → 室外（楼层 0 的分区）；1/2 → 对应楼层
+                        int want = filter == 3 ? 0 : filter;
+                        if (floor != want) continue;
+                    }
+
                     _devBuf.Add(a);
                 }
             }
@@ -994,6 +1423,15 @@ namespace SchoolTwin.UI
 
                 if (_devBar[i] != null) _devBar[i].color = c;
 
+                // 【C-30】选中行高亮 —— 点了没任何视觉反馈，用户会以为"点不动"。
+                // 用行底色表达选中（AccentDim），跟全屏那套保持同一个语义。
+                if (_devRowBg[i] != null)
+                {
+                    bool sel = ReferenceEquals(SchoolTwin.Interaction.TwinPicker.Selected, a);
+                    Color bg = sel ? TwinTheme.AccentDim : Color.clear;
+                    _devRowBg[i].SetFill(bg, bg);
+                }
+
                 // 【P0-3】编号列固定 150、名称列 x=170（间隙 8 ≥ 规格要求的 8）。
                 // 原来这里直接塞 a.TwinId，而 MakeCell 用的是 Overflow ——
                 // 文本画出格子边界压到名称列上。两重修：
@@ -1006,6 +1444,15 @@ namespace SchoolTwin.UI
                 SetText(_devTag[i], TwinStatusPalette.Label(s));
                 if (_devTag[i] != null) _devTag[i].color = c;
             }
+
+            // 【C-31】Content 高度 = 实际行数 × 行距。ScrollRect 靠它算可滚范围，
+            // 不设的话永远停在 0，滚轮滚不动。
+            if (_devContent != null)
+            {
+                float contentH = _devBuf.Count * DevRowH;
+                if (!Mathf.Approximately(_devContent.sizeDelta.y, contentH))
+                    _devContent.sizeDelta = new Vector2(0f, contentH);
+            }
         }
 
         /// <summary>TwinId 的第一段当位置短码（`Class2-1/Light/Main_01` → `Class2-1`）。全码放详情卡。</summary>
@@ -1016,10 +1463,145 @@ namespace SchoolTwin.UI
             return slash > 0 ? twinId.Substring(0, slash) : twinId;
         }
 
+        // ================================================================ 设备管理交互（C-30）
+
+        /// <summary>
+        /// 点楼层 chip。**只改共享状态 + 重画，不碰其它页**。
+        /// 状态写在 TwinSystemState，全屏那套读同一个字段 —— 切视图不会丢筛选。
+        /// </summary>
+        private void OnFloorChipClicked(int index)
+        {
+            if (TwinSystemState.FloorFilter == index) return;
+            TwinSystemState.FloorFilter = index;
+            RefreshFloorChips();
+            RefreshDevice();
+        }
+
+        /// <summary>把三个 chip 的底色/描边/文字色按当前筛选值刷一遍。</summary>
+        private void RefreshFloorChips()
+        {
+            for (int i = 0; i < _chipBg.Length; i++)
+            {
+                if (_chipBg[i] == null) continue;
+                bool on = TwinSystemState.FloorFilter == i;
+
+                Color fill = on ? TwinTheme.AccentDim : TwinTheme.Track;
+                _chipBg[i].SetFill(fill, fill);
+                _chipBg[i].SetBorder(on ? TwinTheme.AccentLine : Color.clear,
+                                     TwinTheme.StrokeHair.Width);
+
+                if (_chipText[i] != null)
+                    _chipText[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
+            }
+        }
+
+        /// <summary>
+        /// 点设备行 → 选中该设备。**用行的下标查 `_devBuf` 而不是存索引** ——
+        /// `_devBuf` 每次刷新都会重排（筛选一变行号就换了），存索引会点到别的设备上。
+        /// 选中走 `TwinPicker.Select`，C-27 的镜头转向会自动生效。
+        /// </summary>
+        private void OnDeviceRowClicked(int row)
+        {
+            if (row < 0 || row >= _devBuf.Count) return;
+
+            TwinAnchor a = _devBuf[row];
+            if (a == null) return;
+
+            SchoolTwin.Interaction.TwinPicker.Select(a);
+            RefreshDevice();      // 立刻重画，让选中态当场可见
+
+            // 【P3-B】钻取到设备详情页（页栈深一层，返回按钮回本页）
+            TwinDrawer.OpenDeviceDetail(a);
+        }
+
+        // ================================================================ 电力管理交互（C-30）
+
+        /// <summary>
+        /// 点回路胶囊 → 打开 SBO 弹窗（Select-Before-Operate）。
+        ///
+        /// ── 为什么必须两步 ──────────────────────────────────────────────
+        /// 一条楼栋回路合闸 = 整栋楼断电，一条房间回路 = 整间教室断电。
+        /// 单次点击就执行，误触代价太大。行业里的电力 SCADA 一律要求先选后操作。
+        ///
+        /// ── 为什么改用它、不用上一轮手写的简化版 ────────────────────────
+        /// 手写版只有一句「再点一次确认」，用户看不到"这次会断哪 12 台"。
+        /// `TwinSboDialog` 会把影响设备名单摊开、给出可见倒计时、作废时说清"什么都没发生" ——
+        /// 这三条正是答辩时能讲清"为什么这个操作是安全的"的依据。
+        /// </summary>
+        private void OnCircuitClicked(string circuitId)
+        {
+            if (string.IsNullOrEmpty(circuitId)) return;
+
+            TwinCircuitNode node = TwinCircuit.Find(circuitId);
+            if (node == null) return;
+
+            EnsureSbo();
+
+            bool turnOn = !node.On;
+            TwinSboRequest req = new TwinSboRequest();
+            req.Title = (turnOn ? "恢复供电 · " : "分级停电 · ") + node.Title;
+            req.Subject = node.Title;
+            req.CircuitId = circuitId;
+            req.PowerOn = turnOn;
+            TwinSystemState.CollectTargets(node, req.Targets);
+
+            // 真正执行：只在 SBO 走到 Armed 且用户点了「执行」时被调用一次
+            req.Operate = delegate
+            {
+                int affected = TwinCircuit.SetSwitch(circuitId, turnOn);
+                TwinToast.Show(node.Title + (turnOn ? " 已合闸" : " 已分闸") +
+                               "（影响 " + affected + " " + TwinCode.UnitDevice + "）");
+                RepaintPowerTree();
+            };
+
+            _sbo.Show(req);
+            RepaintPowerTree();   // 让那一行立刻变成"流程中"的警示色
+        }
+
+        /// <summary>
+        /// 建 SBO 弹窗（惰性，只在第一次点合闸时建）。
+        ///
+        /// 挂在页面自己身上、父节点用页面根 —— 弹窗要盖住整页（除标题栏），
+        /// 所以不能挂到电力树的 Scroll 里（会被 RectMask2D 裁掉）。
+        /// </summary>
+        private void EnsureSbo()
+        {
+            if (_sbo != null) return;
+
+            RectTransform root = transform as RectTransform;
+            if (root == null) return;
+
+            _sbo = gameObject.AddComponent<TwinSboDialog>();
+            _sbo.Build(root, 1f);
+
+            // 窄态面板：宽 420（或 640），高 720，标题栏 96，边距 16
+            float w = root.rect.width > 1f ? root.rect.width : 420f;
+            float h = root.rect.height > 1f ? root.rect.height : 720f;
+            _sbo.Layout(w, h, 96f, 16f);
+        }
+
+        /// <summary>
+        /// 重画电力树。**先清空再重建**，而不是找节点改颜色 ——
+        /// 因为「SBO 流程中」会改变胶囊的描边宽度和配色，
+        /// 逐项改要写好几个分支，重建只要一次 `BuildPowerRows`。
+        /// 20 个节点重建约 0.3ms，电力操作是低频动作，不值得为它做增量更新。
+        /// </summary>
+        private void RepaintPowerTree()
+        {
+            if (_pwrContent == null) return;
+
+            for (int i = _pwrContent.childCount - 1; i >= 0; i--)
+                TwinUIFactory.DestroySafe(_pwrContent.GetChild(i).gameObject);
+
+            BuildPowerRows(_pwrContent);
+        }
+
         /// <summary>
         /// 告警列表刷新：分段文案 + 6 行。
-        /// 只取「进行中」，状态标签统一「进行中」—— 严重度由左侧色条承载，
-        /// 文字不再重复写「严重/警告」（规格 §3.4 负责人裁决）。
+        /// 严重度由左侧色条承载，文字不再重复写「严重/警告」（规格 §3.4 负责人裁决）。
+        ///
+        /// 【C-30】补上「历史」页签：原来只渲染进行中，历史那个页签点了没反应 ——
+        /// 现在按 TwinSystemState.AlarmHistory 分派，进行中 = 未恢复，历史 = 已恢复。
         /// </summary>
         private void RefreshAlarm()
         {
@@ -1033,12 +1615,19 @@ namespace SchoolTwin.UI
             TwinAlarmHistory history = TwinAlarmHistory.Instance;
             if (history != null) history.GetRecent(_abnBuf, 64);
 
+            // 历史条数：已恢复的记录（EndTime > 0）
+            int closed = 0;
+            for (int i = 0; i < _abnBuf.Count; i++)
+                if (!_abnBuf[i].Ongoing) closed++;
+            if (_almSegHis != null) _almSegHis.text = "历史 " + closed;
+
+            bool wantHistory = TwinSystemState.AlarmHistory;
             int n = 0;
             for (int i = 0; i < _abnBuf.Count && n < AlmRows; i++)
             {
-                if (!_abnBuf[i].Ongoing) continue;
-
                 TwinAlarmHistory.AlarmRecord rec = _abnBuf[i];
+                if (wantHistory == rec.Ongoing) continue;   // 进行中取 !Ongoing==false，历史取 Ongoing==false
+
                 if (_almRow[n] != null && !_almRow[n].gameObject.activeSelf)
                     _almRow[n].gameObject.SetActive(true);
 
@@ -1048,8 +1637,9 @@ namespace SchoolTwin.UI
                 SetText(_almId[n], TwinCode.Short(rec.TwinId));
                 SetText(_almName[n], rec.DisplayName);
                 SetText(_almDesc[n], TwinStatusPalette.Label(rec.PeakStatus) + " · " + rec.Clock);
-                SetText(_almDur[n], "进行中");
-                if (_almDur[n] != null) _almDur[n].color = TwinTheme.StatusAlarm;
+                SetText(_almDur[n], wantHistory ? "已恢复" : "进行中");
+                if (_almDur[n] != null)
+                    _almDur[n].color = wantHistory ? TwinTheme.StatusNormal : TwinTheme.StatusAlarm;
 
                 n++;
             }
@@ -1057,6 +1647,38 @@ namespace SchoolTwin.UI
             for (int i = n; i < AlmRows; i++)
                 if (_almRow[i] != null && _almRow[i].gameObject.activeSelf)
                     _almRow[i].gameObject.SetActive(false);
+        }
+
+        // ================================================================ 告警页签交互（C-30）
+
+        /// <summary>
+        /// 切「进行中 / 历史」。状态存 TwinSystemState，与全屏告警页共用一份。
+        /// </summary>
+        private void OnAlarmTabClicked(int index)
+        {
+            bool history = index == 1;
+            if (TwinSystemState.AlarmHistory == history) return;
+
+            TwinSystemState.AlarmHistory = history;
+            RefreshAlarmTabStyles();
+            RefreshAlarm();
+        }
+
+        /// <summary>选中段底块挪到左半/右半，文字配色跟着切。</summary>
+        private void RefreshAlarmTabStyles()
+        {
+            bool history = TwinSystemState.AlarmHistory;
+
+            if (_almSegOnBg != null)
+            {
+                RectTransform rt = _almSegOnBg.rectTransform;
+                rt.anchoredPosition = new Vector2(history ? RightW * 0.5f : 0f, rt.anchoredPosition.y);
+            }
+
+            if (_almSegOn != null)
+                _almSegOn.color = history ? TwinTheme.TextMuted : TwinTheme.Accent;
+            if (_almSegHis != null)
+                _almSegHis.color = history ? TwinTheme.Accent : TwinTheme.TextMuted;
         }
 
         private void RefreshMonitor()
@@ -1081,11 +1703,33 @@ namespace SchoolTwin.UI
                                    : TwinMetricCard.CardState.Normal);
             }
 
-            // 总功率 / 今日用电 需要电力聚合 sink（P5）。现在没有统一口径 ——
-            // 单设备 Power 的量程有的按 W、有的按 kW（灯 0~120W / 插座 0~3.5kW），
-            // 直接求和会得出"1.2 + 42"这种没意义的数，所以恒走无数据态（规格五）。
-            if (_kpiPower != null) _kpiPower.SetState(TwinMetricCard.CardState.NoData);
-            if (_kpiEnergy != null) _kpiEnergy.SetState(TwinMetricCard.CardState.NoData);
+            // 【P5 口径统一】总功率改读**实时求和**，不再是「额定功率 × 台数」的估算。
+            //
+            // ── 为什么必须改 ──────────────────────────────────────────────
+            // 原来这里用 `TotalWatt()`（估算容量）→ 22.2 kW，
+            // 而统计页用 `SumLivePower()`（实时消耗）→ 2.8 kW，
+            // 两个 KPI 都叫"总功率"却差 8 倍 —— 主理人 2026-11-02 截图直接指出
+            // "同一个面板两种数字"。
+            //
+            // 统一到**实时**的理由：统计页那条曲线就是实时求和画的，
+            // KPI 必须和曲线对得上；而且"当前总功率"的语义本来就是"现在用了多少"，
+            // 不是"全开能到多少"。容量视角另有用途，但不该占用这个 KPI。
+            int active = TwinDeviceStats.ActiveDeviceCount;
+            float watt = TwinPowerEstimate.SumLivePower();
+
+            if (_kpiPower != null)
+            {
+                _kpiPower.SetValue(active > 0 ? (watt / 1000f).ToString("0.0") : "—");
+                _kpiPower.SetState(active > 0 ? TwinMetricCard.CardState.Normal
+                                              : TwinMetricCard.CardState.NoData);
+            }
+
+            if (_kpiEnergy != null)
+            {
+                _kpiEnergy.SetValue(active > 0 ? "≈ " + TwinPowerEstimate.TodayKwh().ToString("0.00") : "—");
+                _kpiEnergy.SetState(active > 0 ? TwinMetricCard.CardState.Estimate
+                                               : TwinMetricCard.CardState.NoData);
+            }
 
             RefreshHealthCard();
             RefreshTop3();
@@ -1098,6 +1742,11 @@ namespace SchoolTwin.UI
         /// </summary>
         private void Update()
         {
+            // 【P5】统计页曲线 5Hz 采样（内部自带节流）。
+            // 必须放在 `_nextRefresh` 早退**之前** —— 否则 0.5s 窗口内的帧全被挡掉，
+            // 曲线只能拿到 2Hz 的点。
+            UpdateNarrowStats();
+
             if (!_built) return;
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.5f;
@@ -1109,7 +1758,9 @@ namespace SchoolTwin.UI
                 case 0: RefreshMonitor(); break;
                 case 1: RefreshDevice(); break;
                 case 3: RefreshAlarm(); break;
+                case 4: RefreshStats(); break;      // 【P5】统计页（窄态精简版）
                 // 电力管理（2）不周期刷新：电路状态变化少，树是静态构建的
+                // 设备详情已独立成页（TwinDeviceDetailPage），它自己带 Update，不在这里刷
             }
         }
 

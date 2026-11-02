@@ -266,7 +266,39 @@ namespace SchoolTwin.Twin
 
         public static bool IsPowered(string twinId)
         {
+            // 【P3-4】门不受电力回路影响 —— 见 IsPowerIndependent 的说明。
+            if (IsPowerIndependent(twinId)) return true;
             return IsPoweredZone(ZoneOf(twinId));
+        }
+
+        /// <summary>
+        /// 该设备是否**不挂在电力回路下**（断不断电都能操作）。
+        ///
+        /// ── 为什么门要豁免（主理人 2026-10-31 实测反馈）────────────────
+        /// 「断电关开关门啥事啊，门也不能开关了」—— 教学楼的门是普通机械门
+        /// （推拉 / 合页），不是电磁锁，断电照样能开。把它挂在电力回路下，
+        /// 会出现「1F 一断电，整层门都点不动」，这在答辩演示里会被直接当成 bug。
+        ///
+        /// ── 为什么解析 TwinId 而不查 Registry ──────────────────────────
+        /// 这个方法会被 `AvailabilityOf` 每台设备每帧问到（53 台 × 0.5s），
+        /// 走字典查 TwinAnchor 再取 Category 太贵。TwinId 本身就是
+        /// `Zone/Category/Name_序号`，第二段就是类别，直接切字符串最快。
+        ///
+        /// ── 以后有电磁门禁怎么办 ──────────────────────────────────────
+        /// 那时应该新增一个类别（如 `DoorLock`），而不是把 Door 重新挂回回路 ——
+        /// 两种门在同一场景里共存是常态，靠类别区分才是对的。
+        /// </summary>
+        private static bool IsPowerIndependent(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return false;
+
+            int a = twinId.IndexOf('/');
+            if (a < 0) return false;
+            int b = twinId.IndexOf('/', a + 1);
+            if (b < 0) return false;
+
+            string category = twinId.Substring(a + 1, b - a - 1);
+            return string.Equals(category, "Door", StringComparison.Ordinal);
         }
 
         /// <summary>

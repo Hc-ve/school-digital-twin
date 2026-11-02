@@ -53,6 +53,15 @@ namespace SchoolTwin.Present
         private float _rectAspect = 1f;
         private bool _dimensionKnown;
         private bool _on;
+
+        /// <summary>
+        /// 屏幕当前是否点亮。
+        ///
+        /// 关机动画要用它判断"已经关了的设备别再播一遍" ——
+        /// 主理人 2026-11-02 实测：先点「关闭主脑」把主脑关了，
+        /// 再点「全部关机」时主脑和投影又被点亮播了一次关机动画，逻辑上说不通。
+        /// </summary>
+        public bool IsOn { get { return _on; } }
         private int _blitCount;      // 【诊断】累计 Blit 次数
         private float _prepareRetryAt = -1f;   // 未就绪重试的时间点
 

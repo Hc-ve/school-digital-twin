@@ -101,6 +101,11 @@ namespace SchoolTwin.Interaction
         public static void Select(TwinAnchor anchor)
         {
             PickStamp++;    // 先 +1：连点同一个点位也算一次「点选动作」
+
+            // 【C-27】选中就转向 —— 放在 `Selected == anchor` 提前返回**之前**：
+            // 连点同一台设备也应该重新回正镜头，否则转开之后再也转不回来。
+            FaceAnchor(anchor);
+
             if (Selected == anchor) return;
             Selected = anchor;
 
@@ -108,6 +113,47 @@ namespace SchoolTwin.Interaction
             if (picker != null) picker.RecomputeBounds();
 
             if (SelectionChanged != null) SelectionChanged(anchor);
+        }
+
+        /// <summary>
+        /// 【C-27 修正】选中设备后的**镜头定位**。
+        ///
+        /// ── 只在观景模式下做 ────────────────────────────────────────────
+        /// 主理人 2026-10-31 裁决：镜头定位的用途是「在自由漫游里快速跳到某台设备」，
+        /// 那是**观景模式**（V 键，FreeCameraController 接管）的典型场景。
+        ///
+        /// 第三人称 / 第一人称下**不做**，两个原因：
+        ///   ① 那两个模式的镜头跟着角色走，玩家意图是"我走过去看"，不是"把镜头扭过去"；
+        ///      强行转视线会打断操作，而且角色朝向没变，画面会割裂；
+        ///   ② 点列表行时人可能根本不在那台设备附近，转过去多半只看到一面墙。
+        ///
+        /// ── 为什么用 FreeCameraController.FocusOn 而不是自己算角度 ─────────
+        /// 它已经解决了"从哪个方向靠近、退多远、相机多高、避开墙"这一整套
+        /// （见 ResolveApproach 的注释）。自己再写一遍只会更差。
+        /// 而且观景模式下它本来就拥有相机控制权，走它的入口不会和第三人称打架。
+        /// </summary>
+        private static void FaceAnchor(TwinAnchor anchor)
+        {
+            if (anchor == null) return;
+
+            // 全屏 L2 数据态：中间整块不透明，飞过去也看不见，纯属白折腾
+            if (SchoolTwin.UI.TwinDrawer.IsFullScreen && !SchoolTwin.UI.TwinDrawer.IsFullScreenHome)
+                return;
+
+            // 只认观景模式：`enabled == false` = 第三人称/第一人称在用相机，此时不动。
+            FreeCameraController free = FindObjectOfType<FreeCameraController>();
+            if (free == null || !free.enabled) return;
+
+            GameObject visual = anchor.VisualTarget;
+            Transform t = visual != null ? visual.transform : anchor.transform;
+
+            // 瞄包围盒中心而不是轴心：不少设备（吊灯、门禁）轴心在地脚或墙面，
+            // 瞄轴心会转到"对着地板"或者"对着墙"。
+            Vector3 aim = t.position;
+            Renderer r = t.GetComponentInChildren<Renderer>(false);
+            if (r != null) aim = r.bounds.center;
+
+            free.FocusOn(anchor.transform, 6f, aim);
         }
 
         private void RecomputeBounds()

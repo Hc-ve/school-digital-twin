@@ -82,6 +82,7 @@ namespace SchoolTwin.Player
             ApplyFreeCamMode(false);
         }
 
+
         /// <summary>
         /// 观景模式 = 把相机交回 FreeCameraController（自由漫游 + 数字键 1-9 预设机位）。
         ///

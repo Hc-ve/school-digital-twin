@@ -112,6 +112,60 @@ namespace SchoolTwin.UI
             SetVerticesDirty();
         }
 
+        /// <summary>
+        /// 一次性设置四条线的颜色：主线 / 面积填充 / 顶部边框 / 底部基线。
+        ///
+        /// ── 为什么必须有这个方法 ────────────────────────────────────────
+        /// 四个颜色字段都是 `private [SerializeField]`。Inspector 里拖的实例没问题，
+        /// 但**代码 new 出来的**（统计页那两条曲线就是）没有 Inspector 可拖，
+        /// 外部根本改不了颜色 —— 只能加这个入口。
+        ///
+        /// 顺便避免外部用反射逐个改私有字段（那种写法改一次字段名就全断）。
+        /// </summary>
+        public void SetColors(Color line, Color fill, Color frame, Color baseLine)
+        {
+            _lineColor = line;
+            _fillColor = fill;
+            _frameColor = frame;
+            _baseColor = baseLine;
+            SetVerticesDirty();     // 颜色变了要重绘，否则停在上一帧的顶点色
+        }
+
+        /// <summary>
+        /// 【P3】从外部历史缓冲批量回填（`Vector2` 的 x = 时间, y = 值，按时间升序）。
+        ///
+        /// ── 为什么要这个方法 ────────────────────────────────────────────
+        /// 原来界面打开时只能 `Clear()`，然后靠 `Push` 一点点攒 —— 曲线从空白长出来，
+        /// 观感上像图表坏了。行业里（Grafana / ThingsBoard / WinCC）都是"打开即完整曲线"，
+        /// 因为它们从存储层查询回填。本项目没有存储层，改用 `TwinMetricHistory`
+        /// 的内存缓冲回填，这个方法就是那条回填通道。
+        ///
+        /// ── 为什么参数用 Vector2 而不是内部 Sample ──────────────────────
+        /// `Sample` 是本类的私有 struct。为了让外部能回填而把它改成 public，
+        /// 等于把内部表示暴露出去（以后想加字段就会牵连调用方）。
+        /// `Vector2` 是 Unity 内置类型，语义清晰（x=时间, y=值），零新类型。
+        ///
+        /// ── 为什么超长时只保留末尾 _capacity 个 ────────────────────────
+        /// 缓冲是 300 点、容量是 320，正常情况下装得下。但若以后有人把缓冲调大，
+        /// 这里截断比让 `_samples` 无限增长安全 —— 画线只关心窗口内的点。
+        /// </summary>
+        public void LoadFrom(IReadOnlyList<Vector2> points)
+        {
+            _samples.Clear();
+            if (points == null) return;
+
+            int start = Mathf.Max(0, points.Count - _capacity);
+            for (int i = start; i < points.Count; i++)
+            {
+                Sample s;
+                s.T = points[i].x;
+                s.V = points[i].y;
+                _samples.Add(s);
+            }
+
+            SetVerticesDirty();
+        }
+
         /// <summary>压入一个采样点。</summary>
         public void Push(float time, float value)
         {
@@ -121,6 +175,18 @@ namespace SchoolTwin.UI
             s.T = time;
             s.V = value;
             _samples.Add(s);
+
+            // 【必须在这里也推进 `_now`】
+            //
+            // `_now` 原本只在 `Tick(float)` 里更新，而那个方法**没有任何调用方** ——
+            // `TickScreenVideos` 调的是 `PcScreenPlayer.Tick()`（无参），不是这个。
+            // 于是 `_now` 恒为 0，时间窗算法算出 `span = clamp(0 - t0, 1, 60) = 1`，
+            // 所有采样点被压到同一个 x 坐标 → 线段长度 0 → 画面上什么都没有，
+            // 只有末端方块孤零零挂在右边（主理人 2026-11-02 截图实测）。
+            //
+            // 用 `Max` 而不是直接赋值：设备详情页可能仍在调 `Tick(time)` 推进时间，
+            // 两处都写时不能互相把时间拉回去。
+            if (time > _now) _now = time;
 
             // 注意：这里**不打日志**。上一版在这里打「开始出图」，结果它出现了两次
             // 而线依然看不见 —— 说明「有数据」和「画出来了」是两件事，
@@ -174,7 +240,30 @@ namespace SchoolTwin.UI
             AddQuad(vh, r.xMin, r.yMin, r.xMax, r.yMin + 1f, _baseColor);
             AddQuad(vh, r.xMin, r.yMax - 1f, r.xMax, r.yMax, _frameColor);
 
+            // 【P5】中间网格线：3 条淡线把图表区切成 4 段。
+            //
+            // 只有上下两条边框时，深色底上的图表区读不出"刻度感" ——
+            // 一条平线悬在中间，看不出它在量程的什么位置。
+            // 加上三等分线，一眼能判断"当前值处于低位/中位/高位"，
+            // 这是行业大屏（DataV / Grafana）的标配画法。
+            Color grid = new Color(_frameColor.r, _frameColor.g, _frameColor.b, _frameColor.a * 1.8f);
+            for (int g = 1; g <= 3; g++)
+            {
+                float gy = r.yMin + r.height * g / 4f;
+                AddQuad(vh, r.xMin, gy, r.xMax, gy + 1f, grid);
+            }
+
             if (_samples.Count < 2) return;
+
+            // 【兜底：`_now` 不能早于最后一个采样点】
+            //
+            // 正常情况下 `Push` 会推进 `_now`，但如果某条曲线只用 `LoadFrom` 回填、
+            // 或者有人手动塞了带未来时间戳的点，`_now` 会落后 —— 一旦落后，
+            // 下面的 `span` 会被夹到 1 秒，所有点压到同一列，线就"消失"了。
+            // 这里取两者最大值，任何调用路径都不会踩到。
+            float now = _now;
+            int last = _samples.Count - 1;
+            if (_samples[last].T > now) now = _samples[last].T;
 
             // 【为什么时间窗不是固定的 60 秒】固定窗口下，刚开始只有几秒数据时，
             // 所有采样点都挤在右边缘几个像素里 —— 看起来就是「什么都没画」。
@@ -184,8 +273,8 @@ namespace SchoolTwin.UI
             //   · 数据断了 → _now 继续往前走，跨度被撑大，线自然向左压缩变短，
             //     一眼就能看出「数据停了」，而不是冻住假装没变。
             float t0 = _samples[0].T;
-            float span = Mathf.Clamp(_now - t0, 1f, _windowSeconds);
-            float left = _now - span;
+            float span = Mathf.Clamp(now - t0, 1f, _windowSeconds);
+            float left = now - span;
 
             float range = Mathf.Max(0.0001f, _max - _min);
 

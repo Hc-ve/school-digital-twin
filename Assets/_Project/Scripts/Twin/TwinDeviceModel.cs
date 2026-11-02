@@ -559,10 +559,21 @@ namespace SchoolTwin.Twin
         public static bool IsEnabled(string twinId)
         {
             if (string.IsNullOrEmpty(twinId)) return false;
+
             for (int i = 0; i < Ids.Length; i++)
             {
                 if (string.Equals(Ids[i], twinId, StringComparison.Ordinal)) return true;
             }
+
+            // 【P3】机房座位是**批量生成**的（Seat_01..18），逐个列进 Ids 既冗长又容易漏。
+            // 用前缀判定，以后增删座位不用改这张表。
+            //
+            // 注意：这里**只影响"能不能发命令"**，不影响"走近会不会弹交互菜单" ——
+            // `TwinInteractPrompt.FindBest` 的候选只收 Door / Light，
+            // PC 类型本来就不进那个菜单（主脑的菜单由 TwinPcMenuDriver 单独管）。
+            // 所以主理人要求的「面板内可控制、走近不弹按钮」正好成立。
+            if (twinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal)) return true;
+
             return false;
         }
 
