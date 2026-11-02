@@ -203,6 +203,14 @@ namespace SchoolTwin.UI
         {
             _now = time;
 
+            // 【10Hz 节流】时间轴每帧推进，但**重绘不必每帧**。
+            //
+            // 一次重绘要把 300 个采样点重新生成三角面（约 2400 个顶点）。
+            // 60fps 下就是 14 万顶点/秒，两条曲线翻倍 —— 而这只是为了"线向左滚"，
+            // 10Hz 已经完全看不出卡顿（人眼对缓慢平移的容忍度远高于帧率）。
+            if (time < _tickAt) return;
+            _tickAt = time + 0.1f;
+
             // 【这里故意不丢老点】
             // 早先的写法是「丢掉滑出 60 秒的点」，看着合理，实际有两个坑：
             //   ① 数据一停，老点被一路丢到只剩 1 个 → `_samples.Count < 2` → 整条线消失。
@@ -212,6 +220,9 @@ namespace SchoolTwin.UI
             // 所以这里什么都不用做 —— 只推进时间，让整条线自己往左滚。
             SetVerticesDirty();
         }
+
+        /// <summary>`Tick` 的重绘节流时间点（10Hz）。</summary>
+        private float _tickAt;
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
