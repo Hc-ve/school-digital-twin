@@ -296,6 +296,61 @@ namespace SchoolTwin.Command
             }
         }
 
+        /// <summary>
+        /// 灯具的播种功率（W）：按**房型**分档，不再一律 42f。（P5-12 / R7）
+        ///
+        /// ── 为什么是房型，不是随机数 ────────────────────────────────────
+        /// Top5 五行全 42W 之所以"一眼假"，不是因为数值相同本身，
+        /// 而是它**不可能是真的**：礼堂 12 盏吊灯和走廊灯同功率说不通。
+        ///
+        /// 用随机数也能让判据通过（五个不同值），但答辩被问
+        /// 「为什么这盏是 68W、那盏是 24W」时，随机数答不上来 ——
+        /// 而房型能答：「礼堂是 12 盏大功率吊灯，走廊是低位筒灯」。
+        ///
+        /// ── 数值取值依据 ────────────────────────────────────────────────
+        /// 这个点位代表的是**整个房间的照明**（不是单盏灯），所以取的是
+        /// 该房间照明总功率量级。全部落在量程 0~120 内、且低于警告线 110，
+        /// 不会因为改播种值就自造出告警。
+        ///
+        ///   · 普通教室 / 计算机教室  36 / 42   6~9 盏 LED 面板灯
+        ///   · 礼堂 / 体育馆          68 / 62   12 盏大功率吊灯（y≈7.7）
+        ///   · 食堂                   55       大空间、亮灯时间长
+        ///   · 体育室 / 器材室        38 / 32
+        ///   · 走廊                   24       低位筒灯，数量多但单点代表一片
+        ///   · 校长室 / 教师办公室    28       小房间
+        ///
+        /// 未知房间退回 40（与旧值 42 接近，看不出跳变）。
+        /// </summary>
+        private static float LightSeedWatt(string twinId)
+        {
+            string zone = ZoneOf(twinId);
+            switch (zone)
+            {
+                case "ActZal": return 68f;
+                case "SportHall": return 62f;
+                case "Kitchen": return 55f;
+                case "ClassComputer": return 42f;
+                case "SportRoom2": return 38f;
+                case "SportRoom3": return 36f;
+                case "SportRoom1": return 32f;
+                case "ClassDirector": return 28f;
+                case "ClassTeachers": return 28f;
+                case "Corridor1": return 24f;
+                case "Corridor2": return 24f;
+                default:
+                    // Class1-2 / Class1-3 / Class1-4 / Class2-1 / Class2-2 等普通教室
+                    return zone != null && zone.StartsWith("Class", StringComparison.Ordinal) ? 36f : 40f;
+            }
+        }
+
+        /// <summary>取 TwinId 的第一段（分区名）。避免为一次播种引入字符串切分开销之外的依赖。</summary>
+        private static string ZoneOf(string twinId)
+        {
+            if (string.IsNullOrEmpty(twinId)) return "";
+            int slash = twinId.IndexOf('/');
+            return slash < 0 ? twinId : twinId.Substring(0, slash);
+        }
+
         private void SeedOne(string twinId, ref int seeded, ref int unresolved)
         {
             TwinDeviceModel model = ResolveModel(twinId);
@@ -310,7 +365,28 @@ namespace SchoolTwin.Command
             switch (model.Type)
             {
                 case "Light":
-                    SetState(twinId, "Power", 42f);        // 量程 0~120W，警告线 110
+                    // 【P5-12 / R7】灯具功率按**房间档位**播种，不再一律 42f。
+                    //
+                    // ── 为什么必须分开（主理人 2026-11-02 截图）───────────────
+                    // 播种值全一样 → Top5 五行全是 `42 W · 2%`、条形等长。
+                    // 条形长度按 `该设备 / Top1` 算，五个都等于 Top1，于是全满格。
+                    // 评委一眼就能看出"这五条是复制粘贴的"。
+                    //
+                    // ── 为什么按房间分档，而不是释放 override 交给正弦波 ──────
+                    // `P5-5` §5.3 曾建议"播种后释放 override，把 Power 交还正弦波"。
+                    // **这条我没采用**，因为它会带进两个更严重的回归：
+                    //   ① 灯具量程 0~120，正弦会扫过整个区间 —— 而表现层按
+                    //      `Power > 0.5` 判开关，灯会周期性自闪；
+                    //   ② 用户点"关灯"写进 override 的 0，会被下一拍正弦**覆盖回去**，
+                    //      开关控制直接失效（P26 已经为"状态被波形改掉"踩过一次）。
+                    // `P5-4` §6.3 给的方案才是安全的：**仍然钉住，只是钉不同的值**。
+                    // 这样灯不会闪、开关仍然说了算，而 Top5 立刻出现 4 个以上不同值。
+                    //
+                    // ── 分档依据 ──────────────────────────────────────────────
+                    // 用房型而不是"随机数"：答辩被问「为什么这盏 68W」时，
+                    // 能直接答"礼堂 12 盏大灯，单盏功率高"。随机数答不上来。
+                    // 数值都落在量程 0~120 内、且低于警告线 110，不会自造告警。
+                    SetState(twinId, "Power", LightSeedWatt(twinId));
                     SetState(twinId, "Brightness", 80f);   // 警告带 20~100
                     seeded++;
                     break;
@@ -561,7 +637,10 @@ namespace SchoolTwin.Command
                     float watt;
                     switch (type)
                     {
-                        case "Light": watt = on ? 42f : 0f; break;    // 量程 0~120W，警告线 110
+                        // 【P5-12】开灯的功率必须与播种值同源，否则"点一下开灯"会把
+                    // 分档过的 68W 打回 42W —— 档位只在开局生效一次，一点就废。
+                    // 两处都走 `LightSeedWatt`，改档位只改一个方法。
+                    case "Light": watt = on ? LightSeedWatt(twinId) : 0f; break;
                         case "AC": watt = on ? 1.2f : 0f; break;      // 量程 0~3.5kW，警告线 3
                         // 量程 0~3000W（整间 10 台 × 300W）。开 = 10 台 × 180W = 1800W，
                         // 与 SeedInitialState 的初值必须一致，否则「点开」会看起来像跳变。

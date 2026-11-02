@@ -220,7 +220,14 @@ namespace SchoolTwin.UI
             Text v = TwinUIFactory.Label(_root, "FootVer", TwinTheme.FsMicro,
                 TextAnchor.MiddleRight, TwinTheme.TextMuted);
             TwinUIFactory.Place(v.rectTransform, RailW * 2f + MidW - 20f - 160f, 720f - FootH, 160f, FootH);
-            v.text = "v0.9 · " + DateTime.Now.ToString("HH:mm:ss");
+
+            // 【P5-1 P1-4】这里**只写版本号，不写时间**。
+            //
+            // 原来写 `"v0.9 · " + HH:mm:ss`，而统计页页脚右段（`FFootR`）也是
+            // 「更新 HH:mm:ss」，两个时间戳同屏 —— 主理人明确反感的"信息重复"。
+            // 时间由统计页那份单独承担（它 0.5s 刷一次，本来就准）；
+            // 底带这只是"版本标识"，不带时间语义。
+            v.text = "v0.9";
             v.raycastTarget = false;
         }
 
@@ -556,6 +563,14 @@ namespace SchoolTwin.UI
             if (_powerGroup != null) _powerGroup.gameObject.SetActive(index == 2);
             if (_alarmCenterGroup != null) _alarmCenterGroup.gameObject.SetActive(index == 3);
             if (_statsGroup != null) _statsGroup.gameObject.SetActive(index == 4);
+
+            // 【P5-1 P0-2】每次进统计页都把曲线重置并从历史层重新回填。
+            //
+            // 必须放在 `_statsGroup.SetActive(true)` **之后** —— 曲线是这一组的子物体，
+            // 组没激活时 `Clear()` 会触发一次无效重建。
+            // 重置的意义见 `ResetStatsSpark()` 注释：span 按"缓冲最早点"算，
+            // 留着旧点会让新点挤到右端（P0-2 截图的直接成因）。
+            if (index == 4) ResetStatsSpark();
 
             // 【P5】统计页进**满宽态**：右栏让位，中栏 600 + 右栏 200 合并成 800。
             // 其余四页保持原布局（负责人裁决：只允许统计页动）。
@@ -1005,6 +1020,13 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
             SetGroupActive(_alarmCenterGroup, !home && _tab == 3);
             SetGroupActive(_statsGroup, !home && _tab == 4);
             SetGroupActive(_emptyGroup, false);
+
+            // 【P5-1 P0-2】从 Home（或窄态回来）直接进到统计页时，曲线同样要重建。
+            //
+            // `SelectTab` 只覆盖"页内切 Tab"这一条路径；从 L1 进 L2 时
+            // `_tab` 保持上次的值（默认 0，但也可能停在上次的 4），
+            // 走的入口是 `Show(Mode.System)` —— 不在这里补一句就会漏。
+            if (!home && _tab == 4) ResetStatsSpark();
 
             // L1 右栏两态（告警 / 设备详情）交给 RefreshHome 裁决 ——
             // 它才知道有没有选中设备；在这里硬切会和它打架。
@@ -1536,6 +1558,48 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
         private static void SetText(Text t, string s)
         {
             if (t != null && !string.Equals(t.text, s, StringComparison.Ordinal)) t.text = s;
+        }
+
+        /// <summary>
+        /// KPI 一格：数值大字 + 单位小字，单位位置按数值的实际宽度跟随。
+        ///
+        /// 【为什么不能写死 x】"133"（3 位）和 "2.8"（3 字符但窄）宽度差很多，
+        /// 写死一个偏移量必然在一半情况下错位：要么压在数字上，要么飘出老远。
+        /// `Text.preferredWidth` 是 UGUI 按当前字号/字体算出的真实排版宽度 ——
+        /// 用它算 x 才和肉眼看到的边界一致。
+        ///
+        /// 【为什么用 `LayoutUtility` 而不是自己字号估宽】估宽要自己维护一张
+        /// 字宽表，字号一改就全错。`preferredWidth` 由 TextGenerator 给出，
+        /// 换成别的字库也自动对。
+        /// </summary>
+        private void SetKpi(int i, string value, string unit)
+        {
+            Text v = _kpiValue[i];
+            if (v == null) return;
+
+            SetText(v, value);
+
+            Text u = _kpiUnit[i];
+            if (u == null) return;
+
+            // 单位空串时直接隐藏 —— 否则会留下一格"零宽但仍在排版"的空 Text
+            bool hasUnit = !string.IsNullOrEmpty(unit);
+            if (u.gameObject.activeSelf != hasUnit) u.gameObject.SetActive(hasUnit);
+            if (!hasUnit) return;
+
+            SetText(u, unit);
+
+            // 数值宽度 + 4px 间隙，单位左上角贴到那里。
+            // `preferredWidth` 在 text 设完之后才是新的，所以顺序不能反。
+            float w = Mathf.Ceil(v.preferredWidth);
+            float x = 12f + w + 4f;
+
+            // 兜底：万一单位被挤出卡片右边界（极长的数值 + 单位），
+            // 至少保证它还在卡内，不压到下一张卡上
+            float rightLimit = SKpiW - 12f - Mathf.Ceil(u.preferredWidth);
+            x = Mathf.Min(x, rightLimit);
+
+            u.rectTransform.anchoredPosition = new Vector2(x, u.rectTransform.anchoredPosition.y);
         }
     }
 }

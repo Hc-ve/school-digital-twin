@@ -58,6 +58,81 @@ namespace SchoolTwin.UI
         /// <summary>回填用的临时缓冲（复用，避免每次打开设备都 new）。</summary>
         private static readonly List<Vector2> _outBuf = new List<Vector2>(Capacity);
 
+        // ================================================================ 全楼总功率（P5 曲线）
+
+        /// <summary>
+        /// **全楼总功率**的独立历史缓冲（P5-1 的 P0-2）。
+        ///
+        /// ── 为什么它不能挂在某台设备下面 ──────────────────────────────
+        /// `_store` 是 `twinId → metric → Ring`，存的是**单台设备**的指标。
+        /// 全楼总功率是 70 台设备求和后的派生量，没有哪个 twinId 对应它 ——
+        /// 所以它必须是一条独立的序列，不能塞进 `_store`。
+        ///
+        /// ── 为什么要在这儿采，而不是在统计页采 ────────────────────────
+        /// 统计页只在 `_tab == 4` 时激活，切走就停。如果曲线历史只由统计页自己攒，
+        /// 切走 30s 再回来，缓冲里只有刚进来的几个点 —— 这正是 P0-2 的病根：
+        /// 用当前值伪造 300 点假历史，或者说"一张空图"。
+        ///
+        /// 时序数据必须独立于界面存在（本项目时序层的根本原则，见类头注释）。
+        /// 所以聚合总量和 146 条单指标一样，跟着**常驻 runner** 采，跟界面开不开无关。
+        ///
+        /// ── 成本 ──────────────────────────────────────────────────────
+        /// `SumLivePower()` 实测 0.021 ms/次（70 台），5Hz → 0.11 ms/s。
+        /// 加上原有 146 项采样约 0.30 ms/s，合计约 0.41 ms/s，可接受。
+        /// </summary>
+        private static readonly Ring _aggPower = new Ring();
+
+        /// <summary>
+        /// 把全楼总功率的真实历史回填进曲线。
+        ///
+        /// **有历史就回填，不足 2 点就 Clear** —— 返回 false 表示"还没攒够"，
+        /// 调用方应当显示「正在采样」而不是画一条假平线。
+        /// 这与 `Fill(...)` 的契约一致：界面永远不伪造数据。
+        /// </summary>
+        public static bool FillAggregatePower(TwinSparkline spark)
+        {
+            if (spark == null) return false;
+
+            _outBuf.Clear();
+            _aggPower.CopyTo(_outBuf);
+
+            if (_outBuf.Count >= 2)
+            {
+                spark.LoadFrom(_outBuf);
+                return true;
+            }
+
+            spark.Clear();
+            return false;
+        }
+
+        /// <summary>全楼总功率已采到的点数（用于「正在采样」判定与诊断）。</summary>
+        public static int AggregatePowerCount { get { return _aggPower.Count; } }
+
+        /// <summary>
+        /// 【独立写入口】由 `TwinPowerEstimate` 的常驻 runner 调用，**不经过 `Tick`**。
+        ///
+        /// ── 为什么要有第二个入口（负责人 2026-11-02 要求）────────────────
+        /// 原来唯一的写入点是 `Tick()` 里那一行。而 `Tick()` 属于时序层 ——
+        /// 以后有人重构时序层（改采样周期、换存储、条件早退），那一行很容易被
+        /// 顺手删掉或挪走，曲线就会**静默断掉**：不报错、不警告，
+        /// 只是图上永远显示"正在采样…"，排查时很难想到是时序层的锅。
+        ///
+        /// 现在 `TwinPowerEstimate` 自己持一个常驻采样入口（见它的 `AggPowerRunner`），
+        /// 即使 `Tick()` 里那行被删，曲线仍然能采到数据 —— 两条独立路径，
+        /// 任一条活着就不会断。反之亦然。
+        ///
+        /// ── 重复写入会怎样 ────────────────────────────────────────────
+        /// 两条路径都活着时会重复 Push（同一时刻两个点）。`TwinSparkline`
+        /// 按时间画线，重复 x 只是同一列多一个点，视觉上无差别；
+        /// 环形缓冲容量 300 会自然覆盖。所以**不需要去重**，
+        /// 去重反而要记"上次写的时间戳"，多一份状态多一个出错面。
+        /// </summary>
+        public static void PushAggregatePower(float now, float watt)
+        {
+            _aggPower.Push(now, watt);
+        }
+
         /// <summary>
         /// 扁平化的采样槽：每个 (设备, 指标) 一条，**预先解析好**。
         ///
@@ -116,6 +191,18 @@ namespace SchoolTwin.UI
                 if (s.Anchor.TryGetValue(s.Metric, out v))
                     s.Ring.Push(now, v.Value);
             }
+
+            // 【P5-1 P0-2】全楼总功率：与设备指标同一拍采，5Hz。
+            //
+            // 和上面 146 项分开写，是因为它不来自某台设备的 `Values`，
+            // 而是 70 台求和后的派生量（见 `_aggPower` 注释）。
+            // 放在同一拍里，保证两条曲线的时间戳严格对齐 ——
+            // 分开两拍会出现"总功率曲线比单指标曲线晚半格"的错位。
+            //
+            // ⚠️ 这条**不是唯一路径**：`TwinPowerEstimate` 另有一个常驻 runner
+            // 也在写同一个环（见 `PushAggregatePower` 的注释）。
+            // 两条独立路径，任一条活着曲线就不会静默断掉。
+            PushAggregatePower(now, TwinPowerEstimate.SumLivePower());
 
             // 开销统计：首次 5 秒后报一次（便于验收当场看到数字），之后每 60 秒一次
             _costMsAccum += (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
@@ -265,6 +352,7 @@ namespace SchoolTwin.UI
         {
             _store.Clear();
             _slots.Clear();
+            _aggPower.Clear();          // 聚合总功率也是历史的一部分，一起清
             _slotSourceCount = -1;
             _nextSample = 0f;
             _costMsAccum = 0.0;
@@ -285,6 +373,15 @@ namespace SchoolTwin.UI
             private readonly Vector2[] _buf = new Vector2[Capacity];
             private int _head;    // 下一个写入位置
             private int _count;
+
+            /// <summary>已写入的点数（≤ Capacity）。</summary>
+            public int Count { get { return _count; } }
+
+            public void Clear()
+            {
+                _head = 0;
+                _count = 0;
+            }
 
             public void Push(float t, float v)
             {

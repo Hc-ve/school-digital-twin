@@ -131,6 +131,68 @@ namespace SchoolTwin.UI
         public static readonly Color StatusStale = new Color(0.50f, 0.50f, 0.55f, 1f);
         public static readonly Color StatusOffline = new Color(0.28f, 0.28f, 0.30f, 1f);
 
+        /// <summary>
+        /// donut 第 5 段「其他」的颜色：`(0.26, 0.28, 0.33)`。
+        ///
+        /// ── 为什么不直接用 `StatusUnknown` ──────────────────────────────
+        /// `StatusUnknown` 是**状态语义色**（设备状态未知），全项目多处在用。
+        /// donut 那段是"构成占比"里的聚合项，两者语义不同 ——
+        /// 共用会让"改状态色"意外改掉图表，"改图表"意外改掉状态。
+        ///
+        /// ── 数值怎么定的（P5-1 P1-3 + 负责人裁决）───────────────────────
+        /// 验收要求：「其他」是 5 段中**亮度最低**的一段，
+        /// 亮度按 `0.2126R + 0.7152G + 0.0722B` 算。
+        ///
+        ///   原 StatusUnknown (0.35,0.38,0.45) → 0.3787  ← 比 Seq4 还亮，反抢第一眼
+        ///   优化单建议   (0.29,0.31,0.36) → **0.3094  ← 仍高于 Seq4 的 0.3055，过不了验收**
+        ///   现在采用     (0.26,0.28,0.33) → 0.2794  ← 低于 Seq4 ✔
+        ///
+        /// 所以**不要照优化单的 0.29/0.31/0.36 改**，那个值自相矛盾。
+        /// </summary>
+        public static readonly Color ChartSeqOther = new Color(0.26f, 0.28f, 0.33f, 1f);
+
+        /// <summary>
+        /// 【P5】donut / 分段图表的**唯一**色板：单色相 4 级明度 + 灰。
+        ///
+        /// ── 为什么要收到这里（2026-11-02）──────────────────────────────
+        /// 全屏 `TwinFullLayer.Pages` 与窄态 `TwinSystemPage` 原来各存一份手写实现
+        /// （前者的 `DonutPalette` 数组、后者的 `NDonutColor` switch），
+        /// 靠注释「必须保持一致」互相提醒 —— 那是靠人记，不是靠编译器拦。
+        /// 主理人明确要求「窄态 donut 配色必须和全屏完全一致」，
+        /// 最可靠的做法就是**只留一份**，两边都来这儿取。
+        ///
+        /// ── 为什么是 5 段而不是 4 段 ──────────────────────────────────
+        /// 第 5 位是「其他」聚合项（合并第 5 名及以后的类型）。
+        /// 它表示的不是某个类型而是一堆剩下的，所以用灰 `ChartSeqOther`
+        /// （不是 `StatusUnknown`，理由见那个常量的注释），
+        /// 与 4 级彩阶在视觉上区分开。段序固定按台数降序（图纸 §2.3）。
+        ///
+        /// ── 挪动这里时的注意事项 ──────────────────────────────────────
+        /// 声明位置必须在 `ChartSeq1~4` 与 `ChartSeqOther` **之后** ——
+        /// C# 静态字段按文本顺序初始化，提前声明会读到 (0,0,0,0) 的全黑。
+        ///
+        /// 色板本体**故意 private**：数组是可变引用，公开出去就可能有人
+        /// `ChartSeqPalette[2] = ...` 就地改，又回到"两态不一致"的老路。
+        /// 要加段/改色就改这一处，改完全项目一起变。
+        /// </summary>
+        private static readonly Color[] ChartSeqPalette =
+        {
+            ChartSeq1,          // 第 1 大类型
+            ChartSeq2,
+            ChartSeq3,
+            ChartSeq4,
+            ChartSeqOther,      // 「其他」聚合项（亮度必须低于上面 4 段）
+        };
+
+        /// <summary>
+        /// 按段序取色，越界自动夹到末位（灰）。
+        /// 全屏与窄态**都必须**走这个入口，不许再写 switch 或第二份数组。
+        /// </summary>
+        public static Color ChartSeqAt(int i)
+        {
+            return ChartSeqPalette[Mathf.Clamp(i, 0, ChartSeqPalette.Length - 1)];
+        }
+
         /// <summary>告警橙。**只给告警用**，不要拿来当强调色。</summary>
         public static readonly Color Warn = StatusWarning;
 

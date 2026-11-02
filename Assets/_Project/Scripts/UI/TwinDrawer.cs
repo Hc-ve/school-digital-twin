@@ -79,8 +79,23 @@ namespace SchoolTwin.UI
         /// <summary>头部容器。最大化时要跟着内容一起内缩（见 ApplyMaximizedLayout）。</summary>
         private RectTransform _header;
 
-        /// <summary>最大化按钮的字形（□ / ▣）。切换时直接改 text，不引新贴图。</summary>
+        /// <summary>最大化按钮的字形（□ / ❐）。切换时直接改 text，不引新贴图。</summary>
         private Text _maxGlyph;
+
+        /// <summary>
+        /// 最大化按钮本体（□）。**必须存引用** —— `ApplyHeaderInsets` 要跟 × 一起挪。
+        ///
+        /// 【为什么不存会在全屏态错位】原来这里没有字段，MaxBtn 只在 BuildHeader 里
+        /// `AnchorTopRight(56, 28, 24, 24)` 定一次，之后再没人管它。而 P5-1 P0-3 把
+        /// × 改成了「右距 32 / y=54 / 32×32」，于是两个按钮被拉到了**两行**：
+        ///   □ 占 y 28–52，× 占 y 54–86，横向 24+8+32 还重叠 8px。
+        /// 全屏截图里右上角出现"两个 ×"，就是 □ 在全屏下变成 ▣（方块套方块，
+        /// 缩到 70% 后读作叉）＋ 两个按钮错行造成的。见 2026-11-02 主理人反馈。
+        /// </summary>
+        private RectTransform _maxBtnRt;
+
+        /// <summary>关闭 ×（P5-1 P0-3：全屏 32×32，窄态保持 24×24）。</summary>
+        private TwinButton _closeBtn;
 
         /// <summary>是否处于最大化（铺满画布宽度）。</summary>
         private bool _maximized;
@@ -406,15 +421,24 @@ namespace SchoolTwin.UI
             // 关闭 ×：全屏 24×24、右距 24、y=28（见微 P1-3 / 规格 §3.1）；
             // 用 GhostOnDark 变体 —— 纯 Ghost 在深色标题栏上是"看不见底、只能看见字"，
             // 而这里的字本身又很淡，等于整颗按钮消失。
-            TwinButton close = TwinButton.Create(header, "×", TwinButtonStyle.GhostOnDark,
+            //
+            // 【P5-1 P0-3】全屏态改成 32×32、右距 16。两态边距由
+            // `ApplyHeaderInsets()` 分别下发 —— **窄态一个数字都不动**（窄态已验收，
+            // 挪一次就要重验一次，见 ApplyFullMode 的头注释）。
+            _closeBtn = TwinButton.Create(header, "×", TwinButtonStyle.GhostOnDark,
                 24f, 24f, Close, "Close");
-            TwinUIFactory.AnchorTopRight(close.Rect, 24f, 28f, 24f, 24f);
+            TwinUIFactory.AnchorTopRight(_closeBtn.Rect, 24f, 28f, 24f, 24f);
 
             // 最大化 □（P29-4 C 方案）：只加这一个。
             // **不加「最小化 —」** —— 它的行为和关闭 × 完全重叠，两个入口做一件事只会让人分不清。
             // 位置：× 左边 8px（24 + 24 + 8 = 56 右距），同为 24×24。
+            //
+            // 【P5-1 补】这行的 56/28/24 只是**窄态初值**，全屏态由
+            // `ApplyHeaderInsets()` 重新下发（右距 72 / y=54 / 32×32，与 × 同行同高）。
+            // 千万别只在这里定一次就以为完事 —— 那正是"两个 × 错行"的成因。
             GameObject maxGo = TwinUIFactory.Node("MaxBtn", header);
             RectTransform maxRt = (RectTransform)maxGo.transform;
+            _maxBtnRt = maxRt;
             TwinUIFactory.AnchorTopRight(maxRt, 56f, 28f, 24f, 24f);
 
             // 与「关闭」同一套底：白 @0.04 + 白 @0.10 描边。
@@ -437,6 +461,10 @@ namespace SchoolTwin.UI
             TwinUIFactory.Stretch(_maxGlyph.rectTransform);
             _maxGlyph.text = "□";
             _maxGlyph.raycastTarget = false;
+            // 【字号为什么两态不同】全屏时按钮放大到 32×32，13px 的字形缩在
+            // 32 的框里只剩中间一点，远看像杂点。所以全屏提到 FsBodyStrong(15)，
+            // 窄态仍是 FsBody(13)（24 的框配 13px 正好）。
+            // 两个值直接用 `TwinTheme` 常量，不另存字段 —— 存一份就和 token 脱钩了。
 
             // 分隔线 1px（§4.1：y=88，左右内边距 16）
             Image line = TwinUIFactory.Block(_root, "HeaderLine", TwinTheme.Divider, false);
@@ -483,7 +511,12 @@ namespace SchoolTwin.UI
             // 左端 width−46），比规格假设的 16×16 更宽。按 54 排，摘要右端在 width−54、
             // × 左端在 width−46，间距只有 8px —— 不满足 ②。
             // ① 是排版值、② 是硬指标，冲突时保 ②：rightInset = 46 + 12 = 58。
-            const float rightInset = 58f;
+            //
+            // 【P5-1 P0-3】全屏态改用绝对右缘 888（相对 1000 宽）：
+            //   rightInset = 1000 − 888 = 112。
+            // 窄态仍走上面那套 58 —— 窄态的 × 是 24×24、右距 24，
+            // 58 已经和它对过账，不动。
+            float rightInset = _maximized ? (FullW - FullSummaryRight) : 58f;
 
             // 可用宽度 = 抽屉宽 − 右缘让位 − 左边留白（标题区最多占到 332）
             float avail = _widthCur - rightInset - 332f;
@@ -880,7 +913,16 @@ namespace SchoolTwin.UI
             TwinSystemState.FloorFilter = 0;
             if (_fullLayer != null) _fullLayer.ResetFloorFilter();
 
-            if (_maxGlyph != null) _maxGlyph.text = _maximized ? "▣" : "□";
+            // 【2026-11-02】全屏态的"还原"标记从 `▣` 改成 `❐`。
+            //
+            // `▣` 是"实心方块套一个小实心方块"，在 32×32 里几乎糊成一坨，
+            // 缩到 70% 显示后读起来就是一个叉 —— 与旁边的 × 撞脸，
+            // 主理人截图里报的"两个 ×"有一半是这个原因（另一半是两个按钮错行）。
+            //
+            // `❐` 是"两个错位叠放的方框"，也就是业界通用的 restore 图标形态，
+            // 语义明确、笔画之间有空隙，缩到 70% 仍能读出"两层"。
+            // 若字体缺这个字形会显示成方框，届时退回 `□`（狨态同款）也不突兀。
+            if (_maxGlyph != null) _maxGlyph.text = _maximized ? "❐" : "□";
             ApplyFullMode();
         }
 
@@ -930,6 +972,10 @@ namespace SchoolTwin.UI
             {
                 _maximized = false;
                 if (_maxGlyph != null) _maxGlyph.text = "□";
+                // 【2026-11-02 补】只复位字形不复位位置，下次打开会停在全屏尺寸：
+                // × 还是 32×32/右距32，□ 还是 32×32/右距72，两个按钮比标题条还大。
+                // 这里补一次 ApplyHeaderInsets()，把两个按钮和摘要右缘一起拉回窄态值。
+                ApplyHeaderInsets();
             }
             // 收起全屏层并恢复窄态内容（否则下次打开是一块空白）
             ApplyFullMode();
@@ -1128,6 +1174,86 @@ namespace SchoolTwin.UI
         /// <summary>上次给头部定位时是否全屏。两态标题 y 不同（30/56 vs 20/62），只在切换时重排。</summary>
         private bool _lastFullForHeader;
 
+        // ---- 全屏态头部右上角三段（P5-1 P0-3）----
+        //
+        // 现状（相对 1000 宽的全屏，从左到右排开）：
+        //   状态文字  右端 888
+        //   □ 最大化  左缘 904 … 右缘 936   (右距 72, y=54, 32×32)
+        //   × 关闭    左缘 936 … 右缘 968   (右距 32, y=54, 32×32)
+        //   → 文字与 □ 间距 16 ✔、□ 与 × 间距 8 ✔、× 右缘距面板边界 32
+        //
+        // 【原来那处「x=936 与 间距 16 互斥」的死结，已解开】────────────
+        // 第一版只把 × 挪到 x=936、状态文字右端 888，中间空 48，当时判定
+        // 「x=936 与『右端 888 + 间距 16』数学互斥，必须放弃一个」。
+        // 那个结论错在**假设右上角只有一个按钮**。实际还有一个 □ 最大化，
+        // 它本来就在 × 左边。把它纳入同一行之后：
+        //   888 + 16 = 904（□ 左缘）→ 936（□ 右缘）→ 968（× 右缘）
+        // 三个数字全部成立，一个都不用放弃。
+        //
+        // 教训：算间距前先把这一片**所有**控件数清楚，别只盯着要改的那一个 ——
+        // 只挪 × 不动 □ 的直接后果就是两个按钮错行、□ 缩成 ▣ 被读成第二个 ×。
+        private const float FullCloseSize = 32f;
+        private const float FullCloseY = 54f;
+        private const float FullSummaryRight = 888f;
+        /// <summary>右上角两个按钮之间的横向间距（与窄态一致，视觉节奏统一）。</summary>
+        private const float FullBtnGap = 8f;
+
+        /// <summary>
+        /// 全屏态右上角：关闭键放大到 32×32、最大化键跟着走、状态文字右端收到 888。
+        ///
+        /// 只在 `_maximized` 变化时调，不每帧写 —— 这几个值不会中途变。
+        /// 注意 `_summary` 的右缘是由 `LayoutSummary()` 用 `_widthCur` **现算**的
+        /// （文案长度会变），所以这里不能直接写它的 x，只能改它用的 `rightInset`。
+        ///
+        /// ── 【2026-11-02 修】□ 必须和 × 一起下发 ──────────────────────
+        /// 第一版只挪了 ×，□ 还停在 BuildHeader 里的「右距 56 / y=28 / 24×24」，
+        /// 于是全屏态右上角变成上下两行：□ 在 y 28–52、× 在 y 54–86，
+        /// 横向 24+8+32 还重叠 8px。而全屏时 □ 的字形是 `▣`（方块套方块），
+        /// 缩到 70% 读起来就是一个叉 —— 主理人看到的就是"两个 ×"。
+        ///
+        /// 现在两个按钮同一行中心（y 都是 54）、同高 32、间距 8：
+        ///   □  左缘 904 … 右缘 936
+        ///   ×  左缘 936 … 右缘 968
+        /// 状态文字右端仍是 888，与 □ 左缘 904 间距 16 —— 正好是优化单要的 16。
+        /// </summary>
+        private void ApplyHeaderInsets()
+        {
+            if (_closeBtn == null) return;
+
+            if (_maximized)
+            {
+                // × 右缘 968 → marginRight = 1000 − 968 = 32
+                TwinUIFactory.AnchorTopRight(_closeBtn.Rect, 32f, FullCloseY,
+                    FullCloseSize, FullCloseSize);
+
+                // □ 放在 × 左侧，间距 FullBtnGap：
+                //   右距 = 32(× 右距) + 32(× 宽) + 8(间距) = 72
+                // 宽高与 × 相同、y 也相同 —— 三个值全部由常量推出来，不写死 72
+                if (_maxBtnRt != null)
+                {
+                    TwinUIFactory.AnchorTopRight(_maxBtnRt,
+                        32f + FullCloseSize + FullBtnGap, FullCloseY,
+                        FullCloseSize, FullCloseSize);
+                    // 字形字号跟着放大（32 的框配 13px 太小）
+                    if (_maxGlyph != null) _maxGlyph.fontSize = TwinTheme.FsBodyStrong;
+                }
+            }
+            else
+            {
+                TwinUIFactory.AnchorTopRight(_closeBtn.Rect, 24f, 28f, 24f, 24f);
+
+                // 窄态回到初值：× 右距 24、□ 右距 24+24+8 = 56，同为 24×24
+                if (_maxBtnRt != null)
+                {
+                    TwinUIFactory.AnchorTopRight(_maxBtnRt,
+                        24f + 24f + FullBtnGap, 28f, 24f, 24f);
+                    if (_maxGlyph != null) _maxGlyph.fontSize = TwinTheme.FsBody;
+                }
+            }
+
+            LayoutSummary();
+        }
+
         /// <summary>
         /// 标题与副标定位。两态不同（P29-6 §3.1）：
         ///   窄态 头 96 → 标题 y=20、副标 y=62
@@ -1171,6 +1297,10 @@ namespace SchoolTwin.UI
                 _lastFullForHeader = _maximized;
                 bool isHome = _stack == null || _stack.Top == null || _stack.Top is TwinHomePage;
                 LayoutHeaderText(isHome);
+
+                // 【P5-1 P0-3】右上角三段（关闭键尺寸/边距 + 状态文字右缘）跟着两态换。
+                // 和 LayoutHeaderText 同一个时机 —— 都是"只在切换那一下重排"。
+                ApplyHeaderInsets();
             }
 
             // 底分三种形态（见微 P0-1 / P0-2）：

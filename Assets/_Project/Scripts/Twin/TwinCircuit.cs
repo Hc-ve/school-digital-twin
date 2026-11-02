@@ -121,6 +121,29 @@ namespace SchoolTwin.Twin
             new Dictionary<string, float>(8, StringComparer.Ordinal);
 
         /// <summary>
+        /// TwinId → 是否通电 的查表缓存。**每次合/拉闸都必须整表清空。**
+        ///
+        /// ── 为什么需要（2026-11-02 加断电归零后暴露）──────────────────
+        /// 一旦 `LivePowerOf` 开始问"这台设备通电吗"，`IsPowered` 就从
+        /// "偶尔被面板问"变成"5Hz × 53 台 × 两条采样路径"。
+        ///
+        /// 而 `IsPowered` 内部的成本并不低：
+        ///   · `ZoneOf`  → `Substring`          → 一次字符串分配
+        ///   · `RoomId`  → `"Circuit-" + zone`  → 一次字符串分配
+        ///   · `IsPowerIndependent` → `Substring` → 又一次
+        /// 算下来 530 次/秒 × 3 次分配 ≈ 1600 次小对象分配/秒，纯 GC 压力。
+        ///
+        /// 断电状态是**事件驱动**的（只有点按钮才会变），天然可缓存：
+        /// 缓存表在 `SetSwitch` 里整表清掉，下一次查询重建。
+        /// 71 台设备的重建成本可以忽略，而且只在真正拉闸的那一帧发生。
+        ///
+        /// ⚠️ 新增任何改变 `node.On` 的入口时，必须同时清空这张表 ——
+        /// 漏掉的表现是"拉了闸但读数没归零"，且不会报错。
+        /// </summary>
+        private static readonly Dictionary<string, bool> _poweredCache =
+            new Dictionary<string, bool>(96, StringComparer.Ordinal);
+
+        /// <summary>
         /// 每次进入 Play 都从「全部通电」开始。
         ///
         /// 【为什么必须显式重置】静态字段在编辑器里跨 Play 会话是可能存活的
@@ -134,6 +157,7 @@ namespace SchoolTwin.Twin
             _order.Clear();
             _built = false;
             _unreachableUntil.Clear();
+            _poweredCache.Clear();
             Changed = null;
         }
 
@@ -144,6 +168,7 @@ namespace SchoolTwin.Twin
             _order.Clear();
             _built = false;
             _unreachableUntil.Clear();
+            _poweredCache.Clear();
         }
 
         // ---------------------------------------------------------------- 建表
@@ -266,9 +291,16 @@ namespace SchoolTwin.Twin
 
         public static bool IsPowered(string twinId)
         {
+            // 【缓存必须先查，再跑 IsPowerIndependent】
+            // 后者内部有 `Substring`（切出类别那一段），放在缓存前面等于每次都白分配一次。
+            // 门也是可缓存的：类别由 TwinId 决定，TwinId 不变 → 豁免性永不变。
+            bool cached;
+            if (_poweredCache.TryGetValue(twinId, out cached)) return cached;
+
             // 【P3-4】门不受电力回路影响 —— 见 IsPowerIndependent 的说明。
-            if (IsPowerIndependent(twinId)) return true;
-            return IsPoweredZone(ZoneOf(twinId));
+            bool powered = IsPowerIndependent(twinId) || IsPoweredZone(ZoneOf(twinId));
+            _poweredCache[twinId] = powered;
+            return powered;
         }
 
         /// <summary>
@@ -418,6 +450,10 @@ namespace SchoolTwin.Twin
             if (node.On == on) return CountDevices(circuitId);
 
             node.On = on;
+
+            // 【必须】清空通电缓存 —— 见 `_poweredCache` 的注释。
+            // 不清的表现是：拉了闸，但曲线/总量一个数都没变，且 Console 干净。
+            _poweredCache.Clear();
 
             // 先数设备再发事件：事件处理器里会去停发数据，需要知道范围
             int devices = CountDevices(circuitId);

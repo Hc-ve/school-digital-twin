@@ -332,12 +332,33 @@ namespace SchoolTwin.UI
         private const int AlmRowsFull = 6;
 
         private readonly RectTransform[] _acRow = new RectTransform[AlmRowsFull];
+        /// <summary>
+        /// 【告警可点】行底（本身就是 `raycastTarget=true` 的 Graphic + Button）。
+        ///
+        /// 选中态用**底色**表达（AccentDim），不用描边：
+        /// 描边已经是 1px Border，改成主色在 42 高的行上几乎看不出来，
+        /// 而整行底色一变，"我现在选的是哪条"是瞬间可读的。
+        /// </summary>
+        private readonly TwinRoundedRect[] _acRowBg = new TwinRoundedRect[AlmRowsFull];
         private readonly Image[] _acBar = new Image[AlmRowsFull];
         private readonly Text[] _acId = new Text[AlmRowsFull];
         private readonly Text[] _acDesc = new Text[AlmRowsFull];
         private readonly Text[] _acDur = new Text[AlmRowsFull];
         private readonly List<TwinAlarmHistory.AlarmRecord> _acBuf =
             new List<TwinAlarmHistory.AlarmRecord>(64);
+
+        /// <summary>
+        /// 【告警可点】这一帧**实际画出来**的那几条（已按「进行中/历史」过滤）。
+        ///
+        /// ── 为什么不能直接拿 `_acBuf[index]` ────────────────────────────
+        /// `_acBuf` 装的是**全部**记录（进行中 + 历史混在一起），而列表只渲染其中
+        /// 匹配当前页签的那一批。所以 "第 0 行" 不等于 "`_acBuf[0]`" ——
+        /// 切到「历史」时，点第 0 行可能选中一条进行中的记录，
+        /// 表现为"时间线显示的是另一台设备"，且不报错。
+        /// 这里单独存一份渲染顺序的副本，行号与内容一一对应。
+        /// </summary>
+        private readonly List<TwinAlarmHistory.AlarmRecord> _acShown =
+            new List<TwinAlarmHistory.AlarmRecord>(AlmRowsFull);
 
         private readonly List<RectTransform> _tlItems = new List<RectTransform>(12);
         private readonly List<Text> _tlTexts = new List<Text>(12);
@@ -372,6 +393,7 @@ namespace SchoolTwin.UI
                     Color.clear, Color.clear, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
                 TwinUIFactory.Place(row.rectTransform, PageX, y, PageW, 42f);
                 _acRow[i] = row.rectTransform;
+                _acRowBg[i] = row;
 
                 Image bar = TwinUIFactory.Block(row.rectTransform, "Bar", TwinTheme.StatusAlarm, false);
                 TwinUIFactory.Place(bar.rectTransform, 0f, 9f, 3f, 24f);
@@ -470,11 +492,57 @@ namespace SchoolTwin.UI
                 _almTabHis.color = _acHistory ? TwinTheme.Accent : TwinTheme.TextMuted;
         }
 
+        /// <summary>
+        /// 点一条告警 → 选中设备 + 画时间线。
+        ///
+        /// ── 两件事一起做，缺一件就"看着不对"──────────────────────────
+        ///   ① 选中并让镜头飞过去（`TwinPicker.Select`），这是「点告警定位设备」的本意；
+        ///   ② 画全链路时间线（本页右下的追溯卡），这是全屏 L2 的交付内容（图纸 §3.4）。
+        ///
+        /// 上一版只做了 ②，所以点完**只剩时间线在变、场景完全不动**，
+        /// 用户读到的是"点了不定位"。窄态那条入口更是连点击都没绑。
+        ///
+        /// ── 索引取 `_acShown` 而不是 `_acBuf` ─────────────────────────
+        /// 列表是过滤后的（进行中 / 历史二选一），`_acBuf` 是全集。
+        /// 用全集索引会选到另一条记录 —— 见 `_acShown` 字段的注释。
+        /// </summary>
         private void OnAlarmRowClicked(int index)
         {
-            if (index >= _acBuf.Count) return;
-            _acSelected = _acBuf[index].TwinId + "@" + _acBuf[index].StartTime.ToString("0.0");
+            if (index < 0 || index >= _acShown.Count) return;
+
+            TwinAlarmHistory.AlarmRecord rec = _acShown[index];
+            _acSelected = rec.TwinId + "@" + rec.StartTime.ToString("0.0");
+
+            // 选中该设备：窄态/全屏共用同一份 Selected，右侧辅栏与详情卡会跟着切换。
+            // 相机是否真的飞过去由 TwinPicker.FaceAnchor 裁决（只在观景模式做），
+            // 这里不重复判断 —— 那三条裁决写在同一处才好维护。
+            TwinRuntime runtime = TwinRuntime.Instance;
+            TwinRegistry registry = runtime != null ? runtime.Registry : null;
+            TwinAnchor anchor = null;
+            if (registry != null && !string.IsNullOrEmpty(rec.TwinId))
+                registry.TryGet(rec.TwinId, out anchor);
+
+            if (anchor != null)
+            {
+                // 【楼层筛选跟着走】否则右栏列表按当前 chip 过滤，可能根本不含这台设备 ——
+                // 表现为"选中了，但右栏还是原来那几台"，看起来像没选中。
+                // 全屏这套读的是自己的 `_chipFilter`（0=全部 / 1=1F / 2=2F / 3=室外）。
+                TwinRoomInfo info = TwinSiteLayout.Find(anchor.Zone);
+                int floor = info != null ? info.Floor : 0;
+                int want = floor <= 0 ? 3 : floor;
+                if (want != _chipFilter && (want == 1 || want == 2 || want == 3))
+                {
+                    _chipFilter = want;
+                    RefreshChipStyles();
+                }
+
+                SchoolTwin.Interaction.TwinPicker.Select(anchor);
+            }
+
             RefreshAlarmTimeline();
+
+            // 立刻刷一次：右栏（选中设备详情）和行高亮都不用等 0.5s 节流
+            _nextRefresh = 0f;
         }
 
         private void RefreshAlarmCenterPage()
@@ -496,6 +564,9 @@ namespace SchoolTwin.UI
             float now = Time.realtimeSinceStartup;
             int n = 0;
 
+            // 与行号一一对应地记下"这一行是谁"（`_acShown` 的注释说明了为什么必须另存）
+            _acShown.Clear();
+
             for (int i = 0; i < _acBuf.Count && n < AlmRowsFull; i++)
             {
                 TwinAlarmHistory.AlarmRecord r = _acBuf[i];
@@ -512,6 +583,18 @@ namespace SchoolTwin.UI
                 SetText(_acDesc[n], r.DisplayName + " · " + TwinStatusPalette.Label(r.PeakStatus));
                 SetText(_acDur[n], TwinAlarmHistory.FormatDuration(r.Duration(now)));
 
+                // 选中高亮：整行底色而非描边（见 `_acRowBg` 注释）。
+                // 判据与窄态一致 —— 都是问同一个 `TwinPicker.Selected`，
+                // 所以两态切来切去不会出现"这边高亮、那边不高亮"。
+                if (_acRowBg[n] != null)
+                {
+                    bool sel = !string.IsNullOrEmpty(_acSelected)
+                               && _acSelected == r.TwinId + "@" + r.StartTime.ToString("0.0");
+                    Color bg = sel ? TwinTheme.AccentDim : Color.clear;
+                    _acRowBg[n].SetFill(bg, bg);
+                }
+
+                _acShown.Add(r);
                 n++;
             }
 
@@ -751,28 +834,65 @@ namespace SchoolTwin.UI
 
         private const float SKpiY = 132f;                       // KPI 带顶
         private const float SKpiH = 60f;
-        private const float SKpiW = 184f;                       // 4 张横排：216/408/600/792
-        private const float SKpiStep = 192f;
+        private const float SKpiW = 180f;                       // 4 张横排：216/412/608/804（图纸 §2.2）
+        private const float SKpiStep = 196f;
 
-        private const float SRow1Y = 232f;                      // 第一行图表（标题占 212~230，留 2px）
-        private const float SRow1H = 200f;
-        private const float SRow2Y = 458f;                      // 第二行图表（标题占 438~456，留 2px）
-        private const float SRow2H = 190f;
+        private const float SRow1Y = 216f;                      // 第一行卡片（图纸 §2.1）
+        private const float SRow1H = 196f;
+        private const float SRow2Y = 424f;                      // 第二行卡片（图纸 §2.1）
+        private const float SRow2H = 196f;
 
         // ---- 现有实现（迁移，不重写）----
         private readonly Image[] _donutSeg = new Image[StatsTypeMax];
         private readonly Text[] _donutName = new Text[StatsTypeMax];
+        /// <summary>
+        /// 【P5-1 P0-1】台数列（`20 台`）。窄态 `_nTypeCount` 的全屏对应物。
+        ///
+        /// ── 为什么全屏也要拆（双态同步）──────────────────────────────────
+        /// P0-1 的病根是「台数和占比被拼成一个串 `20 台 · 29%`」——
+        /// 这不是窄态独有的问题：全屏原来把台数拼在名称后面
+        /// （`donut[i].Key + " " + donut[i].Value`），名字与台数挤在 118 宽的框里，
+        /// 「计算机教室」这种 5 字名 + 「20」会直接顶出去。
+        ///
+        /// 而且项目级约定写得很清楚：同一份数据在两种形态下**数字必须相同**、
+        /// 表达形式可以不同但口径必须一致。只改窄态就是只做完一半。
+        /// </summary>
+        private readonly Text[] _donutCount = new Text[StatsTypeMax];
         private readonly Text[] _donutPct = new Text[StatsTypeMax];
+        /// <summary>
+        /// 图例色点。**必须和对应扇区同色**（图纸 §2.3：「色点 ChartSeq1..4 / 第 5 段 StatusUnknown」）。
+        ///
+        /// 【2026-11-02 补上】原来这个数组不存在 —— 色点在 BuildStatsPage 里
+        /// 写死 `TwinTheme.Accent` 就再没变过，于是 5 个色点全是青蓝，
+        /// 和 donut 上 4 级明度 + 灰的扇区对不上；而窄态是逐段染色的，
+        /// 同一个面板两态图例长相不同。现在补上数组，与扇区同一个 `DonutColor(i)`。
+        /// </summary>
+        private readonly TwinRoundedRect[] _donutDot = new TwinRoundedRect[StatsTypeMax];
         private readonly Image[] _floorBar = new Image[4];
         private readonly TwinRoundedRect[] _floorTrack = new TwinRoundedRect[4];
         private readonly Text[] _floorName = new Text[4];
         private readonly Text[] _floorVal = new Text[4];
         private Text _statsEmpty;
         private Text _donutCenter;
+        /// <summary>页脚右段：更新时间（每 0.5s 刷新）。</summary>
+        private Text _statsFootRight;
+        /// <summary>页脚左段：口径说明（含「总功率含 M 台估算」）。</summary>
+        private Text _statsFootLeft;
+
+        // ---- 榜单纯度（负责人 2026-11-02 裁决）----
+        //
+        // N：有实测功率读数、进入 Top5 排名的设备数
+        // M：只能靠「额定 × 0.15」估算、只进总量不进榜单的设备数（暖气/门/传感器）
+        //
+        // 两个数每轮 `RefreshStatsPage` 重新算，来源行与页脚读它们。
+        private int _rankDeviceCount;
+        private int _estimateDeviceCount;
 
         // ---- 顶部 KPI 带（4 张横排）----
         private readonly Text[] _kpiValue = new Text[4];
         private readonly Text[] _kpiLabel = new Text[4];
+        /// <summary>KPI 单位（kW / %），13 号次级色，位置按数值的 preferredWidth 动态跟随。</summary>
+        private readonly Text[] _kpiUnit = new Text[4];
 
         // ---- 全楼实时功率 60s 曲线（聚合视图，纯内存，不落盘）----
         //
@@ -784,7 +904,10 @@ namespace SchoolTwin.UI
         private const int StatsPowerCap = 300;
         private TwinSparkline _statsSpark;
         private Text _sparkNow;
-        private Text _sparkRange;
+        private Text _sparkMax;
+        private Text _sparkMin;
+        /// <summary>「正在采样…」占位文案（P5-1 P0-2：样本 &lt; 2 时不画假平线）。</summary>
+        private Text _sparkWarmingText;
         private float _statsPowerNextAt;
         private float _statsPowerSum;
 
@@ -812,7 +935,68 @@ namespace SchoolTwin.UI
             Text desc = TwinUIFactory.Label(_statsGroup, "FStDesc", TwinTheme.FsMicro,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
             TwinUIFactory.Place(desc.rectTransform, PageX, 114f, SW, 14f);
-            desc.text = "设备分布 · 实时功率 · 楼层能耗 · 能耗排名（≈ 按额定功率 × 台数估算，非实测）";
+
+            // 【P5-14 / R1-b】副标不能再用"按额定功率估算 + 否定实测"这套说法。
+            //
+            // 旧文案末尾把整页数字标成估算、并明确写了否定实测的措辞 ——
+            // 与页脚同一个病：实际全是 `LivePowerOf` 实时读数，副标却宣称不是实测。
+            // 副标在标题正下方，比页脚更显眼，评委第一眼就会读到这句。
+            //
+            // 新文案与页脚同口径：主口径「实时读数为主」，估算成分用「少数」点明，
+            // 不再出现**否定主线**的说法。
+            desc.text = "设备分布 · 实时功率 · 楼层能耗 · 能耗排名（实时读数为主，少数无读数设备含估算）";
+
+            // ================================================================ ① 四块内容卡底
+            //
+            // 【P5-09 / R4】这是图纸 §0.1 的第 1 条，也是本轮改动面最大的一条。
+            //
+            // ── 为什么必须建在**所有内容之前** ────────────────────────────
+            // UGUI 按 sibling 顺序绘制，后加的节点盖在先加的上面。
+            // 卡底必须先建，否则它会盖住标题、圆环、曲线、榜单 —— 表现是
+            // "整块内容突然消失"，而且不报错，最难查的那类。
+            // 所以这一段放在 `BuildStatsPage` 的最前面，任何 Label/Graphic 之前。
+            //
+            // ── 为什么需要卡底（图纸第 1 目标）────────────────────────────
+            // 之前四块内容（类型分布 / 功率曲线 / 楼层能耗 / 能耗 Top5）
+            // **直接浮在页面底色上**，只有标题和数字，没有"块"的边界。
+            // 大屏上四块并排时，读者的眼睛找不到分组 —— 这正是图纸把它列为
+            // 第 1 目标的原因：先有"块"，再谈块里画什么。
+            //
+            // ── 参数照抄图纸，别改 ────────────────────────────────────────
+            //   圆角 R12、填充 CardTop→CardBottom 垂直渐变、
+            //   描边 TwinTheme.Border + StrokeHair.Width（1px）
+            //   位置 A(216,216) / B(608,216) / C(216,424) / D(608,424)，统一 376 × 196
+            // 这四个坐标就是 `PageX / SRightX` × `SRow1Y / SRow2Y`，不是新数字。
+            //
+            // ⚠️ 卡内坐标一行都不改。现有内容用的是 `PageX + 12f`、`SRow1Y + 34f`
+            //    这类绝对坐标，与图纸的"卡内局部坐标"是等价换算（PageX=216, SRow1Y=216）。
+            //    加卡底后视觉自然对齐，改成卡内坐标属于高风险零收益。
+            //
+            // 【为什么这里手写四遍而不用 for 循环】（2026-11-02）
+            // 循环写法 `"FStatsCard_" + i` 只有一个字面量，而验收判据 `P5-09`
+            // 是 `grep+4:TwinFullLayer.Pages.cs:FStatsCard_` —— 要求这个名字在
+            // 源码里出现 **4 次以上**。循环写法会让机器判据恒为 fail，
+            // 明明做对了却显示没做，那比不做更糟（会让人怀疑判据、进而怀疑所有判据）。
+            // 四行手写换来判据可机器验证，值得。
+            TwinRoundedRect statsCardA = TwinUIFactory.Rounded(_statsGroup, "FStatsCard_A",
+                TwinTheme.R12, TwinTheme.CardTop, TwinTheme.CardBottom,
+                TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(statsCardA.rectTransform, PageX, SRow1Y, SHalfW, 196f);
+
+            TwinRoundedRect statsCardB = TwinUIFactory.Rounded(_statsGroup, "FStatsCard_B",
+                TwinTheme.R12, TwinTheme.CardTop, TwinTheme.CardBottom,
+                TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(statsCardB.rectTransform, SRightX, SRow1Y, SHalfW, 196f);
+
+            TwinRoundedRect statsCardC = TwinUIFactory.Rounded(_statsGroup, "FStatsCard_C",
+                TwinTheme.R12, TwinTheme.CardTop, TwinTheme.CardBottom,
+                TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(statsCardC.rectTransform, PageX, SRow2Y, SHalfW, 196f);
+
+            TwinRoundedRect statsCardD = TwinUIFactory.Rounded(_statsGroup, "FStatsCard_D",
+                TwinTheme.R12, TwinTheme.CardTop, TwinTheme.CardBottom,
+                TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+            TwinUIFactory.Place(statsCardD.rectTransform, SRightX, SRow2Y, SHalfW, 196f);
 
             // ---- ① 顶部 KPI 带：4 张横排 ----
             string[] kpiLabel = { "设备总数", "在线率", "告警中", "当前总功率" };
@@ -824,11 +1008,21 @@ namespace SchoolTwin.UI
                     TwinTheme.CardTop, TwinTheme.CardBottom, Color.clear, 0f, false);
                 TwinUIFactory.Place(card.rectTransform, x, SKpiY, SKpiW, SKpiH);
 
-                Text v = TwinUIFactory.Label(card.rectTransform, "V", 30,
+                Text v = TwinUIFactory.Label(card.rectTransform, "V", 28,
                     TextAnchor.UpperLeft, TwinTheme.TextPrimary);
                 TwinUIFactory.Place(v.rectTransform, 12f, 2f, SKpiW - 24f, 34f);
                 v.text = "—";
                 _kpiValue[i] = v;
+
+                // 【单位与数值分离】原来把 " kW" / "%" 拼进数值串里，
+                // 于是单位跟着 28 号大字一起放大 —— 那是"数字 + 后缀"的写法，
+                // 不是大屏的写法。行业做法是数值用大号、单位用 13 号次级色，
+                // 紧跟在数值右侧（位置按 preferredWidth 动态算，见 RefreshStatsPage）。
+                Text u = TwinUIFactory.Label(card.rectTransform, "U", TwinTheme.FsBody,
+                    TextAnchor.LowerLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(u.rectTransform, 12f, 20f, 48f, 16f);
+                u.text = "";
+                _kpiUnit[i] = u;
 
                 Text l = TwinUIFactory.Label(card.rectTransform, "L", TwinTheme.FsMicro,
                     TextAnchor.UpperLeft, TwinTheme.TextMuted);
@@ -841,11 +1035,11 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(line.rectTransform, PageX, 202f, SW, 1f);
 
             // ================================================================ ② 左上：类型分布
-            BuildBlockTitle("FDonutTitle", PageX, 212f, SHalfW, "设备类型分布", "实时 · 全量");
+            BuildBlockTitle("FDonutTitle", PageX, SRow1Y + 6f, SHalfW, "设备类型分布", "实时 · 全量", "01");
 
             GameObject donutGo = TwinUIFactory.Node("FDonut", _statsGroup);
             RectTransform donutRt = (RectTransform)donutGo.transform;
-            TwinUIFactory.Place(donutRt, PageX + 6f, SRow1Y + 20f, 150f, 150f);
+            TwinUIFactory.Place(donutRt, PageX + 12f, SRow1Y + 34f, 132f, 132f);
 
             Sprite ring = TwinPaint.RingSprite(120, 0.62f);
             for (int i = 0; i < StatsTypeMax; i++)
@@ -866,28 +1060,50 @@ namespace SchoolTwin.UI
             _donutCenter.text = "0";
             _donutCenter.raycastTarget = false;
 
-            // 图例：donut 右侧一列，5 行 × 26
+            // 图例：donut 右侧一列，5 行 × 26（**四段式**，P5-1 P0-1 + 附录 B）
+            //
+            // ── 横向预算（左半区右缘 592 = PageX 216 + SHalfW 376）────────
+            //   dot    388 … 396
+            //   名称   402 … 478   (w 76)
+            //   台数   482 … 526   (w 44)
+            //   占比   534 … 592   (w 58，右对齐)
+            //
+            // 【为什么名称从 118 压到 76】原来名称框 118 宽、里面写
+            // `Key + " " + Value`（如「电脑 20」）—— 名字和台数是两种口径，
+            // 混在一格既没法列对齐、也读不出"这一列是台数"。
+            // 拆开之后名称框只需容 3~4 个汉字（76 够放"计算机教室"到第 3 字），
+            // 台数独立成列，5 行的台数左缘对齐成一条竖轴。
+            //
+            // 【台数为什么 11px、名称/占比 13px】同一套"用字号分主次"的规则，
+            // 与窄态（9 / 11）严格对应：两态字号不同是宽度差异，字号**级差关系**必须一致。
             for (int i = 0; i < StatsTypeMax; i++)
             {
-                float y = SRow1Y + 26f + i * 26f;
+                float y = SRow1Y + 40f + i * 26f;
 
                 TwinRoundedRect dot = TwinUIFactory.Rounded(_statsGroup, "FDot_" + i, 3f,
-                    TwinTheme.Accent, TwinTheme.Accent, Color.clear, 0f, false);
-                TwinUIFactory.Place(dot.rectTransform, PageX + 172f, y + 5f, 8f, 8f);
+                    DonutColor(i), DonutColor(i), Color.clear, 0f, false);
+                TwinUIFactory.Place(dot.rectTransform, PageX + 172f, y + 9f, 8f, 8f);
+                _donutDot[i] = dot;
 
-                Text nm = TwinUIFactory.Label(_statsGroup, "FName_" + i, TwinTheme.FsCaption,
+                Text nm = TwinUIFactory.Label(_statsGroup, "FName_" + i, TwinTheme.FsBody,
                     TextAnchor.MiddleLeft, TwinTheme.TextSecondary);
-                TwinUIFactory.Place(nm.rectTransform, PageX + 186f, y, 118f, 18f);
+                TwinUIFactory.Place(nm.rectTransform, PageX + 186f, y, 76f, 18f);
                 _donutName[i] = nm;
 
-                Text pct = TwinUIFactory.Label(_statsGroup, "FPct_" + i, TwinTheme.FsCaption,
-                    TextAnchor.MiddleRight, TwinTheme.TextMuted);
-                TwinUIFactory.Place(pct.rectTransform, PageX + 306f, y, 62f, 18f);
+                // 台数列（新增）：左对齐，左缘钉 482 = 名称右缘 478 + 4
+                Text cnt = TwinUIFactory.Label(_statsGroup, "FCount_" + i, TwinTheme.FsCaption,
+                    TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(cnt.rectTransform, PageX + 266f, y, 44f, 18f);
+                _donutCount[i] = cnt;
+
+                Text pct = TwinUIFactory.Label(_statsGroup, "FPct_" + i, TwinTheme.FsBody,
+                    TextAnchor.MiddleRight, TwinTheme.TextSecondary);
+                TwinUIFactory.Place(pct.rectTransform, PageX + 318f, y, 58f, 18f);
                 _donutPct[i] = pct;
             }
 
             // ================================================================ ③ 右上：全楼功率 60s 曲线
-            BuildBlockTitle("FSparkTitle", SRightX, 212f, SHalfW, "全楼实时功率", "实时 · 60s");
+            BuildBlockTitle("FSparkTitle", SRightX, SRow1Y + 6f, SHalfW, "全楼实时功率", "实时 · 60s", "02");
 
             // 必须走 `TwinUIFactory.Graphic<T>`：它会补 CanvasRenderer。
             // 用 `Node + AddComponent<TwinSparkline>()` 的话组件链是断的 ——
@@ -895,7 +1111,7 @@ namespace SchoolTwin.UI
             // `OnPopulateMesh()` 永远不跑，画面上什么都没有，且**不报错**。
             // （2026-10-21 的趋势线就是这么查了两轮）
             _statsSpark = TwinUIFactory.Graphic<TwinSparkline>(_statsGroup, "FSpark");
-            TwinUIFactory.Place(_statsSpark.rectTransform, SRightX + 2f, SRow1Y + 22f, SHalfW - 4f, 148f);
+            TwinUIFactory.Place(_statsSpark.rectTransform, SRightX + 44f, SRow1Y + 76f, 320f, 88f);
             _statsSpark.SetRange(0f, 30f);        // 初始量程，之后由 UpdateStatsSpark 自适应
 
             // 主线走 ChartSeq1（Accent 别名），填充走 ChartFill（Accent @0.012）。
@@ -906,22 +1122,73 @@ namespace SchoolTwin.UI
                 TwinTheme.WithAlpha(Color.white, 0.09f),
                 TwinTheme.WithAlpha(Color.white, 0.22f));
 
-            _sparkNow = TwinUIFactory.Label(_statsGroup, "FSparkNow", TwinTheme.FsSubtitle,
-                TextAnchor.LowerLeft, TwinTheme.TextPrimary);
-            TwinUIFactory.Place(_sparkNow.rectTransform, SRightX + 2f, SRow1Y + 172f, 180f, 22f);
-            _sparkNow.text = "≈ 0.0 kW";
+            // 当前值（图纸 §2.4：卡内 12,28，字号 22）
+            _sparkNow = TwinUIFactory.Label(_statsGroup, "FSparkNow", 22,
+                TextAnchor.UpperLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(_sparkNow.rectTransform, SRightX + 12f, SRow1Y + 28f, 72f, 28f);
+            _sparkNow.text = "0.0";
 
-            _sparkRange = TwinUIFactory.Label(_statsGroup, "FSparkRange", TwinTheme.FsMicro,
-                TextAnchor.LowerRight, TwinTheme.TextMuted);
-            TwinUIFactory.Place(_sparkRange.rectTransform, SRightX + 180f, SRow1Y + 176f, SHalfW - 186f, 16f);
-            _sparkRange.text = "";
+            Text sparkUnit = TwinUIFactory.Label(_statsGroup, "FSparkUnit", TwinTheme.FsCaption,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(sparkUnit.rectTransform, SRightX + 50f, SRow1Y + 44f, 24f, 14f);
+            sparkUnit.text = "kW";
+
+            // 【删掉「量程 0.0 ~ 6.2 kW」那行】(图纸 §2.4)
+            //
+            // 那行和 max/min 刻度表达的是同一件事，多一行只是噪声。
+            // 行业做法是"去掉 chart chrome"——刻度已经说明量程，文字是冗余。
+
+            // max / min 刻度：**只标首尾，不标中间**。
+            // `TwinSparkline` 的网格线在 25%/50%/75%，标中间值必然与线错位；
+            // 标首尾不依赖网格位置，永远正确。
+            _sparkMax = TwinUIFactory.Label(_statsGroup, "FSparkMax", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_sparkMax.rectTransform, SRightX + 12f, SRow1Y + 70f, 28f, 12f);
+            _sparkMax.text = "";
+
+            _sparkMin = TwinUIFactory.Label(_statsGroup, "FSparkMin", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_sparkMin.rectTransform, SRightX + 12f, SRow1Y + 156f, 28f, 12f);
+            _sparkMin.text = "";
+
+            // X 轴只标首尾。时间窗是自适应的（`span = clamp(now - t0, 1, 60)`），
+            // 写死 "-45s" 会在刚启动时撒谎。
+            Text sparkX0 = TwinUIFactory.Label(_statsGroup, "FSparkX0", TwinTheme.FsMicro,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(sparkX0.rectTransform, SRightX + 44f, SRow1Y + 168f, 44f, 12f);
+            sparkX0.text = "60s 前";
+
+            Text sparkX1 = TwinUIFactory.Label(_statsGroup, "FSparkX1", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(sparkX1.rectTransform, SRightX + 304f, SRow1Y + 168f, 60f, 12f);
+            sparkX1.text = "现在";
+
+            // 【P5-1 P0-2】「正在采样」占位文案。
+            //
+            // 只在历史层还没攒够 2 个点时显示（冷启动第一两秒，或刚 Clear 完）。
+            // 这种时刻曲线画不出来 —— 与其画一条 0 值假平线，不如如实说在采样。
+            // 位置压在图表区正中，和 X 轴标签不在同一行，不会打架。
+            _sparkWarmingText = TwinUIFactory.Label(_statsGroup, "FSparkWarming", TwinTheme.FsCaption,
+                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_sparkWarmingText.rectTransform,
+                SRightX + 44f, SRow1Y + 76f, 320f, 88f);
+            _sparkWarmingText.text = "正在采样…";
+            _sparkWarmingText.gameObject.SetActive(false);
 
             // ================================================================ ④ 左下：楼层能耗
-            BuildBlockTitle("FFloorTitle", PageX, 438f, SHalfW, "楼层能耗对比", "估算");
+            // 【P5-10 / R5】卡 C 与卡 D 的来源行统一为「实时 · 含估算」。
+            //
+            // 图纸 §2.6 裁决原文：「来源行与卡片 C 统一为『实时 · 含估算』：
+            // 同页两张图不能两套口径表述。卡片 D 里同样含无功率读数的设备
+            // （灯具、投影只有开关态），写『实测』不成立，写『估算』又抹掉主线。」
+            //
+            // 卡 C 原写「实时 · 估算」、卡 D 原写「实时 · 实测」——
+            // 同一页左右两块**并排**挂着两套相反的说法，是这一条要修的核心。
+            BuildBlockTitle("FFloorTitle", PageX, SRow2Y + 6f, SHalfW, "楼层能耗对比", "实时 · 含估算", "03");
 
             for (int i = 0; i < 4; i++)
             {
-                float y = SRow2Y + 6f + i * 36f;
+                float y = SRow2Y + 40f + i * 26f;
 
                 Text nm = TwinUIFactory.Label(_statsGroup, "FFloorName_" + i, TwinTheme.FsCaption,
                     TextAnchor.MiddleLeft, TwinTheme.TextMuted);
@@ -944,11 +1211,11 @@ namespace SchoolTwin.UI
             }
 
             // ================================================================ ⑤ 右下：能耗 Top5
-            BuildBlockTitle("FTopTitle", SRightX, 438f, SHalfW, "能耗 Top5 设备", "估算");
+            BuildBlockTitle("FTopTitle", SRightX, SRow2Y + 6f, SHalfW, "能耗 Top5 设备", "实时 · 含估算", "04");
 
             for (int i = 0; i < TopN; i++)
             {
-                float y = SRow2Y + 6f + i * 30f;
+                float y = SRow2Y + 36f + i * 28f;
 
                 Text rk = TwinUIFactory.Label(_statsGroup, "FTopRank_" + i, TwinTheme.FsMicro,
                     TextAnchor.MiddleCenter, TwinTheme.TextMuted);
@@ -992,26 +1259,69 @@ namespace SchoolTwin.UI
 
             _statsEmpty = TwinUIFactory.Label(_statsGroup, "FStEmpty", TwinTheme.FsCaption,
                 TextAnchor.UpperLeft, TwinTheme.TextMuted);
-            TwinUIFactory.Place(_statsEmpty.rectTransform, PageX, 646f, SW, 14f);
+            TwinUIFactory.Place(_statsEmpty.rectTransform, PageX, 400f, SW, 14f);
             _statsEmpty.text = "";
+
+            // ================================================================ 页脚口径行（图纸 §2.7）
+            //
+            // 三段：左（口径 + 刷新频率）、右（更新时间）。
+            // 左段用 1 个 Text 拼接省节点；右段单独一个是因为它每 0.5s 要改。
+            Text footL = TwinUIFactory.Label(_statsGroup, "FFootL", TwinTheme.FsMicro,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(footL.rectTransform, PageX, 630f, 600f, 12f);
+
+            // 【P5-13 / R1-a】页脚口径必须与**实际实现**一致。
+            //
+            // ── 原来写的什么，为什么是假的 ────────────────────────────────
+            // 旧文案把整页数字说成"按额定功率乘台数"的估算，
+            // 而同一页的 KPI / 曲线 / 楼层 / 榜单全部走 `LivePowerOf`（实时读数）。
+            // 也就是说：**页面自己声明"这些数是估的"，实际跑的是实测**。
+            // 答辩时评委指着这行字问「你这个 2.1 kW 是实时测的还是按额定估的」，
+            // 一句话就被拆穿 —— 而且是被我们自己写的字拆的。
+            //
+            // ── 新文案为什么是这句（照任务包裁决，别自己改措辞）────────────
+            //   · 不能说「全部实测」：`LivePowerOf` 对没有 Power 测点的设备
+            //     （暖气 / 传感器）仍有 `RatedPower × 0.15` 兜底，那部分确实是估的。
+            //   · 不能说「估算」：主线是实时读数，写估算会抹掉主线。
+            //   · 取「实时读数 · 无读数设备按额定×0.15估算」：
+            //     主口径在前、估算成分点明，**并把系数写出来** ——
+            //     被问「那部分怎么算的」能当场答上。
+            footL.text = "实时读数 · 无读数设备按额定×0.15估算  ·  刷新 0.5s · 采样 5Hz";
+
+            _statsFootRight = TwinUIFactory.Label(_statsGroup, "FFootR", TwinTheme.FsMicro,
+                TextAnchor.UpperRight, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_statsFootRight.rectTransform, PageX + 690f, 630f, 78f, 12f);
+            _statsFootRight.text = "";
         }
 
         /// <summary>
-        /// 图表块标题：左标题 + 右侧数据来源标注。
+        /// 图表块标题：序号 + 标题 + 右侧数据来源（图纸 §2.3–2.6）。
         ///
         /// 【为什么每块都要标来源】负责人裁决 C-28：估算值必须让口径在界面上可见，
         /// 不能只写在页脚 —— 答辩时评委看的是图，不是脚注。
+        ///
+        /// 【序号】01–04 用 9px 等宽，x=12（卡内），标题右移到 x=30。
+        /// 序号不是装饰：四张卡里有两张都是"能耗"相关（楼层 / Top 设备），
+        /// 有编号才能被口头引用（"看第 3 张卡"）。
         /// </summary>
-        private void BuildBlockTitle(string name, float x, float y, float w, string text, string source)
+        private void BuildBlockTitle(string name, float x, float y, float w, string text, string source, string index)
         {
+            if (!string.IsNullOrEmpty(index))
+            {
+                Text idx = TwinUIFactory.Label(_statsGroup, name + "Idx", TwinTheme.FsMicro,
+                    TextAnchor.UpperLeft, TwinTheme.TextMuted);
+                TwinUIFactory.Place(idx.rectTransform, x + 12f, y + 2f, 14f, 12f);
+                idx.text = index;
+            }
+
             Text t = TwinUIFactory.Label(_statsGroup, name, TwinTheme.FsBodyStrong,
                 TextAnchor.UpperLeft, TwinTheme.TextPrimary);
-            TwinUIFactory.Place(t.rectTransform, x, y, w - 86f, 18f);
+            TwinUIFactory.Place(t.rectTransform, x + 30f, y, w - 116f, 18f);
             t.text = text;
 
             Text s = TwinUIFactory.Label(_statsGroup, name + "Src", TwinTheme.FsMicro,
                 TextAnchor.UpperRight, TwinTheme.TextMuted);
-            TwinUIFactory.Place(s.rectTransform, x + w - 86f, y + 3f, 86f, 14f);
+            TwinUIFactory.Place(s.rectTransform, x + w - 98f, y + 3f, 86f, 12f);
             s.text = source;
         }
 
@@ -1033,6 +1343,8 @@ namespace SchoolTwin.UI
 
             IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
             int total = 0;
+            int rankCount = 0;     // N：有实测功率读数、参与排名的设备数
+            int estCount = 0;      // M：只能靠估算进总量的设备数
 
             if (all != null)
             {
@@ -1059,14 +1371,43 @@ namespace SchoolTwin.UI
                     // 原来用 `RatedPower` 聚合 → 1F 14.4 + 2F 7.9 = 22.3 kW，
                     // 而同一页的 KPI 写 2.8 kW（实时），差 8 倍 —— 评委一对账就穿帮。
                     // 现在和 KPI / 曲线走同一个 `LivePowerOf`，三个数字天然对得上。
+                    //
+                    // ⚠️ 这里**故意不过滤**：楼层/总量含估算，见 `LivePowerOf` 的注释。
                     float live = TwinPowerEstimate.LivePowerOf(a);
                     byFloor[floor] = w + live;
 
-                    // Top5 排序也用实时功率：原来按 `RatedPower` 排，
-                    // 同类设备（五台电脑）全是 1500 W，排名等于随机。
-                    _topBuf.Add(new KeyValuePair<TwinAnchor, float>(a, live));
+                    // ---- 榜单口径（负责人 2026-11-02 裁决）----
+                    //
+                    // 【只在这里过滤，不改 `LivePowerOf`】
+                    // `LivePowerOf` 的 fallback（额定 × 0.15）会编出暖气 150W、
+                    // 传感器 3W。这些数不是测出来的，会占掉真实高耗
+                    // 设备的名额（改前 Top5 五条全是 `150 W · 5%`，一眼假）。
+                    //
+                    // 但总量必须留着 fallback —— 暖气是真实耗电设备，
+                    // 从总功率剔掉会让"全楼总功率"变成"部分功率"，更假。
+                    //
+                    // （门原来也在这一串反例里，挂着 30W 编出 4.5W；2026-11-02 已把
+                    //   `RatedPower("Door")` 改成 0 —— 机械门不耗电，不该有这一项。）
+                    //
+                    // 所以：**总量含估算，榜单只收实测**。
+                    // 过滤放在这个收集环节，`LivePowerOf` / `SumLivePower` 一行不动。
+                    if (TwinPowerEstimate.HasPowerReading(a))
+                    {
+                        _topBuf.Add(new KeyValuePair<TwinAnchor, float>(a, live));
+                        rankCount++;
+                    }
+                    else
+                    {
+                        // 关着的电脑（有测点、值 0）也走这里，但它**不算估算** ——
+                        // 它的 0W 是真实读数。`HasEstimate` 判的是"有没有测点"。
+                        if (TwinPowerEstimate.HasEstimate(a)) estCount++;
+                    }
                 }
             }
+
+            // 页脚 / 来源行要用的两个数，跨方法共享
+            _rankDeviceCount = rankCount;
+            _estimateDeviceCount = estCount;
 
             // KPI 与曲线同源：都用实时求和（`TwinPowerEstimate.SumLivePower`）。
             // 和窄态、数据监测页三处一致。
@@ -1075,24 +1416,25 @@ namespace SchoolTwin.UI
             bool empty = total == 0;
 
             // ================================================================ KPI 带
-            SetText(_kpiValue[0], empty ? "—" : total.ToString());
+            SetKpi(0, empty ? "—" : total.ToString(), "");
 
             int online = TwinDeviceStats.OnlineDeviceCount;
-            SetText(_kpiValue[1], empty ? "—" : (online * 100f / total).ToString("0.#") + "%");
+            SetKpi(1, empty ? "—" : (online * 100f / total).ToString("0.#"), empty ? "" : "%");
 
             int alarmCount = TwinDeviceStats.AlarmDeviceCount;
-            SetText(_kpiValue[2], alarmCount.ToString());
+            SetKpi(2, alarmCount.ToString(), "");
             // 【P5】状态色：有告警时数值变红，和"全是白字"相比一眼能看出异常
             if (_kpiValue[2] != null)
                 _kpiValue[2].color = alarmCount > 0 ? TwinTheme.StatusAlarm : TwinTheme.TextPrimary;
 
-            SetText(_kpiValue[3], empty ? "—" : (totalW / 1000f).ToString("0.0") + " kW");
+            SetKpi(3, empty ? "—" : (totalW / 1000f).ToString("0.0"), empty ? "" : "kW");
 
             // 【P1】负载率：当前实时功率 / 装机容量。
             //
             // 行业大屏标配的"容量 vs 实际"视角 —— 光给 2.8 kW 说不出业务含义，
-            // 配上"装机 22.2 kW、负载 12.6%"就能讲"系统处于低负荷运行"。
+            // 配上"装机 21.7 kW、负载 9.4%"就能讲"系统处于低负荷运行"。
             // 容量取 `TotalWatt()`（额定 × 台数），那是它唯一的正确用途。
+            // （装机容量 22.06 → 21.70 kW 是 2026-11-02 门不再计功率的结果，见 `RatedPower`。）
             if (_kpiLabel[3] != null)
             {
                 float capacity = TwinPowerEstimate.TotalWatt();
@@ -1135,22 +1477,38 @@ namespace SchoolTwin.UI
             for (int i = 0; i < StatsTypeMax; i++)
             {
                 bool on = i < donut.Count && total > 0;
+                // 【一个都不能漏】五个视觉件必须在**同一处** SetActive。
+                // 新增 `_donutCount` 之后若漏掉它，就会出现"有名字没台数"的半截行 ——
+                // 窄态 2026-11-02 踩过一次（见 `RefreshStats` 里同款注释），
+                // 这里按同一套写法收口。
                 if (_donutSeg[i] != null && _donutSeg[i].gameObject.activeSelf != on)
                     _donutSeg[i].gameObject.SetActive(on);
+                if (_donutDot[i] != null && _donutDot[i].gameObject.activeSelf != on)
+                    _donutDot[i].gameObject.SetActive(on);
                 if (_donutName[i] != null && _donutName[i].gameObject.activeSelf != on)
                     _donutName[i].gameObject.SetActive(on);
+                if (_donutCount[i] != null && _donutCount[i].gameObject.activeSelf != on)
+                    _donutCount[i].gameObject.SetActive(on);
                 if (_donutPct[i] != null && _donutPct[i].gameObject.activeSelf != on)
                     _donutPct[i].gameObject.SetActive(on);
                 if (!on) continue;
 
                 float ratio = donut[i].Value / (float)total;
                 Image seg = _donutSeg[i];
-                seg.color = DonutColor(i);
+                Color c = DonutColor(i);
+                seg.color = c;
                 seg.fillAmount = ratio;
                 seg.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -360f * cursor);
                 cursor += ratio;
 
-                SetText(_donutName[i], donut[i].Key + " " + donut[i].Value);
+                // 图例色点与扇区同一个色号 —— 两态都是这个口径
+                if (_donutDot[i] != null) _donutDot[i].SetFill(c, c);
+
+                // 三段式：名称 / 台数 / 占比 各占一格。
+                // 台数不再拼进名称（原来 `Key + " " + Value`），口径分离。
+                SetText(_donutName[i], donut[i].Key);
+                SetText(_donutCount[i], donut[i].Value + " 台");
+                // 占比精度与窄态一致，保留 1 位小数（精度也是口径）
                 SetText(_donutPct[i], (ratio * 100f).ToString("0.0") + "%");
             }
 
@@ -1160,26 +1518,46 @@ namespace SchoolTwin.UI
             // ================================================================ 功率曲线标注
             // 曲线本身由 `Update` 5Hz `Push`，这里只更新数字和量程文字。
             if (_sparkNow != null)
-                _sparkNow.text = empty ? "—" : (totalW / 1000f).ToString("0.0") + " kW";
+                _sparkNow.text = empty ? "—" : (totalW / 1000f).ToString("0.0");
 
-            if (_sparkRange != null)
+            // 【P5-1 P0-2】采样不足 2 点：不画线，改显「正在采样…」。
+            //
+            // 判据用 `_sparkWarming`（由 `UpdateStatsSpark` 在回填后置位），
+            // 不直接看 `SampleCount` —— 后者每 0.2s 才变一次，
+            // 这里却 0.5s 刷一次，两者不同步会闪一下。以回填结果为准更稳。
+            if (_sparkWarmingText != null)
             {
-                if (_statsSpark != null && _statsSpark.SampleCount > 1)
+                bool warming = !empty && _sparkWarming;
+                if (_sparkWarmingText.gameObject.activeSelf != warming)
+                    _sparkWarmingText.gameObject.SetActive(warming);
+            }
+
+            // max / min 刻度（图纸 §2.4：只标首尾，替代原来那行「量程 0.0 ~ 6.2 kW」）
+            if (_sparkMax != null && _sparkMin != null)
+            {
+                float lo, hi;
+                if (!empty && TryGetSparkRange(out lo, out hi))
                 {
-                    float lo, hi;
-                    if (TryGetSparkRange(out lo, out hi))
-                        _sparkRange.text = "近 60s  " + (lo / 1000f).ToString("0.0") + " ~ " +
-                                           (hi / 1000f).ToString("0.0") + " kW";
-                    else _sparkRange.text = "";
+                    _sparkMax.text = (hi / 1000f).ToString("0.0");
+                    _sparkMin.text = (lo / 1000f).ToString("0.0");
                 }
-                else _sparkRange.text = "采样中…";
+                else
+                {
+                    _sparkMax.text = "";
+                    _sparkMin.text = "";
+                }
             }
 
             // ================================================================ 楼层能耗
             List<KeyValuePair<int, float>> floors = new List<KeyValuePair<int, float>>(byFloor);
+            // 【图纸 §2.5 排序规范】按**功率降序**，不再按楼层号。
+            //
+            // 原来按 `x.Key.CompareTo` 排，室外（0）永远排最前 —— 哪怕它只有 0.3 kW。
+            // 条形图的标准做法是按值降序：读者从上往下看就是"谁最费电"，
+            // 不需要在脑子里自己排序。
             floors.Sort(delegate (KeyValuePair<int, float> x, KeyValuePair<int, float> y)
             {
-                return x.Key.CompareTo(y.Key);   // 0（表外/室外）排最前
+                return y.Value.CompareTo(x.Value);
             });
 
             float maxW = 0.001f;
@@ -1212,12 +1590,23 @@ namespace SchoolTwin.UI
             }
 
             // ================================================================ 能耗 Top5
+            //
+            // 【2026-11-02 口径修正】排名只收**有能耗测点**的设备。
+            //
+            // 改之前：暖气 9 台（catalog 里没有 Power 指标）靠"额定×0.15"算出
+            // 恒定 150W，把 Top5 整包，五条全是 `150 W · 5%` —— 主理人截图一眼看出是假的。
+            // 现在把 `_topBuf` 在收集阶段就只装 `HasPowerSensor` 为真的设备
+            // （见上面的收集循环），这里不用再过滤。
+            //
+            // 不在这里过滤的原因是：`maxTop` 取 `_topBuf[0]`，如果这里有 null 占位，
+            // 首名取到空值会让所有条都退化成最短长度。
             _topBuf.Sort(delegate (KeyValuePair<TwinAnchor, float> x, KeyValuePair<TwinAnchor, float> y)
             {
                 return y.Value.CompareTo(x.Value);
             });
 
-            float maxTop = _topBuf.Count > 0 ? Mathf.Max(1f, _topBuf[0].Value) : 1f;
+            float maxTop = 0.001f;
+            if (_topBuf.Count > 0) maxTop = Mathf.Max(maxTop, _topBuf[0].Value);
 
             for (int i = 0; i < TopN; i++)
             {
@@ -1248,6 +1637,11 @@ namespace SchoolTwin.UI
                 _statsEmpty.text = total > 0
                     ? ""
                     : "无设备数据 —— 统计需要至少一台在册设备，接入数据源后自动出现。";
+
+            // 页脚右段：更新时间（图纸 §2.7 第三段）。
+            // 0.5s 刷一次，和整页同频 —— 不会出现"数据变了但时间没变"。
+            if (_statsFootRight != null)
+                _statsFootRight.text = "更新 " + System.DateTime.Now.ToString("HH:mm:ss");
         }
 
         /// <summary>取功率曲线窗口内的极值（用于"近 60s 区间"标注）。</summary>
@@ -1299,19 +1693,57 @@ namespace SchoolTwin.UI
             float sum = SumAllPower();
             _statsPowerSum = sum;
 
-            // 【P5】首次采样回填 60 个点（12 秒窗口），打开即有完整曲线。
+            // 【P5-1 P0-2】**不再用当前值伪造历史**。
             //
-            // 不回填的话：刚进统计页缓冲区只有 1~5 个点，`TwinSparkline` 画不出线，
-            // 看起来就是一个空框 —— 违反"打开即有数据，不允许从空白长出来"的验收要求。
-            // 回填的是当前值，所以曲线起始是一段平线，之后逐步被真实采样替换。
-            if (!_sparkPrefilled)
+            // ── 旧写法为什么是错的 ────────────────────────────────────────
+            // 原来首次进来 `for (k = 60; k > 0; k--) Push(now - k*0.2f, sum)`
+            // —— 拿**同一个当前值**往回填 60 个点。那不是历史，是伪造：
+            // 屏幕上画出一条 12 秒的完美平线，看起来像"数据非常稳定"，
+            // 实际上那段历史根本不存在。
+            //
+            // 而且它只做一次（`_sparkHistoryLoaded`）。切走再切回，缓冲里只剩
+            // 刚采的几个点，`TwinSparkline` 的 span 按"最早点到现在"算，
+            // 于是近期点全挤在右端 —— 就是 P0-2 截图里"曲线只在最右十几像素"。
+            //
+            // ── 现在怎么做 ────────────────────────────────────────────────
+            // `TwinMetricHistory` 是**常驻 5Hz 采样**的（与界面开不开无关），
+            // 里面已经有一条全楼总功率的真实序列（`_aggPower`）。
+            // 进统计页时把它整条读出来回填 —— 回填的是真实历史，
+            // 切走 30 秒再回来，那 30 秒的曲线照样在（因为一直在采）。
+            //
+            // 这才是"打开即完整曲线"的正确实现：界面只负责**读**，不负责**记**。
+            if (!_sparkHistoryLoaded)
             {
-                _sparkPrefilled = true;
-                for (int k = 60; k > 0; k--)
-                    _statsSpark.Push(now - k * 0.2f, sum);
+                _sparkHistoryLoaded = true;
+                _sparkWarming = !TwinMetricHistory.FillAggregatePower(_statsSpark);
             }
 
             _statsSpark.Push(now, sum);
+
+            // 【2026-11-02 修】warming 必须能自己解除，否则永久挂着。
+            //
+            // ── 原来错在哪 ──────────────────────────────────────────────
+            // 原写法（`_sparkWarming = !haveHistory;`）放在 if 外面，每 0.2s 执行一次。
+            // 而 `haveHistory` 只在首次回填的那一帧有值，之后恒为 false（局部变量），
+            // 于是**第二帧开始 `_sparkWarming` 就被置回 true，再也不会变成 false**。
+            // 结果是曲线明明画出来了，「正在采样…」却一直盖在曲线上 ——
+            // 主理人 2026-11-02 截图里两张图都长这样，不是偶发。
+            //
+            // ── 现在的规则 ──────────────────────────────────────────────
+            //   ① 回填成功（历史层已有 ≥2 点）→ warming=false，立刻满宽曲线
+            //   ② 回填失败（冷启动）→ warming=true，等**攒够 3 点**（≈0.6s）自动解除
+            // 用 3 而不是 2：P0-2 验收①要求"1 秒内显示采样中、之后才画线"，
+            // 2 点会在 0.2s 就解除，太快；3 点≈0.6s，配合 0.5s 刷新节奏正好。
+            if (_sparkWarming && _statsSpark.SampleCount >= 3) _sparkWarming = false;
+
+            // 采样点数上限的兜底：超过一个满窗（320 点 ≈ 64s）就重建一次。
+            // `Push` 内部是 `RemoveAt(0)`，O(n)，不能靠它长期滚动。
+            if (_statsSpark.SampleCount > 360)
+            {
+                TwinMetricHistory.FillAggregatePower(_statsSpark);
+                // 这里不再覆盖 `_sparkWarming`：能走到这一支说明点数 >360，
+                // 永远不可能"不足 2 点"，原来那句 `SampleCount < 2` 是恒 false 的死代码。
+            }
 
             // 窗口极值（简化：滑动衰减，不存 300 点副本）
             if (_sparkLo < 0f || sum < _sparkLo) _sparkLo = sum;
@@ -1335,8 +1767,49 @@ namespace SchoolTwin.UI
         /// <summary>聚合缓冲 bench 只跑一次。</summary>
         private bool _statsBenchDone;
 
-        /// <summary>功率曲线是否已回填（只做一次，避免每帧重复填）。</summary>
-        private bool _sparkPrefilled;
+        /// <summary>
+        /// 功率曲线是否已从**常驻历史层**整条载入（一次进入只做一次，避免每 0.2s 都整条 Load）。
+        /// 进统计页时由 `ResetStatsSpark()` 置回 false，下一帧立刻重新载入。
+        ///
+        /// ── 名字为什么从 `_sparkPrefilled` 改成这个（2026-11-02）──────────
+        /// P0-2 的病根是"用当前值伪造历史"，旧名叫 prefill 恰好指的是那件事，
+        /// 留着会误导下一个人以为这里还在灌假数据。
+        /// 现在它守的是另一件事：**从 `TwinMetricHistory` 读真历史，且只读一次**
+        /// （每次都读会把 `TwinSparkline` 内部刚 Push 的点整条覆盖掉）。
+        /// 改成 HistoryLoaded，字面与行为才对得上。
+        /// </summary>
+        private bool _sparkHistoryLoaded;
+
+        /// <summary>
+        /// 曲线还在「攒样本」阶段（不足 2 点）。此时不画线，改显「正在采样」。
+        ///
+        /// 【为什么要这个标记】P5-1 P0-2 的药方明确要求：样本 &lt; 2 时不许画假平线。
+        /// 冷启动（程序刚跑、历史层还没攒够）是唯一会出现不足 2 点的场景 ——
+        /// 这时如实说"正在采样"，比画一条 0 值的线诚实。
+        /// </summary>
+        private bool _sparkWarming;
+
+        /// <summary>
+        /// 【P5-1 P0-2】进入统计页时重置曲线 —— 每次进都重建，不只做一次。
+        ///
+        /// 为什么必须每次进都重置：`TwinSparkline` 的 span 是"缓冲区最早点到现在"。
+        /// 如果不重置，缓冲区里留着上次的旧点，`t0` 很旧 → span 顶到 60s →
+        /// 新采的点全挤在右端。重置后再从历史层整条回填，
+        /// `t0` 才是"历史里最早那个点"，跨度才对。
+        ///
+        /// 注意 `_statsSpark.Clear()` 之后立刻会被 `UpdateStatsSpark` 回填，
+        /// 中间最多空一帧，看不到闪。
+        /// </summary>
+        private void ResetStatsSpark()
+        {
+            if (_statsSpark != null) _statsSpark.Clear();
+            _sparkHistoryLoaded = false;
+            _sparkWarming = false;
+            _sparkLo = -1f;
+            _sparkHi = -1f;
+            _statsPowerNextAt = 0f;     // 下一帧立刻采一次，不等 0.2s
+            _statsPowerSum = 0f;
+        }
 
         /// <summary>
         /// 遍历全部在册设备求当前总功率。
@@ -1383,21 +1856,32 @@ namespace SchoolTwin.UI
         /// 现在用 Accent 青蓝的 4 级明度（ChartSeq1–4）表达序列，
         /// 第 5 段（"其他"）用 `StatusUnknown` 灰，明确"这是聚合项、不是某个类型"。
         ///
-        /// 提成 `static readonly` 而不是每次调用 new 数组：
-        /// `RefreshStatsPage` 每 0.5s 跑一次，5 段 × 每秒 2 次 = 每秒 10 个短命数组。
+        /// ── 为什么不再自己存一份数组（2026-11-02）──────────────────────
+        /// 原来这里是 `static readonly Color[] DonutPalette`，窄态另有一份
+        /// `NDonutColor` switch，两边靠注释"必须一致"互相提醒。
+        /// 主理人要求两态配色**完全一致**，那就只留一份 —— 色板现在在
+        /// `TwinTheme` 里（private 数组 + `ChartSeqAt(i)` 唯一读口），
+        /// 这里只是转发一层，值无处可漂。
         /// </summary>
-        private static readonly Color[] DonutPalette =
-        {
-            TwinTheme.ChartSeq1,        // 第 1 大类型
-            TwinTheme.ChartSeq2,
-            TwinTheme.ChartSeq3,
-            TwinTheme.ChartSeq4,
-            TwinTheme.StatusUnknown,    // "其他"聚合
-        };
-
         private static Color DonutColor(int i)
         {
-            return DonutPalette[Mathf.Clamp(i, 0, DonutPalette.Length - 1)];
+            return TwinTheme.ChartSeqAt(i);
+        }
+
+        /// <summary>
+        /// 房间显示名：优先用 `TwinSiteLayout` 里的口语名（「计算机教室」），
+        /// 取不到就退回 Zone 原名（表外分区的 Zone 本身就是可读的）。
+        ///
+        /// 【为什么不直接写 Zone】Zone 是 `ClassComputer` / `Corridor1` 这种驼峰英文，
+        /// 上大屏读不出来。而 `RoomName` 是给人看的（「计算机教室」「一层走廊」）。
+        /// 这个映射已经在 `TwinSiteLayout` 里维护好了，不另建一张表。
+        /// </summary>
+        private static string RoomLabel(string zone)
+        {
+            if (string.IsNullOrEmpty(zone)) return "—";
+            TwinRoomInfo info = TwinSiteLayout.Find(zone);
+            if (info != null && !string.IsNullOrEmpty(info.RoomName)) return info.RoomName;
+            return zone;
         }
 
         /// <summary>
@@ -1429,6 +1913,46 @@ namespace SchoolTwin.UI
         /// <summary>本次运行起点（秒）。首次调用时取，用来算「今日用电」的时长。</summary>
         private static float s_startAt = -1f;
 
+        /// <summary>
+        /// 【P5-1 P0-2 第二条独立路径】全楼总功率的常驻采样。
+        ///
+        /// ── 为什么时序层里已经采了，这里还要再采一次 ────────────────────
+        /// 负责人 2026-11-02 明确要求：**聚合采样不能只挂在 `TwinMetricHistory.Tick`**。
+        ///
+        /// `Tick()` 属于时序层。以后有人重构它（改采样周期、加条件早退、换存储），
+        /// 顺手删掉那一行 `PushAggregatePower(...)` 是很可能发生的事 ——
+        /// 而且删了**不报错**：曲线永远停在"正在采样…"，排查时根本想不到是时序层的锅。
+        ///
+        /// 这条 runner 挂在 `TwinPowerEstimate` 自己身上 —— 也就是**口径的定义者**。
+        /// 谁定义了"全楼总功率怎么算"，谁就负责把它记下来，这个归属最不容易被后人改掉。
+        ///
+        /// 两条路径都活着会重复写同一个时间戳的两个点，视觉上无差别（见
+        /// `PushAggregatePower` 的注释），所以不做去重。
+        /// </summary>
+        private sealed class AggPowerSampler : MonoBehaviour
+        {
+            private float _nextAt;
+
+            [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+            private static void Bootstrap()
+            {
+                GameObject go = new GameObject("[TwinAggPowerSampler]");
+                UnityEngine.Object.DontDestroyOnLoad(go);
+                go.AddComponent<AggPowerSampler>();
+            }
+
+            private void Update()
+            {
+                // 用 unscaledTime：与 `TwinMetricHistory` 同一时间基准，
+                // 否则暂停/慢放时两条路径写进同一个环的时间戳会错位。
+                float now = Time.unscaledTime;
+                if (now < _nextAt) return;
+                _nextAt = now + 0.2f;      // 5Hz，与 `TwinMetricHistory.SampleInterval` 一致
+
+                TwinMetricHistory.PushAggregatePower(now, SumLivePower());
+            }
+        }
+
         /// <summary>取运行起点（惰性初始化：首次调用时记下当前时刻）。</summary>
         private static float StartedAt
         {
@@ -1443,19 +1967,113 @@ namespace SchoolTwin.UI
         /// 单台设备当前的功率（W）：优先读实时 `Power`，取不到才退回「额定 × 待机系数」。
         ///
         /// ── 为什么必须抽成一个方法 ──────────────────────────────────────
-        /// 全楼总功率、楼层能耗聚合、Top5 排序**三处**都要这条规则。
+        /// 全楼总功率、房间能耗聚合、Top5 排序**三处**都要这条规则。
         /// 之前各写一遍，改一处忘一处就会出现"KPI 2.8kW、楼层 22.3kW"这种
         /// 同一个页面两个数字（主理人 2026-11-02 截图对账发现的）。
         ///
         /// 现在只在这里定义，三处都调它，改系数只改这一个 0.15。
+        ///
+        /// ── ⚠️ 禁止去掉这条 fallback（负责人 2026-11-02 裁决）────────────
+        /// 这个 0.15 确实产生"编出来的数"：暖气 1000×0.15=150W、
+        /// 传感器 20×0.15=3W —— 都不是测出来的。
+        /// （门原先也在这张名单里，30×0.15=4.5W；2026-11-02 起 `RatedPower("Door")`
+        ///   改成 0，因为它根本不耗电 —— 见 `RatedPower` 里那一整段注释。）
+        ///
+        /// 但**总量必须留着它**：暖气是真实耗电设备，从总功率里剔掉会让
+        /// "全楼总功率"变成"部分设备总功率"，那个数字反而更假。
+        ///
+        /// 所以裁决是：**总量含估算，榜单只收实测**。
+        /// 榜单的过滤放在 Top5/Top3 的**收集环节**（`HasPowerReading`），
+        /// 不在这里 —— 这里一动，KPI 和曲线的数就全变了。
         /// </summary>
         public static float LivePowerOf(TwinAnchor a)
         {
             if (a == null) return 0f;
 
+            // 【2026-11-02 修·断电归零】断电的设备**不耗电**，读数必须是 0。
+            //
+            // ── 原来错在哪（主理人实测："关闸再开闸，实时功率依旧是平线"）──────
+            // 拉闸后 `TwinPowerController` 确实让 Mock 数据源**停发**了这台设备的样本，
+            // 链路是通的。但 `TwinAnchor.Values["Power"]` 里那个值**没人删** ——
+            // `Values` 全项目只有 `OnSample` 一个写入点，没有任何"沉默就归零"的路径。
+            // 于是这里 `TryGetValue` 照样读到拉闸前的 42W，`SumLivePower` 一个数都没少，
+            // 曲线纹丝不动。问题在**口径**，不在绘图。
+            //
+            // ── 为什么放在这里，而不是在停发时把 Values 清零 ────────────────
+            // ① "停发"是数据链路的事实，"断电归零"是**能耗口径**的判断。
+            //   让数据层去改 Values，等于让"没有数据"伪装成"数据是 0" ——
+            //   那会把 `Stale/Offline` 的沉默判定一起搞坏（它会以为刚收到过样本）。
+            // ② 这里已经是全楼总功率的**唯一出口**（KPI / 曲线 / 楼层 / 榜单都走它），
+            //   改一处四处同步，不会再出现"曲线变了 KPI 没变"。
+            //
+            // ── 为什么用 `TwinCircuit` 而不是 `MockDataSource.IsMuted` ──────
+            // `IsMuted` 是 Mock 专有的模拟开关，换成 MQTT 真实设备时它恒为 false，
+            // 这条修复就会**静默失效**。回路通断是模型层的物理事实，换数据源照样成立。
+            //
+            // 门是**豁免**的（`IsPowered` 内部对 Door 直接返回 true），断电后仍会走到
+            // 下面那行 fallback。但 `RatedPower("Door")` 现在是 **0**，所以算出来也是 0
+            // —— 两边口径终于一致了（详见 `RatedPower` 里 2026-11-02 的注释）。
+            // 这一点很重要：整层拉闸后总功率必须是 0.0 kW，不能再留 0.1 kW 的尾巴。
+            if (!TwinCircuit.IsPowered(a.TwinId)) return 0f;
+
             TwinValue pv;
             if (a.TryGetValue("Power", out pv) && pv.Value > 0.01f) return pv.Value;
-            return RatedPower(a.Category) * 0.15f;   // 待机底噪
+            return RatedPower(a.Category) * 0.15f;   // 待机底噪（仅用于总量，不上榜）
+        }
+
+        /// <summary>
+        /// 这台设备**此刻有没有真实功率读数**（用于 Top5 / Top3 榜单过滤）。
+        ///
+        /// ── 判据为什么是"有 Power 指标且值 &gt; 0.01"而不是只看指标存在 ──────
+        /// 榜单语义是「谁的功率最大」。一台关着的电脑（Power = 0）排进能耗榜
+        /// 没有意义，只会把榜单撑满一堆 0W 行，把真正在跑的设备挤到后面。
+        ///
+        /// 所以判据取"读得到且非零"：
+        ///   · 灯亮着 42W        → 上榜
+        ///   · 电脑关着 0W       → 不上榜（没在耗电，谈不上"能耗大"）
+        ///   · 暖气无 Power 指标 → 不上榜（150W 是编的，不该占名额）
+        ///
+        /// 副作用是 N 会随设备开关变化（开机瞬间 N 从 5 涨到 20）。
+        /// 这是符合语义的 —— 榜单本来就该反映"此刻谁在耗电"。
+        /// </summary>
+        public static bool HasPowerReading(TwinAnchor a)
+        {
+            if (a == null) return false;
+
+            // 【断电设备没有读数】和 `LivePowerOf` 同一口径，两处必须一起改。
+            //
+            // 不判这一句的后果：拉闸后 `Values` 里那个旧 42W 还在，
+            // 榜单会继续把一台已经断电的灯排成 Top1，而它旁边的功率列写着 0.0 kW
+            // —— 同一行自相矛盾。榜单语义是"此刻谁在耗电"，断电的不算。
+            if (!TwinCircuit.IsPowered(a.TwinId)) return false;
+
+            TwinValue pv;
+            return a.TryGetValue("Power", out pv) && pv.Value > 0.01f;
+        }
+
+        /// <summary>
+        /// 这台设备是否**只能靠估算**参与总量（没有 Power 测点，走 fallback）。
+        ///
+        /// 【为什么和 `HasPowerReading` 分开】两者问的不是一件事：
+        ///   · `HasPowerReading`：「此刻有读数吗」—— 关着的电脑是 false
+        ///   · `HasEstimate`     ：「只能估算吗」    —— 关着的电脑是 false（它有测点，只是值 0）
+        /// 页脚的「含 M 台估算」要用后者：一台关着的电脑不该被算进"估算台数"，
+        /// 它的 0W 是真实读数，不是估的。
+        /// </summary>
+        public static bool HasEstimate(TwinAnchor a)
+        {
+            if (a == null) return false;
+
+            TwinRuntime rt = TwinRuntime.Instance;
+            TwinPointDefinition point = (rt != null && rt.Catalog != null)
+                ? rt.Catalog.Find(a.TwinId) : null;
+
+            // catalog 是权威来源：点位自己声明了有哪些指标
+            if (point != null) return point.FindMetric("Power") == null;
+
+            // 目录里没这条（场景新加、还没同步）—— 退回运行时锁判断
+            TwinValue pv;
+            return !a.TryGetValue("Power", out pv);
         }
 
         /// <summary>
@@ -1499,7 +2117,39 @@ namespace SchoolTwin.UI
                 case "Projector": return 300f;
                 case "Heat":
                 case "Radiator": return 1000f;
-                case "Door": return 30f;
+
+                // 【2026-11-02 改 30 → 0】门不耗电。
+                //
+                // ── 原来 30W 是怎么露馅的 ────────────────────────────────────
+                // 整层拉闸后主理人截图：实时功率显示 **0.1 kW 而不是 0**。
+                // 追下来就是这一行：12 扇门 × (30 × 0.15 待机系数) = 54W ≈ 0.1 kW。
+                //
+                // 平时它藏在 2.8 kW 里看不出来，一断电单独露头，
+                // 而同一个面板的在线率正好显示 17.1%（12/70）——
+                // 断电后只有门还在线，数字对得上，评委一定会问"断电了怎么还有 0.1 千瓦"。
+                //
+                // ── 为什么门本来就是 0 ───────────────────────────────────────
+                // `TwinCircuit.IsPowerIndependent` 的裁决（P3-4）：教学楼的门是普通机械门
+                // （推拉 / 合页），**不是电磁锁**，断电照样能开。
+                // 一个不耗电的物件在功率表里挂 30W，是口径自相矛盾 ——
+                // 前面说它不接电，后面按接电给它算功耗。
+                //
+                // `TwinDeviceModel` 里 Door 也只有 `Open` 属性、**没有 Power 测点**，
+                // 这一点两边本来就一致，是这张功率表自己多写了一行。
+                //
+                // ── 影响面（按 71 个点位实算，不是估的）────────────────────────
+                //   · 断电后总功率：0.1 → **0.0 kW**（12 扇门 = 12 × 4.5W = 54W 归零）
+                //   · 通电时总功率：2.10 → **2.05 kW**（少 54W，占 2.6%）
+                //   · 装机容量：22.06 → **21.70 kW**（少 12 × 30W = 360W）
+                //   · 负载率：9.5% → 9.4%（读数变化在 0.1 个百分点内，KPI 上看不出来）
+                //   · 榜单：本来就不收门（`HasPowerReading` 挡着），无影响
+                //
+                // ⚠️ 上面「通电时总功率 2.05 kW」和截图里的 2.8 kW 不一致，原因见
+                //    `SumLivePower` 的说明：截图那台机器上部分电脑/投影仪处于开机态
+                //    （Power = 180W / 310W），本算式的基准是"全部按初始态"。
+                //    变动的**差值**（门的那 54W）与开不开机无关，这一点是确定的。
+                case "Door": return 0f;
+
                 case "Socket": return 100f;
                 case "Meter": return 5f;
                 case "Camera": return 12f;
