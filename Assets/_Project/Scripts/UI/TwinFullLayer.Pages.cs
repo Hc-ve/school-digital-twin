@@ -1316,8 +1316,8 @@ namespace SchoolTwin.UI
             // 窗口极值（简化：滑动衰减，不存 300 点副本）
             if (_sparkLo < 0f || sum < _sparkLo) _sparkLo = sum;
             if (_sparkHi < 0f || sum > _sparkHi) _sparkHi = sum;
-            _sparkLo = Mathf.Lerp(_sparkLo, sum, 0.002f);
-            _sparkHi = Mathf.Lerp(_sparkHi, sum, 0.002f);
+            _sparkLo = Mathf.Lerp(_sparkLo, sum, 0.02f);
+            _sparkHi = Mathf.Lerp(_sparkHi, sum, 0.02f);
 
             // 【P5】量程自适应。
             //
@@ -1327,7 +1327,7 @@ namespace SchoolTwin.UI
             // 避免数值几乎不变时把噪声放大成锯齿。
             float lo = _sparkLo;
             float hi = _sparkHi;
-            float span = Mathf.Max(hi - lo, Mathf.Max(0.5f, hi * 0.15f));
+            float span = Mathf.Max(hi - lo, Mathf.Max(0.5f, hi * 0.05f));
             float pad = span * 0.25f;
             _statsSpark.SetRange(lo - pad, hi + pad);
         }

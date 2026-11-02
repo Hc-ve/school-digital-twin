@@ -666,10 +666,10 @@ namespace SchoolTwin.UI
 
                 if (_nSparkLo < 0f || sum < _nSparkLo) _nSparkLo = sum;
                 if (_nSparkHi < 0f || sum > _nSparkHi) _nSparkHi = sum;
-                _nSparkLo = Mathf.Lerp(_nSparkLo, sum, 0.002f);
-                _nSparkHi = Mathf.Lerp(_nSparkHi, sum, 0.002f);
+                _nSparkLo = Mathf.Lerp(_nSparkLo, sum, 0.02f);
+                _nSparkHi = Mathf.Lerp(_nSparkHi, sum, 0.02f);
 
-                float span = Mathf.Max(_nSparkHi - _nSparkLo, Mathf.Max(0.5f, _nSparkHi * 0.15f));
+                float span = Mathf.Max(_nSparkHi - _nSparkLo, Mathf.Max(0.5f, _nSparkHi * 0.05f));
                 float pad = span * 0.25f;
                 _nSpark.SetRange(_nSparkLo - pad, _nSparkHi + pad);
             }
