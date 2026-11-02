@@ -1748,6 +1748,11 @@ namespace SchoolTwin.UI
             UpdateNarrowStats();
 
             if (!_built) return;
+
+            // 【P5】每帧推进窄态曲线的时间轴（同全屏：只靠 Push 的话线是冻的）
+            if (_nSpark != null && _selected == 4)
+                _nSpark.Tick(Time.unscaledTime);
+
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.5f;
 
