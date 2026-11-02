@@ -439,6 +439,52 @@ def run_checks():
     return results
 
 
+def strip_comments(text, lang):
+    """去掉注释行，只保留**真正会执行**的代码。
+
+    ── 为什么必须有这个 ────────────────────────────────────────────
+    这个坑在一天之内踩了三次：
+
+      P5-06  grep0 "v0.9 · "   → 命中注释「原来写 `"v0.9 · " + HH:mm:ss`」，
+                                  代码早改对了，判据一直红
+      P5-10  grep0 "实时 · 实测" → 命中注释「卡 D 原写「实时 · 实测」」，
+                                  代码已改成「含估算」，判据报"仍有 1 处"
+      P5-11  grep0 "实时 · 估算" → 同上，命中「原来是「实时 · 估算」」
+
+    根因不是"某条正则写错了"，而是**判据工具本身不分注释和代码**。
+    逐个打补丁只会换个地方再犯 —— 所以在这里一次解决。
+
+    ── 各语言怎么判注释 ──────────────────────────────────────────────
+      cs / js / py  : 行注释 `//`（py 是 `#`），块注释 `/* */`
+      txt / md      : 不处理（判据清单本身要能写例子）
+    """
+    if lang in ("txt", "md", ""):
+        return text
+
+    line_tokens = ["//"]
+    if lang == "py":
+        line_tokens = ["#"]
+
+    out = []
+    in_block = False
+    for line in text.split("\n"):
+        if lang in ("cs", "js"):
+            s = line.strip()
+            if in_block:
+                if "*/" in s:
+                    in_block = False
+                continue
+            if s.startswith("/*"):
+                if "*/" not in s:
+                    in_block = True
+                continue
+        stripped = line.lstrip()
+        if any(stripped.startswith(t) for t in line_tokens):
+            continue        # 整行是注释 → 丢掉
+        out.append(line)
+    return "\n".join(out)
+
+
 def eval_check(spec):
     """解析并执行一条判据，返回 (True/False/None, 说明)。"""
     kind, _, rest = spec.partition(":")
@@ -472,6 +518,11 @@ def eval_check(spec):
                 text = f.read()
         except OSError as e:
             return None, "读不了：%s" % e
+
+        # 默认剔除注释行 —— 见 strip_comments 的说明（同一天踩三次的坑）
+        lang = os.path.splitext(rel)[1].lstrip(".").lower()
+        text = strip_comments(text, lang)
+
         try:
             hits = len(re.findall(pattern, text, re.MULTILINE))
         except re.error as e:

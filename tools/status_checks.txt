@@ -32,10 +32,54 @@ P5-04 | 旧的 60 点伪造回填已删除 | grep0:Assets/_Project/Scripts/UI/Tw
 P5-05 | 窄态旧伪造回填已删除 | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:for \(int k = 60; k > 0; k--\)
 
 # --- P5-1 P1-4 底部时间戳去重 ---
-P5-06 | 版本号不再带时间 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.cs:v0\.9 · 
+#
+# 【2026-11-02 修判据】原为 grep0:...:v0\.9 · ，会命中注释里引用的旧写法
+# 「原来写 `"v0.9 · " + HH:mm:ss`」，于是代码早改对了、判据一直红。
+# 改为正向判：赋值语句必须是纯版本号（行尾 ; 或 "）。
+# 注释里的那行带反引号+加号，不会被这个模式命中。
+P5-06 | 版本号赋值语句只写 v0.9，不带时间 | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:v\.text = "v0\.9";
 
-# --- P5-1 P2-2 两态格式统一（合并列）---
-P5-07 | 窄态房间行已合并数值+占比 | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nFloorPct
+# --- P5-1 P2-2 两态格式统一 ---
+#
+# 【2026-11-02 判据作废，勿照此施工】原判据要求 `_nFloorPct` 消失（v2「两段式」：
+# 数值与占比合并成一个串 `1.8 kW · 66%`）。但图纸 v3 §3.5 已改为四列独立：
+# 名称 0/88、轨道 92/230、值 326/60、占比 390/44→434。
+# 占比本就是独立列，删 `_nFloorPct` 会把 v3 的正确实现改坏。
+# 新判据改为：四列必须各自存在（名称/轨道/值/占比）。
+P5-07 | 窄态房间行四列齐全（名称/轨道/值/占比） | grep+:4:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nFloor(Pct|Val|Name|Track)
 
 ## 待办：房间能耗按 Zone 聚合（尚未派工）
 # P5-08 | 聚合键从 FloorOf 换成 Zone | grep:N:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:RoomLabel
+
+## P5-4 统计页视觉缺口补充（2026-11-02 · 依据主理人两张实机截图）
+#
+# 本组只覆盖"画得对不对 / 位置对不对 / 口径写得对不对"，
+# 不涉及数据口径（LivePowerOf 等三处已裁决 C-32/C-37，禁动）。
+
+# --- Q2 窄态曲线宽追平 434（图纸 §3.3 / §3.9 变更④）---
+#
+# 【不要用 grep+:1:...:RightW - 6f】viewport 那行（561）已经是 RightW-6f，
+# 会把"曲线没改"判成"已改"。必须连同 _nSpark 一起匹配才唯一。
+P5-08 | 窄态曲线宽 434（原 RightW-8=432） | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:Place\(_nSpark\.rectTransform, 0f, 138f, RightW - 6f
+
+# --- Q3 全屏四主卡容器（图纸 §0.1 第 1 条，本轮最核心改动）---
+P5-09 | 四张主卡容器已建 FStatsCard_ | grep+:4:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:FStatsCard_
+
+# --- Q6 来源行口径统一为「实时 · 含估算」（裁决：同页不能两套口径）---
+P5-10 | 全屏卡D不再写「实测」 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:实时 · 实测
+P5-11 | 窄态来源行不再写「估算」 | grep0:Assets/_Project/Scripts/UI/TwinSystemPage.cs:实时 · 估算
+
+# --- Q7 灯具播种差异化（避免 Top5 全 42W 全满格）---
+P5-12 | 灯具播种不再全部 42f | grep0:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "Power", 42f\)
+
+## P5-5 收尾（2026-11-02 19:32 · 新发现 2 条口径文案矛盾，答辩致命）
+#
+# R1/R2 的严重性高于所有视觉项：页面自己声明"这些数是估算不是实测"，
+# 而 KPI/曲线/楼层实际走 LivePowerOf（实时读数）。当初改口径就是为了防穿帮，
+# 改完文案没跟着改 —— 于是照样穿帮，而且是自己写的字拆自己。
+
+# --- R1 页脚口径文案与实际口径相反 ---
+P5-13 | 页脚不再写「按类型额定功率 × 台数」 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:按类型额定功率 × 台数
+
+# --- R2 页面副标同样写着"非实测" ---
+P5-14 | 副标不再写「按额定功率 × 台数估算，非实测」 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:非实测
