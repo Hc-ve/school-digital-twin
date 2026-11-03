@@ -83,3 +83,398 @@ P5-13 | 页脚不再写「按类型额定功率 × 台数」 | grep0:Assets/_Pro
 
 # --- R2 页面副标同样写着"非实测" ---
 P5-14 | 副标不再写「按额定功率 × 台数估算，非实测」 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:非实测
+## P6 · D5/D6 单位归一 + 聚合去重（2026-11-02 · 断点施工）
+
+# --- D5 单位归一化下沉到读取层 ---
+#
+# 判据①：换算能力必须建在 TwinAnchor（读取层），不在 UI 层。
+# 只判"存在"不够 —— 还要判 UI 层**没有**自己查 catalog 换算，
+# 否则同一个 bug 会以"两套换算逻辑漂移"的形式复发。
+P6-01 | 单位换算能力建在 TwinAnchor（TryGetWatt + WattScaleOf） | grep:2:Assets/_Project/Scripts/Twin/TwinAnchor.cs:public (bool TryGetWatt|float WattScaleOf)
+P6-02 | 换算按 Unit 字符串判 kW（不按 Category 硬编码） | grep:1:Assets/_Project/Scripts/Twin/TwinAnchor.cs:Equals\(unit, "kW"
+P6-03 | LivePowerOf 已改用 TryGetWatt 换算后的值 | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:if \(a\.TryGetWatt\("Power", out watt\) && watt > 10f\) return watt;
+
+# 【禁止项】按设备类型/单位硬编码 —— 任务包明令禁止。
+# 这两个模式在正确实现里不该出现（注释已剔除，只判真实代码）。
+# 注意：不能用 grep0 判 `== "AC"`，因为 RatedPower 的 switch 里合法地出现 case "AC"。
+# 所以判更有针对性的写法：把 category 和 AC 用 == 直接比。
+P6-04 | LivePowerOf 里无 if (category == "AC") 硬编码 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:category ?== ?"AC"
+P6-05 | LivePowerOf 里无 if (unit == "kW") 硬编码 | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:unit ?== ?"kW"
+
+# --- D5 第三条 · 聚合点位不参与实时求和 ---
+#
+# 判据：IsAggregatePoint 必须在 LivePowerOf 里被判（不只是 TotalWatt）。
+# 这是"四个出口同步"的保证 —— 只在 SumLivePower 判会让楼层/榜单仍重复计入。
+P6-06 | 聚合点位在实时口径里被排除 | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:if \(IsAggregatePoint\(a\.TwinId\)\) return 0f;
+
+# --- D6 · PC 量程与回读判据按点位自己的 catalog 量程生成 ---
+#
+# 判据：For() 必须真的读 twinId 的量程，而不是写死一个类型常量。
+P6-07 | PC 量程从 catalog 读（MetricMaxOf） | grep:1:Assets/_Project/Scripts/Twin/TwinDeviceModel.cs:MetricMaxOf\(twinId, "Power"
+P6-08 | PC 回读区间不再写死 800~2200 | grep0:Assets/_Project/Scripts/Twin/TwinDeviceModel.cs:0f, 1f, 1f, 800f, 2200f
+P6-09 | PC 回读区间按量程推出 | grep:1:Assets/_Project/Scripts/Twin/TwinDeviceModel.cs:AddAction\(m, "SetPower", true, "Power", 0f, 1f, 1f, onMin, onMax
+
+# --- D5 同批 · Power 属性的 Kind 不再错标 Bool ---
+#
+# Power 是连续瓦数，Bool 的语义是 0/1 两态。全项目 Power 属性共 4 处
+# （Light / AC / PC / Projector），改完应全部为 Float。
+P6-10 | Power 属性不再有 Kind=Bool | grep0:Assets/_Project/Scripts/Twin/TwinDeviceModel.cs:AddProperty\(m, "Power", "Power", TwinPropertyKind\.Bool
+
+# --- 【2026-11-03 裁正】联动开机的期望增量是 3115 W，不是 3.24 kW ---
+#
+# ── 原判据为什么错 ──────────────────────────────────────────────
+# 任务包写「增量 ≈ 3.24 kW = 18 × 180」，把 180 W 当成了**绝对增量**。
+# 但每台电脑开机前不是 0 W，而是 `RatedPower(PC) × 0.15 = 30 W` 的待机底噪
+# （`LivePowerOf` 对"有测点但读数为 0"的兜底，设计如此）。
+#
+# 联动开机下发的其实是 **20 条命令**：主脑 + 投影 + 18 座位。
+#   18 座位  30 → 180 W   = 2700 W
+#   主脑     30 → 180 W   =  150 W
+#   投影     45 → 310 W   =  265 W
+#   ─────────────────────────────
+#   合计                   3115 W
+#
+# 实测闭环（2026-11-03 主理人截图）：
+#   开机前校验和 1735000 ÷ 200 = 8675 W = 8.675 kW（显示 8.7）
+#   8675 + 3115 = 11790 W = 11.79 kW（显示 11.8）✅
+#
+# ── 这条判据为什么这么写 ────────────────────────────────────────
+# 判据不改代码，只守住"分母与基线的口径别被改回去"：
+# ① 待机系数必须还是 0.15（改了它 3115 就不成立）
+# ② 座位开机值必须还是 180W（改了它增量就不对）
+# ③ 投影开机值必须还是 310W（同上）
+# 三条任一被改，期望增量都要重新算 —— 判据会先 fail 提醒，而不是等到答辩对账。
+P6-11 | 待机底噪系数仍为 0.15（3115W 增量的前提） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:RatedPower\(a\.Category\) \* 0\.15f
+P6-12 | 座位开机值仍为 180W | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:on \? 180f : 0f
+P6-13 | 投影开机值仍为 310W | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:on \? 310f : 0f
+#
+# 判据 P6-14 的写法说明：**不能**直接 grep0 整个 "3.24"。
+# 裁正说明本身必须写出旧错值（"原文写 3.24，这个期望值算错了"），
+# 否则读的人不知道为什么改。直接判 0 处会把**正确的记录**判成失败
+# —— 那会让人为了过判据而删掉解释，比不过更糟。
+# 所以只判「旧期望**作为验收标准**出现」这一种写法：
+#   旧：`看总功率增量是否 ≈ 3.24 kW（18×180W）`
+P6-14 | 验收标准不再用 3.24 kW 旧期望 | grep0:Docs/P6_D5单位归一与D6量程核对_断点.md:增量是否 ≈ 3\.24
+#
+# ---- P8：拉闸后榜单白框（2026-11-03 主理人截图发现）----
+#
+# 缺陷：整栋拉闸后 70 台设备仍在册，`empty`(total==0) 为 false，
+# 四块/块内空状态都不显示；而 Top5/Top3 的内容被 `HasPowerReading`
+# 全挡掉（断电无读数）→ 标题还在、下面一片白框。
+# 判据：两态都必须有"设备在册但都不耗电"这一档的空状态文案。
+P8-01 | 全屏 Top5 块有「当前无耗电设备」空状态 | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:当前无耗电设备
+P8-02 | 窄态 Top3 块有 _nTopEmpty 独立空状态节点 | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:NTopEmpty
+P8-03 | 全屏空状态按块分派（不再四块共用一个 empty） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:bool\[\] blockEmpty
+P8-04 | 窄态块内空状态判据含 !empty（不与整页 _nEmpty 重复） | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:bool noRank = !empty
+#
+# ---- 容量口径（2026-11-03 复核：21.86 kW，不是旧注释的 21.70 / 22.06）----
+# 依据：场景 70 台 × RatedPower 实算 = 21860 W；
+# 截图反推 8675/21860 = 39.68% → 显示 39.7%，与实际吻合。
+#
+# ⚠️ 这两条判据**必须指向 md 文档**，不能指向 .cs：
+#    21.86 这个数写在代码注释里，而判据工具对 .cs 会剔除注释行
+#    （见 status.py 的 strip_comments —— 那是为了避免"命中注释里的旧值"误报）。
+#    所以指向 .cs 永远 0 处，判据恒红或恒绿，等于没判。
+#    这是同一个坑的第三次变体：判据要判的东西，必须真的在它的可见范围内。
+P8-05 | 容量口径 21.86 kW 已在文档中算出（≥1 处即可） | grep+:1:Docs/P7_设备编号唯一化_断点.md:21\.86 kW
+#
+# ---- P9：编号文案在窄栏的宽度适配（2026-11-03 主理人裁决「可接受」后落实）----
+#
+# 背景：`WithType()` 从 `TypeLabel`（全名）改用 `TypeMid`（短名）——
+# 因为告警条 id 实际可用宽只有 106px，而 `2F201 温度传感器001` 需 109.5px。
+# 超 1.5px 就是溢出：Legacy Text 是 Overflow 模式，不换行不省略，直接压到告警等级上。
+P9-01 | 编号有中等长度类型名 TypeMid | grep:1:Assets/_Project/Scripts/UI/TwinCode.cs:private static string TypeMid
+P9-02 | WithType 已改用 TypeMid（不再用全名） | grep:1:Assets/_Project/Scripts/UI/TwinCode.cs:string type = TypeMid\(category, name\)
+P9-03 | 中英文分宽的截断工具已提到 TwinUIFactory | grep:1:Assets/_Project/Scripts/UI/TwinUIFactory.cs:public static string FitText\(
+P9-04 | 保留尾部序号的截断（编号唯一性不能丢） | grep:1:Assets/_Project/Scripts/UI/TwinUIFactory.cs:public static string FitTextKeepTail
+P9-05 | 告警条编号走保尾截断 | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:FitTextKeepTail\(TwinCode\.WithType
+P9-06 | 告警条可用宽度由卡宽算出（不各写一个数） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:_alarmIdWidth = ColW - 60f - 2f
+# Alarm 只补了短码字（消）没补中文名，导致 `1F105 Alarm001` 中英混排。
+# 判据盯住 TypeName 里必须有 Alarm 一行 —— 加新设备类型时同类漏补都靠实跑 70 条才看得见。
+P9-07 | Alarm 已有中文类型名（不再漏英文） | grep:1:Assets/_Project/Scripts/UI/TwinCode.cs:case "Alarm": return "烟感"
+P9-08 | 全码房间段与设备序号之间有显式分隔 | grep:1:Assets/_Project/Scripts/UI/TwinCode.cs:sb\.Append\(" · "\)\.Append\(seq\)
+#
+# ---- P10：设备管理全屏态点行无反应（2026-11-03 主理人截图：点了什么都没变）----
+#
+# 缺陷由**两个根因叠加**，只修一个都修不好：
+#   ① 右栏形态判定有两个出口：`Show()` 里无条件关 `_detailGroup`，而
+#      `RefreshSystem()` 根本不碰这三组 → System 态下详情组永远关着。
+#      → 现已抽成 `ApplySystemAside()`，`Show` / `RefreshSystem` / `SelectTab` 共用。
+#   ② 即使可见性对了，判定读的是 `TwinDetailPanel.SelectedAnchor`，它比
+#      `TwinPicker.Selected` **晚一帧**同步；而点行是"选中 → 同帧 Refresh(true)"，
+#      于是读到旧值（null），右栏仍不动，要等 0.5s 节流才悄悄变。
+#      → 统一读 `TwinPicker.Selected`（与行高亮同源同帧）。
+#
+# ⚠️ ② 这个坑本文件里已经踩过一次（C-31，`RefreshDevicePage` 的注释），
+#    教训：同一个面板的同一件事，判定必须只有一处、且读同一个来源。
+P10-01 | System 右栏形态收成唯一出口 ApplySystemAside | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:private void ApplySystemAside\(\)$
+P10-02 | Show() System 分支走 ApplySystemAside（不再硬关详情组） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:if \(!home\) ApplySystemAside\(\);
+P10-03 | RefreshSystem 开头也裁决右栏（0.5s 刷新路径不漏） | grep:2:Assets/_Project/Scripts/UI/TwinFullLayer.cs:ApplySystemAside\(\);$
+P10-04 | 选中来源读 TwinPicker（同帧，不读晚一帧的 SelectedAnchor） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:TwinAnchor sel = SchoolTwin\.Interaction\.TwinPicker\.Selected
+P10-05 | L2 有 Esc 退详情这一层（「Esc 返回」不是假文案） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:public bool HandleEscape\(\)
+P10-06 | 抽屉 Esc 先问 L2（再退页栈 / 收抽屉） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_fullLayer\.HandleEscape\(\)
+P10-07 | 选中行有描边高亮（不只靠 Δ18 的 AccentDim 底） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:SetBorder\(sel \? TwinTheme\.AccentLine
+P10-08 | 窄态行选中同步补描边（双态同步，不各做一套） | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:SetBorder\(sel \? TwinTheme\.AccentLine
+P10-09 | SelectTab 不再自己切辅栏（否则切回来会与详情叠层） | grep0:Assets/_Project/Scripts/UI/TwinFullLayer.cs:SetActive\(index != 4\);
+P10-10 | 告警中心点行真的立即刷新（原来是只重置闸门不调 Refresh） | grep:2:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:_nextRefresh = 0f;\n            Refresh\(true\);
+
+# ---- P11：设备详情全屏/窄屏两套东西（2026-11-03 主理人截图：「展示效果还不一样」）----
+#
+# 症状：全屏 → 设备管理 → 点行，右栏只切出 **4 行纯文字**（位置/类型/指标数/更新，宽 168）；
+#       窄态点行给的是一张 **440 宽完整详情页**（量程条 + 阈值带 + 60s 趋势线 + 告警列表）。
+#       同一个功能两套东西，信息量差一大截 —— 主理人一句话点破。
+#
+# 修法：全屏点行也进那一页（`OpenDeviceDetail`），全屏层的右栏详情组**整个退场**；
+#       详情页按 `TwinDrawer.IsFullScreen` 自己切宽度（窄 440 / 全屏 968），
+#       一套代码、一套信息，只有尺寸不同。
+#
+# 三个配套收口（少一个就出画面 bug）：
+#   a. `ApplyFullMode` 三态互斥：全屏+详情 → 全屏层让位、只开 `_content`
+#   b. 每帧那句"窄态内容与全屏层互斥"必须排掉详情例外，否则下一帧把详情页关掉
+#   c. 三条退出路径（`PopPage` / `OnBackClicked` / `OnEscape`）都要重算谁占屏
+P11-01 | 详情页按宿主形态切宽度（唯一判据 TwinDrawer.IsFullScreen） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:_full = TwinDrawer\.IsFullScreen;
+P11-02 | 全屏几何 968 = 1000 − Pad*2（不保留左轨，与窄态同构） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:private const float FullW = TwinDrawer\.FullW
+P11-03 | 全屏下沿 568（_content 高 580 − 12，不是 _root 的 648） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:private const float FullBottom = 568f;
+P11-04 | 形态变了要整页重建（排版是级联计算，逐项打补丁必漏） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:private void RebuildForHost\(\)
+P11-05 | 三列信息按 _w/3 均分（全屏不再挤在左 450px） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:float colStep = _w / 3f;
+P11-06 | 全屏点行进整页详情（不再切右栏） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:TwinDrawer\.OpenDeviceDetail\(anchor\);
+P11-07 | System 右栏不再有设备详情这一态（详情已由整页取代） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:SetGroupActive\(_detailGroup, false\);
+P11-08 | ApplyFullMode 三态互斥：详情占屏时全屏层让位 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:bool detailOnTop = IsDetailOnTop\(\);
+P11-09 | 详情占屏时清掉 _fullIsHome（否则面板底透、小地图乱显示） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_fullIsHome = false;\n                _fullLayer\.Hide\(\);
+P11-10 | 每帧互斥检查排掉详情例外（否则下一帧把详情页关掉） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:bool contentExpected = !_maximized \|\| IsDetailOnTop\(\);
+P11-11 | Esc 判据改看「Esc 返回」可不可见（不自相矛盾地吃按键） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.cs:if \(_detailGroup == null \|\| !_detailGroup\.gameObject\.activeSelf\) return false;
+P11-12 | OnEscape 的 Pop 分支也重算占屏（原来会停在空内容区） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_stack\.Pop\(\);\n\s*\n\s*ApplyFullMode\(\);
+P11-13 | 抽屉内三条退出路径都收口（PopPage/OnBackClicked/OnEscape/Close） | grep+:4:Assets/_Project/Scripts/UI/TwinDrawer.cs:ApplyFullMode\(\);
+P11-14 | 全屏告警行按余量变高（把空白变成可读信息，不塞占位框） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:rowH = Mathf\.Min\(AlarmRowHMax, AlarmRowH \+ extraH / rows\);
+P11-15 | 告警空态显隐的唯一出口（判实际填了几行 n，不判建了几个节点） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:bool showEmpty = n == 0;
+P11-16 | 告警标题不再复读「无记录」（那句交给空态标签） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:: "告警与异常"\);
+P11-17 | 每帧自检宿主形态（最大化不一定触发 OnShow，页栈没变） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:if \(TwinDrawer\.IsFullScreen != _full\)
+P11-18 | 重建前先 SetActive(false)（Destroy 延迟到帧尾，否则叠一帧） | grep:2:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:gameObject\.SetActive\(false\);\s*(?://[^\n]*)?\s*\n\s*TwinUIFactory\.DestroySafe
+P11-19 | 两个入口都配对：OnShow 与 RebuildForHost 建完都填内容（Build 只建骨架，RefreshAll 无条件调） | grep:2:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:^\s{12}RefreshAll\(\);$
+P11-20 | RebuildForHost 自身完整（Build 后紧跟 RefreshAll，不靠调用者） | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:Build\(\);\n            RefreshAll\(\);\n        \}
+
+## P27 数据真实性（2026-11-03 · 目标：关机不再波动 / 环境量按物理形态走）
+
+# --- P27-A 分类判据只有一处（波形与噪声同源，不各写一套）---
+P27-01 | 环境量形态分类存在 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:public enum MetricShape
+P27-02 | 形态判定按精确指标名，不做 Contains 模糊匹配 | grep0:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:Contains\("Temp"\)|Contains\("temp"\)
+P27-03 | 四个环境量指标都有专属形态 | grep+:4:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:case "(Temperature|SupplyTemp|CO2|Humidity)": return MetricShape\.
+P27-04 | 噪判据 IsSmooth 存在且四类都归为平滑 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:public static bool IsSmooth
+
+# --- P27-B 室温必须是派生量，不能是独立正弦 ---
+#
+# 【为什么这条判据最重要】第一版把室温写成「22 分钟周期正弦」，周期没有物理来源，
+# 主理人一问「天气系统上线后会不会跟着变」就暴露了。判据锁定：
+# 室温只能读 TwinClimate，不允许在生成器里自己造周期。
+P27-05 | 室温由 TwinClimate 派生 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:double c = TwinClimate\.IndoorNowC\(\) \+ offset;
+P27-06 | 室温不再有自造的几分钟级周期 | grep0:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:GenerateRoomTemperature[\s\S]{0,600}?/\s*(15\.0|22\.0\s*\*\s*60|330\.0)
+P27-07 | 气候模型只有一个时刻来源 HourOfDay | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:public static double HourOfDay
+P27-08 | 室温走「室外→热惯性→得热→供暖」四步 | grep+:4:Assets/_Project/Scripts/Data/TwinClimate.cs:热惯性|OccupancyGainC\(hour\)|ResolveHeatingSeason\(\)|HeatingTargetC
+
+# --- P27-C 天气/时间系统接入点（为下一轮预留，不能是空壳）---
+P27-09 | 天气可外部设置 | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:public static void SetWeather\(Weather w\)
+P27-10 | 时刻可外部覆盖（时间系统拖动条用） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:public static void SetHourOverride\(double hour, bool enable\)
+P27-11 | 日较差由天气决定（晴天与阴天曲线形状不同） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:public static double DailyRangeC\(Weather w\)
+P27-12 | 供暖季按月份自动判定，不再恒真 | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:return month == 11 \|\| month == 12 \|\| month == 1 \|\| month == 2 \|\| month == 3;
+
+# --- P27-D CO2 必须有方向性（只涨不跌 + 断崖换气），不能是正弦 ---
+#
+# 【2026-11-03 修】原来判据匹配的是硬编码时段 `hour >= 7.5`。
+# 后来发现那段硬编码与 TwinClimate 的得热表是两份互相不知情的作息表，
+# 会造成"室温说上课、CO₂ 说没人"的分裂，已改成问 GainAt()。判据随之更新。
+P27-13 | CO2 的占用判定问 TwinClimate 得热表（不另写时段） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:bool occupied = TwinClimate\.GainAt\(hour\) > 0\.35;
+P27-14 | 换气段走指数衰减（断崖，不是对称回落） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:norm = Math\.Exp\(-4\.5 \* u\);
+P27-15 | 爬升段走线性（斜率恒定，CO2 的典型特征） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:norm = cycle / riseSpan;
+P27-16 | 空教室保持低值不爬升 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:norm = 0\.06 \+ 0\.04 \* slow;
+
+# --- P27-E 湿度必须走真实湿空气物理（含湿量 / 饱和含湿量）---
+#
+# 【为什么这条必须这么严】第一版用线性式 `52 - (T-20)*4.5` 算湿度，
+# 实算 7 月（30.5°C）得到 −3%RH（负数），4 月雨天得到 115%RH（超饱和）。
+# 根因：相对湿度不是温度的线性函数，它是「含湿量 ÷ 饱和含湿量」，
+# 而饱和含湿量随温度**指数增长**。所以判据要锁定三件事：
+# ① 有饱和水汽密度公式；② 有凝结上限（不许 >100%）；③ 有蓄湿下限（不许"沙漠"）。
+P27-17 | 湿度由含湿量除以饱和含湿量得出（不是线性式） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:return absMoisture / sat \* 100\.0;
+P27-18 | 饱和含湿量用 Magnus 公式（指数关系，非近似） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:double es = 6\.112 \* Math\.Exp\(17\.67 \* tempC / \(tempC \+ 243\.5\)\);
+P27-18b | 有凝结上限，相对湿度不许超过 100% | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:if \(absMoisture > sat \* 0\.94\) absMoisture = sat \* 0\.94;
+P27-18c | 有建筑蓄湿下限，不算出"沙漠级"干燥 | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:if \(absMoisture < MoistureFloorGm3\) absMoisture = MoistureFloorGm3;
+P27-18d | 产湿与得热共用同一张作息表（三处"有人"判定同源） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:absMoisture \+= 0\.5 \+ 3\.0 \* \(OccupancyGainC\(hour\) - 0\.2\);
+
+# --- P27-F 暖气供水走质调节，且非供暖季不能外推 ---
+#
+# 【踩到的坑】质调节公式 `75+(室外+10)×(−1.2)` 在 7 月（室外 25~34°C）
+# 会算出 22~33°C 的"供水温度"—— 比室温还低。但 7 月锅炉根本没开采暖循环。
+# 修法是分运行状态，不是改公式（公式在供暖温度区间内是对的）。
+P27-19 | 供水温度在供暖季走质调节（室外越冷出水越热） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:supply = 75\.0 \+ \(outdoor \+ 10\.0\) \* \(-1\.2\);
+P27-19b | 非供暖季走生活热水定温，不外推出荒谬值 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:supply = 48\.0;
+P27-20 | 质调节读的是室外温度 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:double outdoor = TwinClimate\.OutdoorNowC\(\);
+
+# --- P27-G 关机设备的所有派生指标都要归零（这是主理人报障的原点）---
+#
+# 【为什么用单一出口】PC 的 Power 原来有三个写入点（SeedOne / ApplyRoomToSeats /
+# OnCommandMessage），每处都只写 Power + OnCount，谁也没写 CPULoad。
+# 修的时候如果只在其中一处补，另外两处照样漏 —— 所以收成 SetPcRunning 一个出口。
+P27-21 | PC 派生指标表存在 | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:private static readonly string\[\] PcDerivedMetrics = \{ "CPULoad" \};
+P27-22 | 开关机统一走 SetPcRunning | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:private void SetPcRunning\(string twinId, bool on, float watt, float units\)
+P27-23 | 关机时派生指标钉死 0 | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:else SetState\(twinId, metric, 0f\);
+P27-24 | 开机时释放 override 回到波形 | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:if \(on\) ClearState\(twinId, metric\);
+P27-25 | 三个写入点全部改走单一出口 | grep+:2:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetPcRunning\(
+# 【判据本身的坑，2026-11-03】原来写的是 grep0 匹配 `^\s*SetState(twinId, "Power", watt);\s*$`，
+# 期望 PC 的 Power 不再被无条件写。但合法的两处正是这个形状：
+#   · 902 行在 SetPcRunning 内部（那台是 PC，只需这一处）
+#   · 738 行在 else 分支里（明确是**非 PC** 才走到）
+# 判据把「正确代码」判成了「未改」。改为正向锁定：Power 写入点必须恰好 2 处，
+# 且 PC 分支必须调 SetPcRunning（不直接写 Power）。
+P27-26 | Power 写入点收成 2 处（SetPcRunning 内部 + 非 PC 的 else 分支） | grep:2:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "Power", watt\);
+P27-26b | PC 分支走 SetPcRunning，不直接写 Power | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:if \(string\.Equals\(type, "PC", StringComparison\.Ordinal\)\)\s*\{\s*\n\s*SetPcRunning\(
+
+# --- P27-H 关机后状态不能还被判成警告（回差会吃掉"关机判正常"）---
+#
+# 【为什么要绕过回差】ApplyDeadband 在 prev==Warning && raw==Normal 时，
+# 按 value < WarnLow + db 强行留住 Warning。关机后 value=0、WarnLow=20、
+# db=4 → 恒成立 → 亮度 0 却被判成「警告」，灯是黄的。
+P27-27 | 运行时才有意义的指标表存在 | grep:1:Assets/_Project/Scripts/Twin/TwinAnchor.cs:private static readonly string\[\] RunningOnlyMetrics = \{ "Brightness", "CPULoad" \};
+P27-28 | 关机判定写在 StatusOf（绕过回差），不在 RawStatusOf | grep:1:Assets/_Project/Scripts/Twin/TwinAnchor.cs:if \(IsRunningOnlyMetric\(metric\) && !IsDeviceRunning\(\)\)
+P27-29 | 运行判定读真实功率阈值 | grep:1:Assets/_Project/Scripts/Twin/TwinAnchor.cs:return power\.Value > PowerOnThreshold;
+
+# --- P27-I 详情页胶囊必须随数据实时变化（两态同一套修法）---
+P27-30 | 全屏详情页胶囊抽成独立方法 | grep:1:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:private void RefreshChip\(\)
+P27-31 | 详情页 10Hz 刷新里会刷胶囊 | grep+:2:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:RefreshChip\(\);
+# 【判据本身的坑，2026-11-03 两次】原来拿注释里那句「状态会随数据变，胶囊必须跟着走」当模式，
+# 而 status.py 的 strip_comments 会剔除注释行 → 必然 0 处。
+# 改成盯代码之后还错了一次：pattern 里写了 `//[^\n]*\n` 想吃掉那行注释，
+# 但注释已被前置剔除，那行根本不存在 → 又 0 处。
+# 最终写法：用 `[\s\S]{0,120}?` 跨越被删掉的注释，只锚定「判空守卫」到「调 RefreshChip」。
+P27-32 | 浮卡侧同样每周期刷胶囊（RefreshValues 判空后即调 RefreshChip） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:private void RefreshValues\(\)\s*\{\s*\n\s*if \(_selected == null\) return;[\s\S]{0,120}?RefreshChip\(\);
+P27-33 | 两态胶囊文字色取自同一来源（不一个 TwinTheme 一个 TwinStatusPalette） | grep0:Assets/_Project/Scripts/UI/TwinDeviceDetailPage.cs:lum < 0\.45f \? TwinTheme\.TextPrimary
+
+# --- P27-J 暖气阀门要有播种（没人操作的执行机构不该自己抖）---
+P27-34 | 暖气播种表存在 | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:private static readonly string\[\] HeatSeedIds
+P27-35 | 阀门播种值 45%（供暖季半开） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(HeatSeedIds\[i\], "ValveOpen", 45f\);
+
+# --- P27-K 编译与工具链 ---
+P27-36 | 生成器引入了 System（新增方法直接用 Math.，未限定） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:^using System;
+P27-37 | 环境量在数据源侧跳过噪声叠加 | grep:1:Assets/_Project/Scripts/Data/MockDataSource.cs:if \(!discrete && !smooth\)
+
+# --- P27-L 空调/供暖的物理一致性（这轮实算又发现两处，追补）---
+#
+# 【为什么加这组】写完自认为"物理模型"了，但**没有实算就交付**。
+# 实际用公式跑一遍全年（12 月 × 4 种天气 × 每 15 分钟）才发现：
+#   · 供暖季室温算出 15.5~16.2°C（教室偏冷 4°C）→ 得热被一起钳掉了
+#   · 7 月湿度算出 −3%RH → 线性式外推越界
+#   · 7 月供水算出 22~33°C → 质调节在非供暖季无意义
+# 这三条都是"看代码觉得对、算出来是错的"。教训：物理模型必须实算。
+P27-38 | 供暖钳制只压天气项，得热在钳制**之后**加 | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:indoors = HeatingTargetC \+ \(indoors - HeatingTargetC\) \* HeatingStiffness;[\s\S]{0,600}?indoors \+= OccupancyGainC\(hour\);
+P27-39 | 得热是平滑插值，不是纯阶跃（否则 12:00 室温瞬跳 0.8°C） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:t = t \* t \* \(3\.0 - 2\.0 \* t\);
+P27-40 | 得热时刻表存在且首尾闭合（24:00 接回 0:00 不断开） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:0\.2, 0\.2, 0\.5, 1\.2, 1\.2, 0\.4, 0\.4, 1\.1, 1\.1, 0\.6, 0\.2, 0\.2
+P27-41 | 得热表对外可查（CO2/湿度/室温三处同源，不各写一份作息） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:public static double GainAt\(double hour\)
+
+# --- P27-M 播种覆盖全类型（这轮又发现烟感从未被压住）---
+#
+# 【怎么发现的】把 catalog 的指标清单（14 种）与 `SeedOne` 的 case 分支逐一对照，
+# 发现 `Alarm` / `Sensor` 两类没有分支。`Smoke` 于是跑通用正弦：
+# 量程 0~100、警告线 20、告警线 40，基线 2.4~17.6，每 45 秒冲一次量程边界
+# → **烟感每隔一分钟左右报一次火警**，而它是只读设备，用户连"关掉它"都做不到。
+P27-42 | 烟感有播种（洁净空气读数接近 0，不许自己抖出火警） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "Smoke", 0f\);
+P27-43 | 传感器分支存在且刻意不压环境量（否则天气系统失效） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:case "Sensor":
+P27-44 | 传感器未被任何 SetState 压住 | grep0:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "Temperature"
+
+# --- P27-N 播种必须真的被调用（不只是 case 分支存在）---
+#
+# 【这轮的教训，比上一条更狠】
+# 我给 `SeedOne` 加了 `case "Alarm"` 并写好了 `SetState(twinId,"Smoke",0f)`，
+# 自以为烟感已经压住。**实际根本没生效** —— 因为 `SeedOne` 只会被三条路径调用：
+#   ① TwinControlScope.All（烟感是只读设备，不在里面）
+#   ② SeedOnlyIds（原来只有教师机一条）
+#   ③ HeatSeedIds（只写 ValveOpen）
+# 于是 `case "Alarm"` 是**死代码**，烟感照旧跑正弦波，
+# 主理人截图里那条「走廊 烟感 浓度 27.27 obs/m 警告」就是它。
+#
+# 结论：**case 分支存在 ≠ 播种生效**。「写了分支」和「谁调这个分支」
+# 是两件事，必须分开验证。判据要锁 ID 在表里，不能只锁 case 存在。
+P27-46 | 烟感点位进了 SeedOnlyIds（真正会被遍历到） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:Corridor1/Alarm/Fire_01
+P27-47 | 烟感播种值 0（洁净空气读数，不是 27 obs/m） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "Smoke", 0f\);
+
+# --- P27-O CPU 负载必须按「开机冲刺→回落」建模，不能套通用正弦 ---
+#
+# 【为什么加】主理人第二张截图：刚点开机，CPU 83.88% 正在擦告警线 85。
+# 通用波形把基线夹在 10~75%，等于"刚开机什么程序都没跑，负载常态 30~60%"，
+# 还每 45 秒冲一次上限。真实台式机空闲是 5~15%。
+P27-48 | CPULoad 有专属物理形态（不落 Default） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:case "CPULoad": return MetricShape.CpuLoad;
+P27-49 | 开机冲刺按指数衰减（不是常驻高负载） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:0\.80 \* Math\.Exp\(-sinceOn / BootTau\);
+P27-50 | 空闲基线 8~14%，不再周期性冲上限 | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:double idle = 0\.11 \+ 0\.03 \* Math\.Sin
+P27-51 | 开机时刻按 twinId 记账（不能用 phase：PhaseOf 含 seq 每帧变） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:BootStart\[twinId\] = t;
+P27-52 | 开机时清掉开机时刻（否则新一次开机看不到启动冲刺） | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:if \(on\) MockSignalGenerator\.ResetBootClock\(twinId\);
+P27-53 | 数据源把 twinId 传进生成器（否则记账 key 全空） | grep:1:Assets/_Project/Scripts/Data/MockDataSource.cs:in cfg, point\.TwinId\);
+
+# --- P27-P SetTemp 阈值放宽到 28（主理人 2026-11-03 裁决）---
+#
+# 【为什么改】26°C 是夏天最常见的空调设定，原来 WarnHigh=26 把它判成越界；
+# 而且回差 db=(26-18)*5%=0.4 → 门槛 25.6，导致"调到 27 再调回 26"会永久卡在警告。
+# 阈值是口径问题，不该靠压低播种值绕过。改为 28 后 db=0.5、门槛 27.5，26 稳落正常。
+P27-54 | SetTemp 的 WarnHigh 已放宽到 28（5 个空调点位；Temperature 本来也有 28，故不能全库计数） | grep:5:Assets/_Project/ScriptableObjects/TwinCatalog_Mock.asset:- Metric: SetTemp[\s\S]{0,300}?WarnHigh: 28
+P27-55 | AC 设定温度播种回到真实的 26°C | grep:1:Assets/_Project/Scripts/Command/MockDeviceAgent.cs:SetState\(twinId, "SetTemp", 26f\);
+
+# --- P27-Q 收工复核：静态状态跨 Play 泄漏 + 湿度下限余量 ---
+#
+# 【为什么要补这两条】
+# ① `BootStart` 存的是「数据源时间轴上的 t」，而 t 每次 Play 都从 0 重来。
+#    上一轮记的 start 会让这一轮算出负的 elapsed → clamp 成 0 → 判"刚刚开机"。
+#    与 `s_muted` / `s_overrides` 是同一类坑，必须放在同一个清理入口。
+# ② 湿度下限 5.5 g/m³ 让 11 月晴天最干时刻到 30.09%RH，而 WarnLow=30
+#    —— 余量只剩 0.09。将来天气变干或阈值收紧，会立刻表现成"传感器故障"。
+#    改成 6.5 后余量 5.2%RH，物理含义仍成立（约 37%RH@20°C）。
+P27-56 | 开机时刻表在进 Play 时被清空（与 s_muted/s_overrides 同一入口） | grep:1:Assets/_Project/Scripts/Data/MockDataSource.cs:MockSignalGenerator\.ResetAllBootClocks\(\);
+P27-57 | 清空方法确实清 BootStart | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:public static void ResetAllBootClocks\(\)
+P27-58 | 湿度蓄湿下限取 6.5（不是贴阈值的 5.5） | grep:1:Assets/_Project/Scripts/Data/TwinClimate.cs:MoistureFloorGm3 = 6\.5;
+P27-59 | 旧的 5.5 已不存在（防止两处并存） | grep0:Assets/_Project/Scripts/Data/TwinClimate.cs:MoistureFloorGm3 = 5\.5;
+
+# --- P27-R 施工卫生：文档注释不能被代码插入打断 ---
+#
+# 【为什么加】上一轮把 `ResetBootClock` 插在 `IsSmooth` 的 <summary> 前面，
+# 结果 `IsSmooth` 的 `<summary>` 开标签被吃掉，留下一串悬空的 `///` + `</summary>`。
+# 这类残损**不影响编译**，所以编译器不会报 —— 只会让 XML 文档错位，
+# 而本项目大量依赖注释讲"为什么"，注释结构坏了等于把最贵的东西弄坏了。
+#
+# ⚠️ 这条判据我写错了两版，都记下来：
+#   第一版：拿注释里的句子当模式 → `strip_comments` 把注释整行删掉 → 必然 0 处。
+#   第二版：断言 `</summary>` 紧邻 `IsSmooth` → 同样在注释里，被删掉 → 还是 0 处。
+# 根因不是正则写坏了，是**判据只看得到代码、看不到注释**。
+# 所以断言改成可验证的结构事实：`IsSmooth` 前面紧邻一个 `}`（上一个成员的收尾）。
+# 若上一轮那种"插入把注释切断"再发生，中间会夹进别的成员声明/悬空括号，这条立刻变红。
+P27-60 | IsSmooth 前紧邻成员收尾括号（说明上一段注释与代码都完整） | grep:1:Assets/_Project/Scripts/Data/MockSignalGenerator.cs:\}[\s]*public static bool IsSmooth
+
+# --- P27-S 踩坑沉淀必须落盘（防止"改了代码没记教训"）---
+#
+# 【为什么加】这一轮 12 个坑全部是「编译通过、逻辑自洽、看起来正常」的类型，
+# 唯一能把它们留下的东西就是文档。判据锁死"文档存在且包含关键锚点"，
+# 防止哪天被误删或被批量替换清空。
+P27-61 | P27 踩坑日志已落盘 | has:Docs/P27_数据真实性_踩坑日志.md
+P27-62 | 踩坑日志覆盖 G1（case 分支存在≠播种生效） | grep:1:Docs/P27_数据真实性_踩坑日志.md:case` 分支存在 ≠ 播种生效
+P27-63 | 踩坑日志覆盖 G2（钳制顺序） | grep:1:Docs/P27_数据真实性_踩坑日志.md:钳制类操作的顺序
+P27-64 | 踩坑日志覆盖 G3（百分比量不能线性外推） | grep:1:Docs/P27_数据真实性_踩坑日志.md:相对湿度\*\*不是温度的线性函数\*\*
+P27-65 | 踩坑日志覆盖 G9（记账 key 用身份不用数值） | grep:1:Docs/P27_数据真实性_踩坑日志.md:^### 坑 11：记账 key
+# ⚠️ 锚点必须选**标题行**，不能选正文句子 —— 见 P27-70 的说明。
+#    正文句子会在「总览表 / 小节标题 / 教训引用」三处各出现一次，`grep:1` 必然漂移。
+P27-66 | 踩坑日志覆盖 G11（改代码弄坏注释编译器不报） | grep:1:Docs/P27_数据真实性_踩坑日志.md:^### 坑 9：.*编译器不报
+P27-67 | 踩坑日志覆盖 G12（判据只看得到代码） | grep:1:Docs/P27_数据真实性_踩坑日志.md:^### 判据只看得到代码，看不到注释
+P27-68 | 交接基线 §1.6 已登记 G 类 | grep:1:Docs/P00_项目总览_交接基线.md:### G\. 数据真实性类
+P27-69 | 交接基线版本记录已登记 v1.21 | grep:1:Docs/P00_项目总览_交接基线.md:^\| 2026-11-03 \| v1\.21 \|
+
+# --- P27-T 判据自身的锚点选择（本项目第 6、7 次踩"判据"这一类）---
+#
+# 【为什么单列】上面 P27-66/67 第一次运行时都报"未过"，但我打开日志一看：
+# G11、G12 两节写得完整无误。红的是判据，不是文档。
+#
+#   P27-66  `编译器不报`        → 3 处（总览表 D 行 / 小节标题 / 正文加粗各一次）
+#   P27-67  `判据只看得到代码…` → 2 处（引用块 / 小节标题各一次）
+#   P27-69  `/| 2026-11-03 …`   → 470 处（前导斜杠写错，`\|` 成了字面竖线）
+#
+# 三个都不是"文档缺内容"，而是**锚点选在了会重复出现的位置**。
+# 这和 G12 是同一个根因的两个面：
+#    G12 面：判据读不到**注释**里的文本（被 strip_comments 删掉）
+#    P27-T 面：判据读到**太多**同一句话（正文/表格/标题重复）
+#
+# 结论：**锚点必须选"文档结构里天然唯一"的位置** —— 标题行 `^### 坑 N：`（带行首锚），
+# 而不是正文句子。这条已作为 P27-70 入判据，防止后来者再挑正文句子当锚点。
+P27-70 | 锚点判据不得以正文句子为模式（只允许标题行/行首锚） | grep0:Tools/status_checks.txt:^P2[0-9]-6[579] \| [^|]*\| grep:[0-9]+:[^|]*\.md:[^#^/]
