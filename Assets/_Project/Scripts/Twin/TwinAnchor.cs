@@ -51,6 +51,41 @@ namespace SchoolTwin.Twin
         private static readonly HashSet<string> s_unconfiguredWarned =
             new HashSet<string>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// 「**仅在设备运行时才有意义**」的指标 —— 设备一旦关机，它们的读数不代表任何物理事实。
+        ///
+        /// ── 为什么需要这张表（主理人 2026-11-03：「其他用电设备好像全部是这样的」）──
+        /// 现象：灯关掉之后，状态胶囊从「正常」变成黄色「警告」。
+        /// 根因不是数据错、也不是阈值错，而是**同一个指标在两种设备状态下有两种语义**：
+        ///
+        ///   · 灯亮着、亮度 8%   → 太暗，灯具老化/需要维护  → 该报警（WarnLow = 20 就是为它设的）
+        ///   · 灯关着、亮度 0%   → 这是"关灯"这个动作的结果  → **不该报警**
+        ///
+        /// 纯阈值判定（`RawStatusOf`）只看数值，看不到设备状态，于是两种情况被一视同仁：
+        /// `0 < WarnLow(20)` 恒成立 → 每盏关掉的灯都是「警告」。
+        /// 关 16 盏灯就会给告警列表灌进 16 条假警，值班的人再也看不见真的那条。
+        ///
+        /// ── 为什么不改阈值（WarnLow 20 → 0）────────────────────────────
+        /// 那等于把「亮度太低要维护」这条业务规则删掉 —— 灯亮着却只有 5%
+        /// 这种真的该修的状态就再也报不出来了。阈值是对的，缺的是"此刻适不适用"。
+        ///
+        /// ── 判据为什么是"设备关机"，不是"值为 0"──────────────────────
+        /// 值为 0 也可能是一次坏采样。而"设备关机"是一个**已知的人为状态**，
+        /// 由主开关指标（`Power ≤ 0.5`）直接表达，不靠猜。
+        ///
+        /// ⚠️ 只收「开机才有、关机无意义」的指标。下面这些**不要**放进来：
+        ///   · `SetTemp`（空调设定温度）—— 关机后仍是用户设的值，26°C 依然成立
+        ///   · `LampHours`（投影灯泡累计时长）—— 累计量，关机也保留
+        ///   · `Volume`（铃音量）—— 设定量，与响不响无关
+        /// </summary>
+        private static readonly string[] RunningOnlyMetrics = { "Brightness", "CPULoad" };
+
+        /// <summary>主开关指标名。用电设备都用它表达"通没通电"。</summary>
+        private const string PowerMetric = "Power";
+
+        /// <summary>"开"的下限。与面板（`TwinControlRow.StateText`）判"已开/已关"同一口径。</summary>
+        private const float PowerOnThreshold = 0.5f;
+
         private TwinCatalog _catalog;
         private GameObject _resolvedTarget;
         private float _lastSampleRealtime = -1f;
@@ -244,6 +279,85 @@ namespace SchoolTwin.Twin
             return _values.TryGetValue(metric, out value);
         }
 
+        // ---------------------------------------------------------------- 单位归一化
+
+        /// <summary>
+        /// 把本点位的某个指标读成**瓦特（W）**。
+        ///
+        /// ── 为什么这里必须存在（2026-11-02 · D5 答辩致命）───────────────
+        /// catalog 里 Power 的单位**不统一**：39 个点位声明 `Unit = W`，
+        /// 5 台空调声明 `Unit = kW`（量程 0~3.5，开机值 1.2）。
+        /// 数据层忠实地按各自单位写入 —— 空调写的是 `1.2`（kW），灯写的是 `42`（W）。
+        ///
+        /// 而 `TwinPowerEstimate.LivePowerOf` 把读到的数**一律当 W** 直接相加：
+        /// 5 台空调一共只贡献 `1.2 × 5 = 6 W`，占全楼 0.08%。
+        /// 这就是「空调占比 0.08%」「总功率只有 7.3 kW」的全部原因 ——
+        /// 不是数据错，是**读的人不知道单位**。
+        ///
+        /// ── 为什么放在 TwinAnchor，不放在 UI 层 ─────────────────────────
+        /// ① catalog 已经在这里了（`Start()` 里 `_catalog = runtime.Catalog`），
+        ///    换算只差一次 `FindMetric`，不产生任何新依赖；
+        /// ② 单位是**点位自己的属性**，和"这个值代表多少物理量"是同一件事。
+        ///    让 UI 层去查 catalog 换算，等于每个页面都要重复一次"我知道它是什么单位"，
+        ///    迟早有一处忘掉 —— 那正是当前这个 bug 的成因。
+        /// ③ **不在 `OnSample` 写入时换算**：`_values` 存的是数据源的原始值，
+        ///    是数据链路的真相。改了它，详情页显示的"1.2"会变成"1200"，
+        ///    而它的单位列还写着 kW —— 把一处错误换成另一处错误。
+        ///    换算只发生在**消费方要计算/比较**的时候。
+        ///
+        /// ── 为什么按 Unit 字符串判、而不是 if (category == "AC") ─────────
+        /// 硬编码类别是"用一个特例补另一个特例"：下次加一台以 kW 计量的
+        /// 电锅炉 / 充电桩，又得回来加一个 case，而忘了加不会报错。
+        /// 按 `Unit` 判，只依赖**数据源自己声明的物理事实**：
+        /// 以后任何点位只要写 kW，自动就是对的。
+        ///
+        /// ── 没有 Unit 声明的点位（旧资产 / 手动塞的点）────────────────
+        /// 一律当成 W。这是**唯一安全的默认值**：项目里 39/44 是 W，
+        /// 猜 W 最多错 5 个（已经由 catalog 覆盖），猜 kW 会错 39 个。
+        /// </summary>
+        /// <param name="metric">指标名，如 "Power"。</param>
+        /// <param name="watt">读到的瓦特值；没有该指标或已断电归零时返回 false。</param>
+        public bool TryGetWatt(string metric, out float watt)
+        {
+            watt = 0f;
+
+            TwinValue raw;
+            if (!_values.TryGetValue(metric, out raw)) return false;
+
+            watt = raw.Value * WattScaleOf(metric);
+            return true;
+        }
+
+        /// <summary>
+        /// 该指标「原始值 → 瓦特」的乘数。1 = 本来就是 W，1000 = 声明的是 kW。
+        ///
+        /// 【为什么单独暴露】除 `TryGetWatt` 外，还有两处需要它：
+        ///   · `TwinPowerEstimate.HasPowerReading` 要判断"读到的非零"，
+        ///     但它比的是**原始值**，不能拿换算后的比较（否则 0.005 kW 的
+        ///     待机功耗会被 ×1000 放大成 5W，明明几乎不耗电却判成"在耗电"）；
+        ///   · 调试/自检工具要打印"原始值 / 换算后"，两列必须能被同一个函数解释。
+        /// </summary>
+        public float WattScaleOf(string metric)
+        {
+            TwinMetricDefinition def = FindMetricDefinition(metric);
+            if (def == null) return 1f;                 // 没声明 → 按 W
+
+            string unit = def.Unit;
+            if (string.IsNullOrEmpty(unit)) return 1f;
+
+            // 用 Trim + 忽略大小写：资产里可能写 "kW" / "KW" / " kW"，
+            // 这些语义完全一样，没必要让一个空格决定 1000 倍的误差。
+            unit = unit.Trim();
+            if (string.Equals(unit, "kW", StringComparison.OrdinalIgnoreCase)) return 1000f;
+            if (string.Equals(unit, "MW", StringComparison.OrdinalIgnoreCase)) return 1000000f;
+
+            // W / kWh / 其它 → 不换算。
+            // ⚠️ 注意 `kWh` 是**电量**不是**功率**，绝不能乘 1000。
+            // 目前只有 2 个点位用 h/kWh 类单位，且都不是 Power 指标；
+            // 万一将来有人把电量塞进 Power，这里是最后一个能拦住的地方。
+            return 1f;
+        }
+
         /// <summary>取“最差”的一个指标状态，用于整机着色。</summary>
         public TwinStatus StatusOfWorst()
         {
@@ -306,6 +420,22 @@ namespace SchoolTwin.Twin
 
         private TwinStatus StatusOf(string metric, TwinValue value)
         {
+            // ── 【P27】设备关机 → 运行期指标不参与判定，且**绕过回差** ─────────
+            //
+            // 为什么必须在这里、而不是放在 `RawStatusOf` 里：
+            // `RawStatusOf` 的返回值还要过一遍 `ApplyDeadband`，而回差的本意是
+            // 「变好要等值真的离开阈值一段距离」—— 它按 `value < WarnLow + db` 强行留住 Warning。
+            // 关机时亮度恒为 0，`0 < 20 + 4` 永远成立 → 放进去会被改回 Warning，
+            // 等于白改。而这里压根不是"变好"，是"这个指标此刻不适用"，没有回差可言。
+            //
+            // 顺带把 `_metricStatus` 记成 Normal：这样设备重新开机、数值恢复时，
+            // 回差的参照点也是干净的，不会因为"关机前是 Warning"而卡在警告里。
+            if (IsRunningOnlyMetric(metric) && !IsDeviceRunning())
+            {
+                _metricStatus[metric] = TwinStatus.Normal;
+                return TwinStatus.Normal;
+            }
+
             TwinStatus raw = RawStatusOf(metric, value);
 
             TwinStatus prev;
@@ -368,6 +498,10 @@ namespace SchoolTwin.Twin
             if (value.Quality == DataQuality.Bad) return TwinStatus.Warning;
             if (value.Quality == DataQuality.Uncertain) return TwinStatus.Warning;
 
+            // ⚠️ 「关机时运行期指标不报警」的判定**不在这里**，在 `StatusOf` 里，
+            //    因为它必须绕过回差。两处都写会变成两个出口 —— 本项目已经为此
+            //    踩过三次（P10 右栏形态、P11 空态显隐、P11-b 建块与填内容分离）。
+
             TwinMetricDefinition def = FindMetricDefinition(metric);
             if (def != null)
             {
@@ -401,6 +535,40 @@ namespace SchoolTwin.Twin
             Debug.LogWarning("[Twin] 点位 " + _twinId + " 的指标 " + metric +
                              " 未在点位目录中配置阈值，状态显示为「未知」（灰）。" +
                              "请在 TwinCatalog 里补上该指标的阈值。");
+        }
+
+        /// <summary>这个指标是不是「只在设备运行时才有意义」。见 RunningOnlyMetrics。</summary>
+        private static bool IsRunningOnlyMetric(string metric)
+        {
+            if (string.IsNullOrEmpty(metric)) return false;
+            for (int i = 0; i < RunningOnlyMetrics.Length; i++)
+            {
+                if (string.Equals(RunningOnlyMetrics[i], metric, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 这台设备此刻**在运行**吗。
+        ///
+        /// 判据只有一个：主开关指标 `Power > 0.5`。和面板的「已开 / 已关」
+        /// （`TwinControlRow.StateText`）、卡片、三维表现层是同一个口径 ——
+        /// 这个项目已经因为"同一件事多处判定"出过三次事故（P10 的教训），
+        /// 所以不新造判据，直接读那个已经存在的值。
+        ///
+        /// ── 没有 `Power` 指标的点位怎么办 ────────────────────────────────
+        /// 返回 false（视为"没在运行"）。但只有 `RunningOnlyMetrics` 里的指标会问到这里，
+        /// 而这两个指标目前只出现在有 `Power` 的设备（灯 / PC）身上 ——
+        /// 环境传感器没有 Power，它也不会有 Brightness。
+        ///
+        /// ⚠️ 以后若给某类设备加一个没有 Power 的"运行期指标"，必须同时给它一个
+        ///    开关指标并在下面补判据，否则那个指标会永远不报警（静默失效）。
+        /// </summary>
+        private bool IsDeviceRunning()
+        {
+            TwinValue power;
+            if (!_values.TryGetValue(PowerMetric, out power)) return false;
+            return power.Value > PowerOnThreshold;
         }
 
         private TwinMetricDefinition FindMetricDefinition(string metric)

@@ -76,12 +76,22 @@ namespace SchoolTwin.Data
         /// 这一轮开局就一个字节都不发，场景里表现为"这几个点位永远没数据"，
         /// 而 Console 干干净净 —— 排查方向会被引到数据源/点位上，而不是这里。
         /// 顺手把 override 也清了（它原来只在手动菜单里清，同一个坑）。
+        ///
+        /// 【P27 追加】开机时刻表（`MockSignalGenerator.BootStart`）是同一类东西：
+        /// 它记的是数据源时间轴上的 t，而 t 每次 Play 都从 0 重来。
+        /// 登录点一并挪到 `MockSignalGenerator.ResetAllBootClocks()`。
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStaticsOnLoad()
         {
             s_muted.Clear();
             s_overrides.Clear();
+
+            // 【P27】开机时刻表也要清 —— 它存的是「数据源时间轴上的 t」，
+            // 而 t 每进一次 Play 就从 0 重来。上一轮记的 start 会让这一轮算出负的
+            // elapsed，被 clamp 成 0 → 判成"刚刚开机" → CPU 从 80% 起跳。
+            // 与上面两张表同属「静态状态跨 Play 泄漏」，放在同一处清，不要分散。
+            MockSignalGenerator.ResetAllBootClocks();
         }
 
         public override string SourceName { get { return "Mock"; } }
@@ -184,6 +194,18 @@ namespace SchoolTwin.Data
                         // 就不再是"开"或"关"，而是一个谁都不认识的小数。
                         bool discrete = MockSignalGenerator.IsDiscrete(metric);
 
+                        // 【P27】环境量（室温 / 暖气出水 / CO2 / 湿度）也不能加噪声。
+                        //
+                        // 它们由 `MockSignalGenerator` 内部的专用模型生成（滑动极慢、
+                        // 或带方向性），本身已经是平滑曲线。再叠 `±span×3%` 就等于
+                        // 给一个时间常数几十分钟的物理量画了一张示波器图：
+                        // 温度 span=30 → ±0.9°C 的逐样本抖动，10Hz 下满屏毛刺。
+                        //
+                        // 判据与波形模型同在 `MockSignalGenerator` 里（`IsSmooth`），
+                        // **不在这里另写一份 if** —— 否则会出现
+                        // "波形换成慢的那套了，噪声还是快的那套"。本项目为此踩过三次。
+                        bool smooth = MockSignalGenerator.IsSmooth(metric);
+
                         // 平时在正常区间内波动，偶发短暂越界。
                         // 与 MqttLoopbackPublisher 共用 MockSignalGenerator，
                         // 保证「换数据源」时画面表现一致（P1 架构承诺的延伸）。
@@ -194,8 +216,8 @@ namespace SchoolTwin.Data
                             ExcursionSeconds = _excursionSeconds,
                             ExcursionDepth = _excursionDepth
                         };
-                        float value = MockSignalGenerator.Next(metric, t, PhaseOf(i, k, seq), in cfg);
-                        if (!discrete)
+                        float value = MockSignalGenerator.Next(metric, t, PhaseOf(i, k, seq), in cfg, point.TwinId);
+                        if (!discrete && !smooth)
                             value += (float)((rng.NextDouble() - 0.5) * 2.0) * span * _noiseRatio;
 
                         float overridden;

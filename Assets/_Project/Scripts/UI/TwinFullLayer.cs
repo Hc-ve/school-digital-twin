@@ -73,6 +73,12 @@ namespace SchoolTwin.UI
         private readonly Text[] _alarmId = new Text[3];
         private readonly Text[] _alarmDesc = new Text[3];
         private readonly Text[] _alarmTag = new Text[3];
+        /// <summary>
+        /// 告警条编号的可用宽度（px）。由 <see cref="BuildRightRail"/> 按卡宽算出，
+        /// 供 <see cref="RefreshAlarmRail"/> 的 `FitTextKeepTail` 使用 —— 两处不能各写一个数，
+        /// 否则改卡宽时只改一处，编号就会重新压到告警等级上。
+        /// </summary>
+        private float _alarmIdWidth = 106f;
         private Text _alarmTitle;
         /// <summary>3 条之外的余量提示（P1-2：标题写 5、列表只 3 条，必须给"还有 N 条"）。</summary>
         private Text _moreAlarm;
@@ -372,6 +378,23 @@ namespace SchoolTwin.UI
                 TwinUIFactory.Place(id.rectTransform, 12f, 10f, ColW - 60f, 16f);
                 _alarmId[i] = id;
 
+                // 【2026-11-03 文案变长后加保底截断】编号从 `1F104 电脑` 变成
+                // `1F104 机房电脑001` 之后，告警卡这一行到了**刀锋边缘**：
+                //
+                //   卡宽 ColW = 168，id 起点 12、宽 108 → 文字框右缘 120
+                //   但右边 tag（告警等级）框从 112 起，右对齐、「数据陈旧」4 字 @9 = 36px，
+                //   实际占 120..156 —— 所以 id 的**真正可用宽是 108px**。
+                //   而 70 台里最长的 `2F201 CO₂传感器001` @11 实测约 107.8px。
+                //
+                // 差 0.2px 就是 0。Legacy Text 是 Overflow 模式：超出不换行、
+                // 不省略，直接画到 tag 上 —— 表现是「告警」两个字被编号压住。
+                // 所以这里不靠"刚好放得下"，套 `FitText`（中英文分别计宽）。
+                // 106 = 108 让 2px 余量，给字体度量误差留空间。
+                //
+                // ⚠️ 不要改成 `TwinUIFactory.Truncate`：它按 `fontSize×0.62` 一律估宽，
+                //    中文会被少算 38%，等于没截 —— 详见 `TwinUIFactory.FitText` 的注释。
+                _alarmIdWidth = ColW - 60f - 2f;
+
                 Text desc = TwinUIFactory.Label(card.rectTransform, "Desc", TwinTheme.FsMicro,
                     TextAnchor.UpperLeft, TwinTheme.TextMuted);
                 TwinUIFactory.Place(desc.rectTransform, 12f, 28f, ColW - 24f, 14f);
@@ -574,10 +597,13 @@ namespace SchoolTwin.UI
 
             // 【P5】统计页进**满宽态**：右栏让位，中栏 600 + 右栏 200 合并成 800。
             // 其余四页保持原布局（负责人裁决：只允许统计页动）。
-            // 切走时这里会把它打开，恢复原样。
-            if (_asideGroup != null && _asideGroup.gameObject.activeSelf == (index == 4))
-                _asideGroup.gameObject.SetActive(index != 4);
-            // 空状态组保留但不再使用：五页都有真实内容了（P29-6 收口时接的电力/告警/统计）
+            //
+            // 【P10】**这里不再自己切 `_asideGroup`**。
+            // 原来写的是 `_asideGroup.SetActive(index != 4)` —— 它只认"是不是统计页"，
+            // 不认"设备管理页是否正在看详情"。于是从设备详情切走再切回来，
+            // 辅栏被无条件打开，和设备详情组**同时显示**、两层内容叠在 200px 右栏里。
+            // 现在三组的可见性统一由 `ApplySystemAside()` 裁决（唯一出口），
+            // 它在 `RefreshSystem()` 开头就会跑，这里只负责把 Tab 状态设好。
             if (_emptyGroup != null) _emptyGroup.gameObject.SetActive(false);
 
             _nextRefresh = 0f;   // 切页立刻刷一次，不等下一个 0.5s
@@ -916,24 +942,45 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
         }
 
         /// <summary>
-        /// 点设备行 → **只选中**（右栏从告警切到设备详情）。
+        /// 点设备行 → 选中该设备，并**进入设备详情页**（全屏满宽态）。
         ///
-        /// 为什么**不调** TwinDetailPanel.FocusOn：
-        ///   ① 它内部会让 FreeCameraController 飞过去，但当前相机控制权在 TwinThirdPersonCamera 手里，
-        ///      第三人称每帧覆盖相机位姿 —— 飞了也看不见（主理人 play 实测"无反应"）；
-        ///   ② 它会把窄态那张 470 浮卡叫出来，而全屏 L2 的中间是**数据态、整块不透明**，
-        ///      既没有 3D 可看、也不需要浮卡（详情归右栏）。
-        /// 窄态下的相机聚焦是另一条独立的事（需要给第三人称加"看向/走近"接口），不在本页范围。
+        /// ── 【2026-11-03 P11 改：不再切右栏】────────────────────────────
+        /// 原来点行只做 `TwinPicker.Select()`，右栏从「筛选」切到「设备详情」——
+        /// 而那个详情只有 4 行纯文字（位置/类型/指标数/更新），
+        /// 窄态点行走的是 `TwinDrawer.OpenDeviceDetail` → 一张 440 宽的完整详情页
+        /// （量程条 + 阈值带 + 60s 趋势线 + 告警列表）。
+        /// 主理人截图指出：「设备详情全屏和窄屏展示效果还不一样啊」——
+        /// 一句话点破：同一个功能、两套东西，信息量差一大截。
+        ///
+        /// ── 现在：两态走**同一张详情页** ────────────────────────────────
+        /// 全屏点行 → `OpenDeviceDetail` → 详情页 Push 到页栈 → 全屏层让位（Hide），
+        /// 详情页自己按 `TwinDrawer.IsFullScreen == true` 用满宽 968 排版，
+        /// 与窄态 440 同一份代码、同一套信息（量程条 / 阈值带 / 趋势线 / 告警），
+        /// 只有宽度和趋势线高度不同。
+        ///
+        /// 同时**保留** `TwinPicker.Select()`：右栏列表的行高亮、以及从详情页返回后
+        /// 「刚才看的是哪一台」都靠它。
+        ///
+        /// ── 为什么不再调 TwinDetailPanel.FocusOn ────────────────────────
+        ///   ① 它内部让 FreeCameraController 飞过去，但相机控制权在第三人称手里，
+        ///      每帧被覆盖 —— 飞了也看不见（主理人 play 实测"无反应"）；
+        ///   ② 它会把窄态那张 470 浮卡叫出来，而详情页已经是整页了，浮卡会叠在上面。
         /// </summary>
         private void OnDeviceRowClicked(int index)
         {
             if (index < 0 || index >= _devBuf.Count) return;
 
-            SchoolTwin.Interaction.TwinPicker.Select(_devBuf[index]);
+            TwinAnchor anchor = _devBuf[index];
+            if (anchor == null) return;
 
-            // 立刻刷一次，右栏不用等 0.5s 节流
+            SchoolTwin.Interaction.TwinPicker.Select(anchor);
+
+            // 立刻刷一次：从详情页返回时，行高亮不会停在上一台
             _nextRefresh = 0f;
             Refresh(true);
+
+            // 进详情页（页栈 Push）。这一步会让全屏层 Hide —— 见 ApplyFullMode。
+            TwinDrawer.OpenDeviceDetail(anchor);
         }
 
         /// <summary>点筛选 chip → 切换楼层过滤，并立即刷新列表。</summary>
@@ -1010,8 +1057,14 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
             SetGroupActive(_homeGroup, home);       // L1 左栏：KPI / 入口 / 动态
             SetGroupActive(_railGroup, !home);      // L2 左轨：5 Tab
 
-            // 【P5】统计页满宽态：右栏让位给画布。其余四页照常显示。
-            SetGroupActive(_asideGroup, !home && _tab != 4);     // L2 辅栏：筛选 / 小结 / 追溯
+            // ⚠️ 右栏三组（辅栏 / 告警条 / 设备详情）**不在这里切**，
+            // 统一交给下面的 `ApplySystemAside()`（System 态）与
+            // `RefreshHome()`（Home 态）。原来这两行在这里各写一遍：
+            //     SetGroupActive(_asideGroup,  !home && _tab != 4);
+            //     SetGroupActive(_alarmGroup,  false);
+            //     SetGroupActive(_detailGroup, false);
+            // 结果是"同一个判定有两个出口"—— 上面那行管统计页让位，
+            // 下面 P10 那段又管详情位，两处打架，点行时详情组被这边关掉。
 
             // 主栏五组互斥：数据监测 / 设备管理 / 电力管理 / 告警中心 / 数据统计
             SetGroupActive(_monitorGroup, !home && _tab == 0);
@@ -1028,12 +1081,36 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
             // 走的入口是 `Show(Mode.System)` —— 不在这里补一句就会漏。
             if (!home && _tab == 4) ResetStatsSpark();
 
-            // L1 右栏两态（告警 / 设备详情）交给 RefreshHome 裁决 ——
-            // 它才知道有没有选中设备；在这里硬切会和它打架。
-            if (!home)
+            // ══════════════════════════════════════════════════════════════
+            // 【2026-11-03 P10 修·设备管理页点行无反应】
+            //
+            // ── 症状（主理人 play 实测）─────────────────────────────────
+            // 全屏 → 设备管理 → 点任意一行，**什么都看不出来**：
+            // 行不点亮、右栏不变、没有任何反馈。主理人判为"死按钮"。
+            //
+            // ── 两个根因（不是一个）────────────────────────────────────
+            // ① 右栏形态判定**有两个出口**：这里无条件 `_detailGroup=false`，
+            //    而 `RefreshSystem` 根本不碰这三组 → System 态下详情组永远关着。
+            // ② 即使把 ① 修好，判定读的是 `TwinDetailPanel.SelectedAnchor`，
+            //    它比 `TwinPicker.Selected` **晚一帧**同步；点行是同帧刷新，
+            //    读到的是旧值 → 右栏仍不动。详见 `ApplySystemAside` 的注释。
+            //
+            // ── 现在怎么判 ──────────────────────────────────────────────
+            // 抽成 `ApplySystemAside()` 统一裁决，`Show` 与 `RefreshSystem` 共用；
+            // 里面只读 `TwinPicker.Selected`（和行高亮同源同帧）。
+            //
+            // 【这里这行其实是冗余的】下面 `Refresh(true)` → `RefreshSystem()`
+            // 开头就会调同一个方法。之所以留着，是当"进/切页时右栏必须当场是对的"
+            // 这条不变量 —— 万一以后有人在 `Refresh` 里加了早退（比如节流提前 return），
+            // 右栏不会残留上一页的形态。幂等调用，代价为 0。
+            // ══════════════════════════════════════════════════════════════
+            if (!home) ApplySystemAside();
+            else
             {
-                SetGroupActive(_alarmGroup, false);
-                SetGroupActive(_detailGroup, false);
+                // Home 态：辅栏是 L2 专属（筛选 / 台账小结 / 全链路追溯），必须关掉。
+                // 告警条 / 详情组两组交给紧随其后的 `Refresh(true)` → `RefreshHome()` 裁决，
+                // 这里不碰 —— 碰了就又变成"两个出口"。
+                SetGroupActive(_asideGroup, false);
             }
 
             Refresh(true);
@@ -1090,12 +1167,114 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
             else RefreshSystem();
         }
 
+        /// <summary>
+        /// System 模式下右栏该显示什么 —— **唯一出口**。
+        ///
+        /// 【为什么要抽出来】`Show(Mode.System)` 与 `RefreshSystem()` 两条路径都要决定
+        /// 右栏形态：前者是"进/切页"，后者是"点击行后的 0.5s 刷新"。
+        /// 两处各写一遍必然分叉 —— 2026-11-03 的"点行无反应"就是分叉的后果：
+        /// `Show` 里硬关详情组，而 `Refresh` 走 `RefreshSystem` 时**根本不碰**这两组，
+        /// 于是选中的变化永远表达不出来。
+        ///
+        /// ── 右栏两态（System 下）──────────────────────────────────────
+        /// | 页 | 右栏内容 | 判据 |
+        /// |---|---|---|
+        /// | 数据统计 `_tab==4` | 让位给画布（满宽） | 恒关 |
+        /// | 其余四页 | 辅栏（筛选 / 小结 / 追溯） | 恒关详情组 |
+        ///
+        /// 告警条（`_alarmGroup`）只在 Home 右栏出现，System 下恒关。
+        ///
+        /// ── 【2026-11-03 P11 又砍一刀：System 里不再有"右栏设备详情"】────────
+        /// P10 修好"点行有反应"之后，设备管理页的右栏会在选中时切到
+        /// `_detailGroup` —— 但那只是 4 行纯文字（位置/类型/指标数/数据更新，宽 168），
+        /// 跟窄态点行给了张完整详情页（量程条 + 阈值带 + 趋势线 + 告警）差着一大截。
+        /// 主理人截图原话：「设备详情全屏和窄屏展示效果还不一样啊」。
+        ///
+        /// P11 的解法是**让全屏点行也进那一页整页详情**（`TwinDrawer.OpenDeviceDetail`），
+        /// 于是 `_detailGroup` 在 System 下**再没有出场机会** —— 它描述的每一个字段，
+        /// 详情页里都有，而且更全。留着它只会在"从详情页返回"时冒出来，
+        /// 变成一个比详情页简陋十倍的第二形态。
+        ///
+        /// ⚠️ 注意 `_detailGroup` **没有删**：L1（Home）右栏还在用它 ——
+        /// 3D 里点中一台设备时右栏显示摘要，那是另一条链路，与页栈无关。
+        /// 这里只是把 System 态的入口关掉。
+        ///
+        /// ── 【2026-11-03 P10 第二刀·选中来源必须读 TwinPicker】─────────────
+        /// 第一版这里读的是 `TwinDetailPanel.Instance.SelectedAnchor`，**这是错的**：
+        /// 那个属性背后是 `_selected`，而 `_selected` 是在 `TwinDetailPanel.Update()`
+        /// 里从 `TwinPicker.Selected` 抄过来的 —— **晚一帧**。
+        ///
+        /// 而点行的调用链是**同帧同步**的：
+        ///     Button.onClick → OnDeviceRowClicked → TwinPicker.Select() → Refresh(true)
+        /// 于是 `Refresh(true)` 里读到的还是点击前的旧值（null），右栏原地不动；
+        /// 真正切换要等 `TwinDrawer.Update` 的 0.5s 节流刷新 —— 用户看到的就是
+        /// 「点了没反应」（0.5s 后才悄悄变，且行高亮 Δ18 肉眼看不出）。
+        ///
+        /// ⚠️ 这个坑本文件**已经踩过一次**：`RefreshDevicePage` 的 C-31 注释写的
+        /// 就是「选中态直接读 TwinPicker.Selected，不要读 TwinDetailPanel.SelectedAnchor」。
+        /// 同一个面板两处判定，一处改了一处没改 —— 所以这里统一成同一口径，
+        /// 两个方法以后要么一起改，要么都用 `TwinPicker.Selected`。
+        ///
+        /// 【P11 后这里不再读选中，但口径仍然保留】行高亮 (`RefreshDevicePage`)
+        /// 与 L1 的 `RefreshHome` 都还读 `TwinPicker.Selected`，
+        /// 三处必须继续同源 —— 只是右栏形态不再参与选中判定。
+        /// </summary>
+        private void ApplySystemAside()
+        {
+            // 统计页满宽 → 右栏整块让位；其余页常驻辅栏。
+            //
+            // 【为什么不再看 `sel`】见上：System 里详情走整页，右栏没有第三态了。
+            // 少一个判定就少一处"两态不同步"——这正是 P10 那次事故的成因。
+            bool statsPage = _tab == 4;
+
+            SetGroupActive(_alarmGroup, false);
+            SetGroupActive(_detailGroup, false);
+            SetGroupActive(_asideGroup, !statsPage);
+        }
+
+        /// <summary>
+        /// Esc 在 L2 里的一层：**先退"设备详情"这一块，再退页 / 收抽屉**。
+        ///
+        /// 【为什么必须有】详情块上挂着一行「Esc 返回」（`BuildDetailRail` 里的 `DBack`），
+        /// 没有这个入口那句话就是假的 —— 按 Esc 会直接把整个抽屉收掉，
+        /// 比"返回辅栏"退得还狠，用户下次还得重新开抽屉、重新点设备管理。
+        ///
+        /// 由 `TwinDrawer.OnEscape` 在退页栈之前调用，返回 true = 已消费。
+        ///
+        /// ── 【P11 判据改了：看"那句话在不在屏幕上"，而不是看模式】────────
+        /// 原来写的是 `if (_mode != Mode.System) return false;` —— 它假设
+        /// "System 态一定有详情块"，而 P11 之后 System 态的详情块**永远不显示了**
+        /// （设备详情改成整页，见 `ApplySystemAside`）。
+        ///
+        /// 继续按模式判的后果：全屏设备管理里点了行、按 Esc，
+        /// 内部把选中清掉了、返回 true，但**屏幕上什么都不会变**
+        /// —— 正是主理人最反感的那种"按了没反应"。
+        ///
+        /// 所以判据换成"详情块当前是不是真的可见"。这样它**自我维护**：
+        /// 哪天右栏详情被删掉或被别的形态取代，这里自动失效，不需要再改一次。
+        /// </summary>
+        public bool HandleEscape()
+        {
+            // 屏幕上没有「Esc 返回」这句话，就不该把 Esc 吃掉
+            if (_detailGroup == null || !_detailGroup.gameObject.activeSelf) return false;
+            if (SchoolTwin.Interaction.TwinPicker.Selected == null) return false;
+
+            // 清选中 → 右栏回辅栏。清完必须立刻刷，否则要等 0.5s 节流。
+            SchoolTwin.Interaction.TwinPicker.Select(null);
+            _nextRefresh = 0f;
+            Refresh(true);
+            return true;
+        }
+
         private void RefreshHome()
         {
             // 【规格 §5.1】右栏两态：有选中设备 → 设备详情；无选中 → 告警列表 + 设备类型。
             // 左栏（KPI / 入口 / 动态）不参与切换，始终显示。
-            TwinDetailPanel panel = TwinDetailPanel.Instance;
-            TwinAnchor sel = panel != null ? panel.SelectedAnchor : null;
+            //
+            // 【P10】选中来源统一读 `TwinPicker.Selected`，**不读
+            // `TwinDetailPanel.SelectedAnchor`**（它晚一帧）——
+            // 和 `ApplySystemAside`、`RefreshDevicePage` 三处同源。
+            TwinAnchor sel = SchoolTwin.Interaction.TwinPicker.Selected;
             bool showDetail = sel != null;
 
             if (_alarmGroup != null && _alarmGroup.gameObject.activeSelf == showDetail)
@@ -1168,7 +1347,8 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
 
                 Color c = TwinStatusPalette.Of(r.PeakStatus);
                 if (_alarmBar[n] != null) _alarmBar[n].color = c;
-                SetText(_alarmId[n], TwinCode.WithType(r.TwinId));
+                SetText(_alarmId[n], TwinUIFactory.FitTextKeepTail(TwinCode.WithType(r.TwinId),
+                                                                   TwinTheme.FsCaption, _alarmIdWidth, 3));
                 SetText(_alarmDesc[n], TwinStatusPalette.Label(r.PeakStatus) + " · 已持续 " +
                                         TwinAlarmHistory.FormatDuration(r.Duration(now)));
                 if (_alarmTag[n] != null)
@@ -1338,6 +1518,13 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
 
         private void RefreshSystem()
         {
+            // 右栏形态先裁决（详情 / 辅栏 / 让位），再刷主栏五页。
+            //
+            // 【顺序为什么是"先右后主"】`ApplySystemAside` 会让辅栏与详情组
+            // 互相让位，而这两组里可能有本帧要写的文本。先摆好可见性，
+            // 再刷内容，就不会出现"写进了隐藏的组"（那样下次显示时是旧值）。
+            ApplySystemAside();
+
             // 五页各自刷新，互不牵连。空页（统计数据不足）由各页自己处理空状态。
             switch (_tab)
             {
@@ -1481,11 +1668,22 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
                 Color c = TwinStatusPalette.Of(s);
 
                 // 选中行高亮：点一行后右栏切详情，列表这边要让人看出选的是哪条
+                //
+                // 【2026-11-03 P10 补强】原来只有一层 `AccentDim` 填充（Accent @0.035，
+                // 亮度差 Δ18）—— 在深色行底上几乎是看不见的，主理人截图里那行
+                // 看不出任何变化，等于"高亮没做"。现在加到三层，逐层递进：
+                //   ① 底：AccentDim（Δ18，给"面"的轻重）
+                //   ② 边：StrokeAccent（1px Accent@0.55）—— 行边界从"无"变成"有"
+                //   ③ 字：编号转 TextPrimary、右侧「详情 ›」转 Accent
+                // ②③ 是这套 UI 里既有的选中语言（Tab / 筛选 chip 都这么写），
+                // 不引入新 token，也不靠调 alpha 硬凑 —— 8bit 表达不出来。
                 bool sel = selected != null && ReferenceEquals(selected, a);
                 if (_devRowBg[i] != null)
                 {
-                    Color fill = sel ? TwinTheme.AccentDim : Color.clear;
-                    _devRowBg[i].SetFill(fill, fill);
+                    _devRowBg[i].SetFill(sel ? TwinTheme.AccentDim : Color.clear,
+                                         sel ? TwinTheme.AccentDim : Color.clear);
+                    _devRowBg[i].SetBorder(sel ? TwinTheme.AccentLine : TwinTheme.Border,
+                                           TwinTheme.StrokeHair.Width);
                 }
 
                 if (_devBar[i] != null) _devBar[i].color = c;
@@ -1496,6 +1694,10 @@ TwinRoundedRect chip = TwinUIFactory.Rounded(_asideGroup, "FChip_" + i, TwinThem
                 SetText(_devTag[i], TwinStatusPalette.Label(s));
                 if (_devTag[i] != null) _devTag[i].color = c;
                 SetText(_devSwitch[i], "详情 ›");
+                // 未选中行把「详情 ›」压成次级色：满屏 11 行都是主色链接，视觉上像
+                // "一排按钮"，反而看不出哪行是当前选中的。选中才给 Accent。
+                if (_devSwitch[i] != null)
+                    _devSwitch[i].color = sel ? TwinTheme.Accent : TwinTheme.TextMuted;
             }
 
             // 【C-31】Content 高度 = 实际行数 × 行距。ScrollRect 靠它算可滚范围，

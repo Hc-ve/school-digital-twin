@@ -290,6 +290,115 @@ namespace SchoolTwin.UI
             return text.Substring(0, limit - 1) + "…";
         }
 
+        /// <summary>
+        /// 按像素宽度截断，**中英文分别计宽**，超出的用「…」收尾。
+        ///
+        /// ── 为什么不能直接用上面的 <see cref="Truncate"/> ──────────────────
+        /// 它按 `fontSize × 0.62` 一律估算每个字符。那个系数是给英文/数字的：
+        /// 中文是方块字，实际宽度≈整个字号，用 0.62 估等于**少算 38%**。
+        /// 结果就是"以为塞得下、实际溢出" —— Legacy Text 是 Overflow 模式，
+        /// 不会换行也不会省略，直接画到右边那一列上去。
+        ///
+        /// 本项目的设备编号（`2F201 CO₂传感器001`）中文占比很高，
+        /// 用 0.62 估会把它算成 12 字宽，实际是 8 字宽 + 6 个半宽字符。
+        ///
+        /// ── 为什么提到这里 ────────────────────────────────────────────────
+        /// `TwinPointListPanel` 与 `TwinAlarmHistoryPanel` 各抄了一份同逻辑的
+        /// `FitText`（并各自带一份 `IsWideChar`）。三份实现迟早会分叉 ——
+        /// 改了一处忘另一处，就会出现"这个列表截得刚好、那个列表溢出"。
+        /// 按项目约定（同 `TwinCode` 的编号、`LivePowerOf` 的功率）：
+        /// **同一件事只能有一个出口**。那两份保留是由于各自还带着行高/列宽上下文，
+        /// 但**新代码一律用这一个**，不要再抄第四份。
+        /// </summary>
+        public static string FitText(string text, int fontSize, float maxWidth)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            if (maxWidth <= 1f) return "";
+
+            float fs = Mathf.Max(1, fontSize);
+            float w = 0f;
+            for (int i = 0; i < text.Length; i++)
+            {
+                float cw = IsWideChar(text[i]) ? fs : fs * 0.55f;
+                if (w + cw > maxWidth)
+                {
+                    if (i <= 0) return "";
+                    return text.Substring(0, i) + "…";
+                }
+                w += cw;
+            }
+            return text;
+        }
+
+        /// <summary>中日韩统一表意文字 + 全角标点的起始区段（近似判据，够用）。</summary>
+        public static bool IsWideChar(char c)
+        {
+            return c >= 0x2E80;
+        }
+
+        /// <summary>
+        /// 按像素宽度截断，但**保留尾部 N 个字符不被截掉**，省略号打在中间。
+        /// `2F201 CO₂传感器001` → `2F201 CO₂传…001`
+        ///
+        /// ── 为什么设备编号不能简单从尾部截 ────────────────────────────
+        /// 编号的唯一性**全部落在尾部序号上**（`001` / `012`）。
+        /// `FitText` 从尾部截会得到 `2F201 CO₂传感…` —— 三台传感器全变成同一个字符串，
+        /// 等于把 P7「70 台设备唯一指认」的成果当场抹掉。省下 8px 换掉唯一性，不值。
+        ///
+        /// ── 为什么省略号打中间而不是开头 ──────────────────────────────
+        /// 开头是房间号（`2F201`），它回答"在哪"；中间的类型是修饰语，最可压缩。
+        /// 所以压缩顺序是：类型名 → 省略号 → 序号，房间号与序号都不动。
+        ///
+        /// 放不下时返回空串（调用方原样显示会溢出，宁可空也不能压着别的控件）。
+        /// </summary>
+        public static string FitTextKeepTail(string text, int fontSize, float maxWidth, int keepTail)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            if (maxWidth <= 1f) return "";
+
+            // 够宽就原样返回，别做无谓的改写
+            float need = TextWidth(text, fontSize);
+            if (need <= maxWidth) return text;
+
+            if (keepTail < 0) keepTail = 0;
+            if (keepTail > text.Length) keepTail = text.Length;
+
+            string tail = text.Substring(text.Length - keepTail);
+            string head = text.Substring(0, text.Length - keepTail);
+
+            float fs = Mathf.Max(1, fontSize);
+            float tailW = TextWidth(tail, fontSize);
+            float ellW = fs;        // 「…」按一个全角宽算，偏保守
+
+            // 从头往后吃，能放几个字就放几个
+            float budget = maxWidth - tailW - ellW;
+            if (budget <= 0f) return tail.Length > 0 && tailW <= maxWidth ? tail : "";
+
+            float w = 0f;
+            int cut = 0;
+            for (int i = 0; i < head.Length; i++)
+            {
+                float cw = IsWideChar(head[i]) ? fs : fs * 0.55f;
+                if (w + cw > budget) break;
+                w += cw;
+                cut++;
+            }
+            if (cut <= 0) return "…" + tail;
+
+            return head.Substring(0, cut) + "…" + tail;
+        }
+
+        /// <summary>按 <see cref="FitText"/> 同一套字宽规则估字符串像素宽。</summary>
+        public static float TextWidth(string text, int fontSize)
+        {
+            if (string.IsNullOrEmpty(text)) return 0f;
+            float fs = Mathf.Max(1, fontSize);
+            float w = 0f;
+            for (int i = 0; i < text.Length; i++)
+                w += IsWideChar(text[i]) ? fs : fs * 0.55f;
+            return w;
+        }
+
         // ================================================================ 画布缩放策略
 
         /// <summary>

@@ -179,7 +179,14 @@ namespace SchoolTwin.Twin
             switch (category)
             {
                 case "Light":
-                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 120f);
+                    // 【D5 同批 · Kind 修正】原来写 `Bool`，但 `Brightness` 是 0~100 的浮点，
+                    // `Power` 更是 0~120 的连续瓦数。`Bool` 的语义是"只有 0/1 两态"，
+                    // 用在功率上是纯粹的类型错标。
+                    //
+                    // 目前无人读 `Kind`（全项目 grep 确认），所以这不是在修一个正在发作的
+                    // bug，而是拆一颗地雷：将来谁按 `Kind == Bool` 去渲染"开/关"两态开关，
+                    // 就会把 68W 的读数画成一个二值指示灯。
+                    AddProperty(m, "Power", "Power", TwinPropertyKind.Float, "W", 0f, 120f);
                     // 开灯 → 功率 42W（量程 0~120，警告线 110）；关灯 → 0W（警告线是 0，不误报）
                     AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 25f, 70f, 0f, 0.6f);
                     m.Events.Add("LampFail");
@@ -187,7 +194,10 @@ namespace SchoolTwin.Twin
 
                 case "AC":
                     AddProperty(m, "SetTemp", "SetTemp", TwinPropertyKind.Float, "°C", 16f, 30f);
-                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "kW", 0f, 3.5f);
+                    // 【D5 同批 · Kind 修正】同 Light：0~3.5 的连续 kW 读数不是开关量。
+                    // 而且这个 `Unit = kW` 正是 D5 那个 1000 倍错误的源头标注 ——
+                    // 标注本身是对的（空调确实以 kW 计量），错的是读的人没换算。
+                    AddProperty(m, "Power", "Power", TwinPropertyKind.Float, "kW", 0f, 3.5f);
                     // 开空调 → 1.2kW；关 → 0kW
                     AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 0.5f, 2.2f, 0f, 0.06f);
                     AddAction(m, "SetTemperature", false, "SetTemp", 16f, 30f, 1f, 0f, 0f, 0f, 0f);
@@ -203,25 +213,72 @@ namespace SchoolTwin.Twin
                     break;
 
                 case "PC":
-                    // 【2026-10-22 量程修正：0~300W → 0~3000W】
-                    // 0~300W 是**单台**电脑的量程，可这个点位的语义是「**整间**机房的电脑」——
-                    // 计算机教室有 10 台 Computer06，满负荷 10×300 = 3000W。
+                    // ══════════════════════════════════════════════════════════════
+                    // 【D6 · 2026-11-02 核实结论】这里的量程分**两种语义**，必须分开
+                    // ══════════════════════════════════════════════════════════════
                     //
-                    // 用单台量程去卡整间总功耗，两种表现都是错的：
-                    //   · 按真实总功耗算 → 1800W 直接顶穿 300W 上限，永远报警；
-                    //   · 按单台功耗算   → 永远「健康」，量程形同虚设（这就是改动前的状态）。
-                    // 而且 MockSignalGenerator 的基线是**从阈值派生**的，
-                    // 阈值区间不对，模拟出来的波形也就不对 —— 那条「292W 告警」其实是假告警。
-                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 3000f);
+                    // 台账 D6 原写：「catalog 主流是 `Max: 300`（单台），这里声明
+                    // `0~3000`，两者任一为真另一个就错」。核实结果：**两个都对，
+                    // 错的是这里只写了整间那一套，没管单台点位**。
+                    //
+                    // catalog 实测（`TwinCatalog_Mock.asset`，21 个 PC 点位）：
+                    //   · `ClassComputer/PC/Room_01`   Max 3600  —— **整间**聚合点
+                    //   · `ClassComputer/PC/Master_01` Max 300   —— 单台
+                    //   · `Seat_01..18`                Max 300   —— 单台 ×18
+                    //   · `ClassTeachers/PC/Room_01`   Max 300   —— 单台（那间只有 1 台）
+                    // 即 20 个是单台 300，只有 1 个是整间 3600。**主流是 300。**
+                    //
+                    // ── 为什么不能一律写成 300，也不能一律写 3000 ──────────────
+                    // 一律 300：`Room_01` 满编 18×180=3240 直接顶穿，永远告警。
+                    // 一律 3000：18 个 Seat 的告警线变成 2900 —— 单台电脑永远"健康"，
+                    //            量程形同虚设，而 MockSignalGenerator 的基线从阈值派生，
+                    //            波形也会跟着跑偏（2026-10-22 那条假告警就是这个病）。
+                    //
+                    // 所以改成**按点位自己的 catalog 量程**生成：
+                    // `For()` 本来就收到了 `twinId` 参数，只是从来没读它。
+                    // 这里把量程从"类型常量"换成"这个点位的数据源声明"——
+                    // 与 `TwinAnchor.WattScaleOf` 同一个思路：**只信数据源自己说的**。
+                    //
+                    // ── 为什么回读区间也要跟着变（这是真 bug，不是注释问题）─────
+                    // 原来 `ExpectOn` 写死 800~2200（整间 10 台的语义）。
+                    // 而 `MockDeviceAgent.ApplyState` 对 **每个 Seat** 都写 180W。
+                    // 于是「联动开机」下发的 18 条命令，每一条回读都会比：
+                    //     实际 180W  ∈ [800, 2200]?  → false
+                    // 全部判 `Mismatch`（"设备状态与期望不一致"），18 条全 Failed。
+                    // 命令明明执行了、屏幕也亮了，日志却全是失败 —— 答辩现场最难解释的那种。
+                    // 现在 `ExpectOn` 由同一份量程推出：单台 300 → 期望 150~300；
+                    // 整间 3600 → 期望 800~3240（放宽到满编附近，容"确实只开了几台"）。
+                    {
+                        float pcMax = MetricMaxOf(twinId, "Power", 300f);
 
-                    // 【为什么加 OnCount】房间级点位最容易回答的问题不是「耗多少瓦」，
-                    // 而是「开了几台」。10 台 × 180W 的功耗数字看不出「有 2 台没开」。
-                    AddProperty(m, "OnCount", "OnCount", TwinPropertyKind.Int, "台", 0f, 30f);
+                        // 整间 vs 单台的判定用**量程**，不用 TwinId 前缀：
+                        // 以后再多一间机房、或多一台单机，不用回来加 case。
+                        // 阈值 600 取在单台 300 与整间 3600 之间，两侧都有 2 倍余量。
+                        bool wholeRoom = pcMax > 600f;
 
-                    // 开 = 10 台 × 180W = 1800W；关 = 0W。
-                    // 回读区间放到 800~2200：机房不一定满编 10 台，
-                    // 卡太死会让「确实开了 6 台」被判成「执行了但状态没变」。
-                    AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 800f, 2200f, 0f, 1f);
+                        AddProperty(m, "Power", "Power", TwinPropertyKind.Float, "W", 0f, pcMax);
+
+                        // 【为什么加 OnCount】房间级点位最容易回答的问题不是「耗多少瓦」，
+                        // 而是「开了几台」。10 台 × 180W 的功耗数字看不出「有 2 台没开」。
+                        //
+                        // 【D6 同批】原来这里写死 `0~30`，对单台机是错的（"开机 1 台 / 上限 30 台"），
+                        // 整间机房的 catalog 又声明的是 `0~18`（18 个座位），30 也对不上。
+                        // 现在同样从 catalog 读，读不到才退回：
+                        //  · 整间 → 用 `pcMax/180` 粗估（3600/180=20，与实际 18 台同量级）
+                        //  · 单台 → 1
+                        float onCountMax = MetricMaxOf(twinId, "OnCount",
+                                              wholeRoom ? Mathf.Max(1f, Mathf.FloorToInt(pcMax / 180f)) : 1f);
+                        AddProperty(m, "OnCount", "OnCount", TwinPropertyKind.Int, "台", 0f, onCountMax);
+
+                        // 回读区间按量程推：
+                        //  · 单台（300）：开 = 180W → 期望 150~300（留出不同机型差异）
+                        //  · 整间（3600）：开 = 台数×180 → 期望 800~3240
+                        //    下限 800 保留原来的宽松度（"确实只开了 6 台"不该判失败）
+                        float onMin = wholeRoom ? 800f : pcMax * 0.5f;
+                        float onMax = wholeRoom ? pcMax * 0.9f : pcMax;
+
+                        AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, onMin, onMax, 0f, 1f);
+                    }
                     break;
 
                 case "Door":
@@ -235,7 +292,7 @@ namespace SchoolTwin.Twin
                     // 为什么带 `LampHours`：投影仪和灯、空调不一样，它有一个**只会往上走**的
                     // 计数（灯泡寿命）。这是它最该被孪生体盯住的量 —— 比"开没开"更有价值。
                     // 也让"开机"这件事在卡片上有第二处能看出反应（小时数在涨）。
-                    AddProperty(m, "Power", "Power", TwinPropertyKind.Bool, "W", 0f, 400f);
+                    AddProperty(m, "Power", "Power", TwinPropertyKind.Float, "W", 0f, 400f);
                     AddProperty(m, "LampHours", "LampHours", TwinPropertyKind.Int, "h", 0f, 10000f);
                     // 开机 → 约 310W（含风扇与信号板）；关机 → 0W（待机功耗太小，按 0 算）
                     AddAction(m, "SetPower", true, "Power", 0f, 1f, 1f, 150f, 400f, 0f, 5f);
@@ -390,6 +447,36 @@ namespace SchoolTwin.Twin
                 max = value + def.ExpectTolerance;
             }
             return true;
+        }
+
+        /// <summary>
+        /// 取该点位在 catalog 里声明的指标量程上限；取不到就退回给定的类型默认值。
+        ///
+        /// ── 为什么需要它（D6）──────────────────────────────────────────────
+        /// `For()` 一直收到 `twinId`，但从来没用过它 —— 所有量程都按 `Category`
+        /// 一拍脑袋定死。于是同一个 `PC` 类型下，"整间机房 3600W" 和
+        /// "单台电脑 300W" 被迫共用一个数：写 3000 单台永远不告警，写 300 整间永远告警。
+        ///
+        /// 量程是**这个点位的属性**，就写在 catalog 里，直接读它即可 ——
+        /// 和 `TwinAnchor.WattScaleOf` 是同一个思路：**只信数据源自己声明的**。
+        ///
+        /// ── 为什么要 `runtime == null` 兜底 ────────────────────────────────
+        /// 编辑器态（未进 Play）调 `For()` 时 `TwinRuntime.Instance` 还没有，
+        /// 这时必须退回类型默认值，不能抛异常也不能返回 0 —— 返回 0 会让
+        /// 量程变成 0~0，所有读数都判告警。
+        /// </summary>
+        private static float MetricMaxOf(string twinId, string metric, float fallback)
+        {
+            if (string.IsNullOrEmpty(twinId) || string.IsNullOrEmpty(metric)) return fallback;
+
+            TwinRuntime runtime = TwinRuntime.Instance;
+            TwinCatalog catalog = runtime != null ? runtime.Catalog : null;
+            TwinPointDefinition point = catalog != null ? catalog.Find(twinId) : null;
+            TwinMetricDefinition def = point != null ? point.FindMetric(metric) : null;
+
+            // 量程必须为正：catalog 里写 0 或负数是配置错误，退回默认值更安全
+            if (def == null || def.Max <= 0f) return fallback;
+            return def.Max;
         }
 
         private static void AddProperty(TwinDeviceModel m, string name, string metric,

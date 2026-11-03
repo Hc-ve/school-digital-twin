@@ -813,15 +813,44 @@ namespace SchoolTwin.UI
             page.Bind(anchor);
 
             // 已经在栈顶就只换绑定，不重复入栈（连点同一台设备时会走到这里）
-            if (_instance._stack.Top == page) return;
+            //
+            // 【P11】但**必须**补一次 ApplyFullMode：连点另一台设备时，
+            // 页栈没变、栈顶还是详情页，可"当前是哪台"变了 —— 若不做任何事，
+            // 详情页会停在上一台（因为 Bind 里只在 `_built` 时刷新，
+            // 而 OnShow 才是重排入口）。这里让它重新 OnShow 一次。
+            if (_instance._stack.Top == page)
+            {
+                page.OnShow();
+                _instance.ApplyFullMode();
+                return;
+            }
+
             _instance._stack.Push(page);
+
+            // 【P11 关键一步】Push 之后立刻重算"谁占屏"。
+            //
+            // 原来没有这句：全屏态下详情页被 Push 进 `_content`，而 `_content`
+            // 在全屏是关着的 → 详情页虽然激活了，但父节点不可见 → 用户看不到，
+            // 观感还是"点了没反应"。`.Push` 本身只改页栈，不知道全屏层的存在。
+            //
+            // 放在 Push 之后、并在里面处理"全屏层让位 + 打开 _content"，
+            // 两态（窄态 Push / 全屏 Push）从此走同一个收口。
+            _instance.ApplyFullMode();
         }
 
         /// <summary>【P3-B】返回上一页。详情页左上角的返回按钮调它。</summary>
         public static void PopPage()
         {
             if (_instance == null) return;
-            if (_instance._stack.Depth > 1) _instance._stack.Pop();
+            if (_instance._stack.Depth > 1)
+            {
+                _instance._stack.Pop();
+
+                // 【P11】Pop 同样要重算"谁占屏"：从详情页返回「设备管理」时，
+                // 全屏层必须重新出场把 200/600/200 三栏铺回来。
+                // 少了这句，返回后画面会停在一张空的内容区上（全屏层是关着的）。
+                _instance.ApplyFullMode();
+            }
         }
 
         private static string ModuleName(string key)
@@ -941,7 +970,20 @@ namespace SchoolTwin.UI
             // 窄态 = 用面板，保持禁走。
             TwinUIState.FullScreen = _maximized;
 
-            if (_maximized)
+            // 【2026-11-03 P11】栈顶是「设备详情页」时，全屏层必须让位。
+            //
+            // ── 为什么需要这个判断 ──────────────────────────────────
+            // 全屏只显示 `_fullLayer`（它自己一套骨架），`_content` 是关的；
+            // 而详情页挂在 `_content` 里 → Push 了也看不见，等于"点了没反应"。
+            // 反过来，如果只是把 `_content` 打开而不关全屏层，两套字会叠在一起。
+            //
+            // ── 为什么不干脆让详情页也进全屏层 ──────────────────────
+            // 那就又变成"两套实现"—— 窄态一份、全屏一份，正是主理人这次报的问题。
+            // 现在详情页只有一份，靠 `IsFullScreen` 自己切换宽度；
+            // 全屏层退场，让这一页占满 1000×720。
+            bool detailOnTop = IsDetailOnTop();
+
+            if (_maximized && !detailOnTop)
             {
                 TwinFullLayer.Mode mode = (_stack != null && _stack.Top != null
                                            && !(_stack.Top is TwinHomePage))
@@ -953,12 +995,33 @@ namespace SchoolTwin.UI
             }
             else
             {
+                // 【P11】详情页占屏时**必须把 `_fullIsHome` 清掉**，不能留着上一个值。
+                //
+                // 它有两个下游读者，留着旧值两处都会错：
+                //   ① `ApplyMaximizedLayout` 的 `hole = _maximized && _fullIsHome` ——
+                //      若从 L1（Home）进来，hole 为真 → 面板底填透明、4 块 backdrop 亮起，
+                //      中间 3D 会从详情页左右各 16 的缝里透出来，看着像"底没做实"。
+                //   ② `TwinDrawer.IsFullScreenHome` —— 小地图靠它决定是否显示。
+                //      详情页是数据态，小地图浮上去会压住量程条。
+                //
+                // 详情页是"数据态"，语义上等于 L2，所以这里一律按 L2 处理（solid）。
+                _fullIsHome = false;
                 _fullLayer.Hide();
             }
 
-            // 窄态内容与全屏层互斥：同时开着会两套字叠在一起
-            if (_content != null && _content.gameObject.activeSelf == _maximized)
-                _content.gameObject.SetActive(!_maximized);
+            // 【全屏层与内容区互斥改成三态】
+            //   全屏 + 无详情 → 只开全屏层（关 _content）
+            //   全屏 + 有详情 → 只开 _content（关全屏层），详情页铺满
+            //   窄态         → 只开 _content
+            bool wantContent = !_maximized || detailOnTop;
+            if (_content != null && _content.gameObject.activeSelf != wantContent)
+                _content.gameObject.SetActive(wantContent);
+        }
+
+        /// <summary>栈顶是不是「设备详情页」—— 它决定全屏下由谁占屏。</summary>
+        private bool IsDetailOnTop()
+        {
+            return _stack != null && _stack.Top is TwinDeviceDetailPage;
         }
 
         public void Close()
@@ -1000,7 +1063,13 @@ namespace SchoolTwin.UI
         private void OnBackClicked()
         {
             if (_stack == null) return;
-            if (_stack.Depth > 1) _stack.Pop();
+            if (_stack.Depth > 1)
+            {
+                _stack.Pop();
+                // 【P11】与 `PopPage()` 同一个收口：返回后要重新决定谁占屏，
+                // 否则从全屏详情页返回会停在一张空内容区上。
+                ApplyFullMode();
+            }
             else Close();
         }
 
@@ -1050,10 +1119,32 @@ namespace SchoolTwin.UI
         {
             if (!_open) return false;
 
+            // 【P10 → P11 改】全屏 L2 里先退「设备详情」这一层，再退页 / 收抽屉。
+            //
+            // ── 为什么这一句现在几乎不会命中 ────────────────────────────
+            // P10 时"设备详情"是右栏的一个**组**（`_detailGroup`），不进页栈，
+            // 所以需要一个额外的 Esc 出口把它退掉，否则「Esc 返回」那行是假文案。
+            //
+            // P11 之后详情变成了页栈里的**真实一页**。详情页占屏时全屏层被 `Hide()`
+            // （`_mode` 置 `None`、`gameObject` 关掉），而 `HandleEscape()` 现在的判据是
+            // 「`_detailGroup` 可不可见」—— 全屏层关着，那个判定必然 false。
+            //
+            // 所以这一句**保留但不再是主路径**：它现在只在一种情况下兜底 ——
+            // 详情组还亮着、而页栈已经回到列表（比如以后又有人在右栏挂回详情预览）。
+            // 真正的"退详情"由下面 `_stack.Pop()` 承担，与窄态完全一致。
+            if (_fullLayer != null && _fullLayer.HandleEscape()) return true;
+
             // 先退一层页；已经在首页就收抽屉
             if (_stack != null && _stack.Depth > 1)
             {
                 _stack.Pop();
+
+                // 【P11 必须补】Pop 之后重算"谁占屏"。
+                //
+                // 少了这句，从全屏详情页 Esc 返回时：详情页出栈、全屏层还关着 →
+                // 画面停在一张空的内容区上（三栏没了、页也没了）。
+                // 和 `PopPage()` 里那句是同一个理由，两条出口都要收口。
+                ApplyFullMode();
                 return true;
             }
 
@@ -1339,8 +1430,14 @@ namespace SchoolTwin.UI
             // 只要某处又把 _content 激活了（切页 / Push / 恢复），下一帧就会被重新关掉。
             // 上一版只在 ApplyFullMode 里切一次，一旦有第二条路径激活它，
             // 就会出现"窄态 440 页面 + 全屏三栏"叠在一起（见微 P0-3 / P1-2 的橙色段就是这么来的）。
-            if (_content != null && _content.gameObject.activeSelf == _maximized)
-                _content.gameObject.SetActive(!_maximized);
+            //
+            // 【P11 补】例外：全屏 + 栈顶是详情页时，`_content` **本来就该开着** ——
+            // 那一刻全屏层已经让位（`ApplyFullMode` 三态里的第二态），画面由详情页独占。
+            // 不排掉这个例外，这里的 `SetActive(!_maximized)` 会在下一帧把详情页连父节点一起关掉，
+            // 表现就是"全屏点行 → 一闪 → 又回到三栏"。
+            bool contentExpected = !_maximized || IsDetailOnTop();
+            if (_content.gameObject.activeSelf != contentExpected)
+                _content.gameObject.SetActive(contentExpected);
 
             // 全屏态内容交给 FullLayer 的三栏，窄态内容已隐藏 —— 所以全屏时头部**通栏**（pad=0），
             // 不能再按"内容居中"去内缩，否则标题会缩到中间、和左右栏对不齐。

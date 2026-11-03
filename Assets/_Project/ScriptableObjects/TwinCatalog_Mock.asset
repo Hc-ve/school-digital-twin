@@ -120,7 +120,7 @@ MonoBehaviour:
       Min: 16
       Max: 30
       WarnLow: 18
-      WarnHigh: 26
+      WarnHigh: 28
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
@@ -242,7 +242,7 @@ MonoBehaviour:
       Min: 16
       Max: 30
       WarnLow: 18
-      WarnHigh: 26
+      WarnHigh: 28
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
@@ -374,7 +374,7 @@ MonoBehaviour:
       Min: 16
       Max: 30
       WarnLow: 18
-      WarnHigh: 26
+      WarnHigh: 28
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
@@ -473,7 +473,7 @@ MonoBehaviour:
       Min: 16
       Max: 30
       WarnLow: 18
-      WarnHigh: 26
+      WarnHigh: 28
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05
@@ -889,7 +889,7 @@ MonoBehaviour:
       Min: 16
       Max: 30
       WarnLow: 18
-      WarnHigh: 26
+      WarnHigh: 28
       AlarmLow: 16
       AlarmHigh: 30
       Epsilon: 0.05

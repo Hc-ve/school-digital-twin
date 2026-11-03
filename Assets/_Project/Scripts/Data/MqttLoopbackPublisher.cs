@@ -243,7 +243,7 @@ namespace SchoolTwin.Data
                         TwinMetricDefinition metric = point.Metrics[k];
                         if (metric == null || string.IsNullOrEmpty(metric.Metric)) continue;
 
-                        float value = MakeValue(metric, t, i, k);
+                        float value = MakeValue(metric, t, i, k, point.TwinId);
                         string topic = _topicPrefix + point.TwinId + "/" + metric.Metric;
                         string payload = MakePayload(value, tsUnix, metric.Metric);
 
@@ -292,7 +292,8 @@ namespace SchoolTwin.Data
         /// 具体算法见 MockSignalGenerator：MockDataSource 与这里共用同一实现，
         /// 保证「换数据源」时画面表现一致。
         /// </summary>
-        private float MakeValue(TwinMetricDefinition metric, double t, int pointIndex, int metricIndex)
+        private float MakeValue(TwinMetricDefinition metric, double t, int pointIndex, int metricIndex,
+                                string twinId)
         {
             MockSignalGenerator.Config cfg = new MockSignalGenerator.Config
             {
@@ -304,7 +305,10 @@ namespace SchoolTwin.Data
 
             // 每个点位/指标错开相位，避免所有曲线同步
             double ph = pointIndex * 1.7 + metricIndex * 2.9;
-            return MockSignalGenerator.Next(metric, t, ph, in cfg);
+
+            // 传 twinId：`CPULoad` 要按机器记账"这台开了多久"。
+            // 与 MockDataSource 走同一个生成器，保证「换数据源」时表现一致。
+            return MockSignalGenerator.Next(metric, t, ph, in cfg, twinId);
         }
 
         /// <summary>

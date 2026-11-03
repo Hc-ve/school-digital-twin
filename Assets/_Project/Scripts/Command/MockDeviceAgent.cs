@@ -171,6 +171,14 @@ namespace SchoolTwin.Command
             for (int i = 0; i < SeedOnlyIds.Length; i++)
                 SeedOne(SeedOnlyIds[i], ref seeded, ref unresolved);
 
+            // 【P27】暖气 9 台：有锚点、有数据、但不控不播 —— 阀门开度一直在 0~100% 抖。
+            // 见 HeatSeedIds 的说明。这里只写状态，不进白名单（界面上仍然不给按钮）。
+            for (int i = 0; i < HeatSeedIds.Length; i++)
+            {
+                SetState(HeatSeedIds[i], "ValveOpen", 45f);
+                seeded++;
+            }
+
             // 【P3】机房座位（Seat_XX）：**不在硬编码白名单里，必须单独补一轮**。
             //
             // 不补的后果（2026-11-01 实测）：Seat 没有初始状态 → 走正弦波 →
@@ -207,6 +215,54 @@ namespace SchoolTwin.Command
             // 留在这里会被 Seed 两次 —— 值一样所以无害，但日志里的数字会骗人。
             // 只留教师办公室那台：它是 `Computer03`，模型没有屏幕，永远不给按钮。
             "ClassTeachers/PC/Room_01",
+
+            // 【P27 补】【我上次漏掉的一条链路】
+            //
+            // 上次给 `SeedOne` 加了 `case "Alarm"`，以为烟感就压住了。
+            // 实际根本没有被调用 —— 因为 `SeedOne` 只会被三条路径调：
+            //   ① `TwinControlScope.All`（烟感不在，它只读无按钮）
+            //   ② `SeedOnlyIds`（原来是空的，只有教师机一条）
+            //   ③ `HeatSeedIds`（只写 ValveOpen，不碰 Smoke）
+            //
+            // 于是 `case "Alarm"` 是**死代码**，烟感照旧跑正弦波，
+            // 主理人截图里那条「走廊 烟感 浓度 27.27 obs/m 警告」就是它。
+            //
+            // 教训：**加 case 分支 ≠ 播种生效**。分支只在被调用时执行，
+            // 而"谁调用它"是另一件事 —— 这两件事必须分开验证。
+            // 判据 P27-46 现在锁定这条 ID 必须在表里，不只是 case 存在。
+            "Corridor1/Alarm/Fire_01",
+        };
+
+        /// <summary>
+        /// 【P27】暖气的「固定值」播种表。
+        ///
+        /// ── 为什么暖气必须单独压（主理人 2026-11-03「其他用电设备好像全部是这样的」）──
+        /// 9 台暖气**一个都不在** `TwinControlScope.Ids` 白名单里
+        /// （原因见那里的注释：没有可视化部件，点了看不出反应），
+        /// 也从来没进过 `SeedOnlyIds` —— 于是它们的 `ValveOpen` 从来没被压住过，
+        /// 一直自由跑正弦波，在 0~100% 之间上下摆。
+        ///
+        /// 后果不是"数字在跳"这么轻：暖气阀门的正常区是 **0~100（全量程）**，
+        /// 所以它永远不会报假警，看起来"没问题"。但一个**没人操作、也没上报真实工况**
+        /// 的阀门开度在 3% → 87% → 12% 之间反复横跳，本身就不符合现实 ——
+        /// 暖气阀是执行机构，开度由温控器决定，不会自己抖。
+        ///
+        /// ── 为什么播「45%」而不是 0 或 100 ────────────────────────────
+        /// 供暖季的常态是阀门半开（按需调节），45% 落在量程中段、
+        /// 远离两端，视觉上是一条平稳的直线，不会让人误以为"关着"或"全开"。
+        /// 这个点位在界面上不可控（只读），所以它之后不会再变 —— 这正是"静止"的含义。
+        /// </summary>
+        private static readonly string[] HeatSeedIds =
+        {
+            "Class1-2/Heat/Radiator_01",
+            "Class1-3/Heat/Radiator_01",
+            "Class1-4/Heat/Radiator_01",
+            "Class2-2/Heat/Radiator_01",
+            "ClassComputer/Heat/Radiator_01",
+            "ClassDirector/Heat/Radiator_01",
+            "ClassTeachers/Heat/Radiator_01",
+            "Corridor1/Heat/Radiator_01",
+            "Corridor2/Heat/Radiator_01",
         };
 
         /// <summary>
@@ -249,6 +305,32 @@ namespace SchoolTwin.Command
         private bool _seatIdsScanned;
 
         /// <summary>
+        /// PC 的「**运行期派生指标**」—— 关机时必须一起归零的指标。
+        ///
+        /// ── 为什么需要这张表（主理人 2026-11-03 截图）───────────────────
+        /// 「电脑都没开机，CPU 负载和温度数据都一直在跳动变化，这正常吗？」
+        /// 不正常。截图里三组数据互斥：功率 **0 W**、开机 **0 台**、CPU 负载 **20.08%**
+        /// 而且 Δ 一直在变。物理上不成立 —— 没通电的机器不可能有 CPU 负载。
+        ///
+        /// ── 根因：三个开关机写入点都只压了两项 ──────────────────────────
+        /// `Power` 和 `OnCount` 被压住了，`CPULoad` 没有人管。
+        /// 而 `MockSignalGenerator.Next()` 是**每个指标各自一条独立正弦波**，
+        /// 指标之间没有任何物理约束 —— 于是 `CPULoad` 照常跑它的 10~75% 曲线。
+        /// （`IsDiscrete()` 只拦「量程从 0 起且宽度 ≤ 1」的开关量，
+        ///   `CPULoad` 是 0~100，不满足条件，必然被当连续量。）
+        ///
+        /// ── 为什么用表，不写死在三个分支里 ──────────────────────────────
+        /// 三个写入点（播种 / 整间联动 / 单台命令）如果各自列举一遍，
+        /// 以后给 PC 加一个「内存占用」指标就会漏掉其中一两处 ——
+        /// 而这个 bug 恰恰就是「列举不全」造成的。集中到一张表，
+        /// 新增指标只要往这里加一行，三条路径自动同时生效。
+        ///
+        /// ⚠️ 加进来的指标必须满足：**开机才有、关机为 0**。
+        ///    像 `LampHours` 那种「累计量、关机也保留」的不能放进来。
+        /// </summary>
+        private static readonly string[] PcDerivedMetrics = { "CPULoad" };
+
+        /// <summary>
         /// 整间开机 / 关机 → 逐个下发给 18 个座位点位。
         ///
         /// 用 `SetState` 而不是发命令：`SetState` 直接写 override，
@@ -275,8 +357,10 @@ namespace SchoolTwin.Command
 
             for (int i = 0; i < _seatIds.Count; i++)
             {
-                SetState(_seatIds[i], "Power", on ? 180f : 0f);
-                SetState(_seatIds[i], "OnCount", on ? 1f : 0f);
+                // 【P27】整间联动也必须压派生指标 —— 见 PcDerivedMetrics 的注释。
+                // 原来这里只写 Power / OnCount，18 个座位的 CPU 负载照常跑正弦波，
+                // 于是「整间关机、每台 CPU 负载 30%」这种画面会出现。
+                SetPcRunning(_seatIds[i], on, on ? 180f : 0f, 1f);
             }
 
             Debug.Log("[TwinCmd] 机房联动：" + (on ? "开机" : "关机") +
@@ -393,7 +477,20 @@ namespace SchoolTwin.Command
 
                 case "AC":
                     SetState(twinId, "Power", 1.2f);       // 量程 0~3.5kW，警告线 3
-                    SetState(twinId, "SetTemp", 26f);      // 警告带 18~26
+                    // 【P27】播种 26°C（夏天最常见的设定值）。
+                    //
+                    // ── 这里踩过一个坑，记下来 ──────────────────────────────
+                    // 原来 catalog 的 WarnHigh 是 26，而回差 db = (26−18)×5% = 0.4°C，
+                    // `ApplyDeadband` 要求 `value > WarnHigh − db` 即 > 25.6 才留在 Warning。
+                    // 于是播种 26 时，只要进过一次 Warning（用户调到 27 再调回来），
+                    // 设定值 26 会**一直显示警告**，一分钟都退不回来。
+                    //
+                    // 我先想到的是把播种值降到 25 绕过去 —— 那是治标：
+                    // 用户自己调到 26 照样报警，而 26°C 本来就是夏天正常设定。
+                    // 主理人裁决把 **WarnHigh 放宽到 28**（catalog 5 处已改），
+                    // 阈值口径才对得上现实。db 变成 (28−18)×5% = 0.5，门槛 27.5，
+                    // 26 稳落在 Normal 内侧，播种也能回到真实值。
+                    SetState(twinId, "SetTemp", 26f);      // 警告带 18~28（原 18~26 偏紧）
                     seeded++;
                     break;
 
@@ -420,8 +517,11 @@ namespace SchoolTwin.Command
                     //
                     // 真实场景也对：上课前机房是关的，学生/老师进来才开。
                     // 关机时 `OnCount` 也要一起归零，否则卡片会写「已关」旁边「开机 1 台」。
-                    SetState(twinId, "Power", 0f);
-                    SetState(twinId, "OnCount", 0f);
+                    //
+                    // 【P27】改走 `SetPcRunning` —— 除了功率与台数，还要把 `CPULoad`
+                    // 这类"开机才有"的派生指标一起压到 0。原来只写两行，
+                    // CPU 负载会继续跑正弦波（主理人 2026-11-03 截图：关机 + 0 台 + CPU 20%）。
+                    SetPcRunning(twinId, false, 0f, 1f);
                     seeded++;
                     break;
                 }
@@ -444,6 +544,36 @@ namespace SchoolTwin.Command
                     // → 铃会自己一直在响（和门的 `Open` 是同一类问题，99 号清单第 17 条）。
                     SetState(twinId, "Ring", 0f);
                     SetState(twinId, "Volume", 70f);
+                    seeded++;
+                    break;
+
+                case "Sensor":
+                    // 【P27】温湿度传感器。`Temperature` / `Humidity` 已由
+                    // `MockSignalGenerator` 的物理模型接管（室温、含湿量），
+                    // 这里**不能**再压成常数 —— 压了就等于把天气系统关掉了。
+                    // 所以这个分支刻意什么都不写，只是留一个说明，
+                    // 免得下一个人以为是漏掉了又补一个 SetState 进来。
+                    //
+                    // 它们不需要播种的原因：环境量本身是"设备读到的客观值"，
+                    // 不存在"关机了还在动"的问题 —— 传感器一直是通电工作的。
+                    seeded++;
+                    break;
+
+                case "Alarm":
+                    // 【P27】烟感。**这是本轮最严重的一个漏播种**。
+                    //
+                    // 原来 `SeedOne` 里没有 `Alarm` 分支，于是 `Smoke` 一直跑通用正弦：
+                    // 量程 0~100、警告线 20、告警线 40，基线被夹到 2.4~17.6，
+                    // 然后每 45 秒有一次冲向量程边界的"越界事件"——
+                    // 意味着烟感**每隔一分钟左右就报一次火警**（冲到 100 obs/m）。
+                    //
+                    // 而且烟感是**只读设备，界面上没有按钮**，用户看着它报警却什么都做不了。
+                    // 主理人说"处于关闭状态，数据波动还比较频繁"，这类"永远在抖"的传感器
+                    // 正是同一种毛病的另一种表现。
+                    //
+                    // 真实烟感：洁净空气下读数接近 0（散射式大约 0.0~0.5 obs/m），
+                    // 读数不跳、长期平稳，只有真的冒烟才起来。
+                    SetState(twinId, "Smoke", 0f);
                     seeded++;
                     break;
             }
@@ -650,17 +780,32 @@ namespace SchoolTwin.Command
                         case "Projector": watt = on ? 310f : 0f; break;
                         default: watt = on ? 1f : 0f; break;
                     }
-                    SetState(twinId, "Power", watt);
+                    // 【P27】PC 走专用出口，**不再在外面重复写一次 Power**。
+                    //
+                    // 原来这里先无条件 `SetState(twinId, "Power", watt)`，再对 PC 补
+                    // `OnCount`（现在补到 `SetPcRunning` 里）。虽然两处写的值一样、不出错，
+                    // 但"同一个指标有两个写入点"正是本项目反复出事的结构 ——
+                    // 以后谁改了其中一处，另一处不会跟着变，而且没有任何报错。
+                    // 所以：PC 的分支自己把 Power / OnCount / 派生指标一次写完；
+                    // 其它类型仍走下面这行通用的 Power 写入。
+                    if (string.Equals(type, "PC", StringComparison.Ordinal))
+                    {
+                        SetPcRunning(twinId, on, watt, PcUnitCount(twinId, model));
+                    }
+                    else
+                    {
+                        SetState(twinId, "Power", watt);
+                    }
 
                     // 灯还有亮度这个指标。只改功率不改亮度的话，卡片上会出现
                     // 「已关」旁边写着「亮度 62%」—— 一眼就能看出是假的。
                     // 亮度是灯具自己的属性，跟着开关一起走才对。
+                    //
+                    // 【P27】关机时归 0 之后，状态判定不会再把它算成「警告」——
+                    // 亮度 0 是"关灯"的结果，不是"太暗"这个故障。见
+                    // `TwinAnchor.RunningOnlyMetrics`：运行期指标在设备关机时不参与报警。
                     if (string.Equals(type, "Light", StringComparison.Ordinal))
                         SetState(twinId, "Brightness", on ? 80f : 0f);
-
-                    // 电脑同理：只改总功率不改开机台数，卡片上会写「已关」而「开机 10 台」。
-                    if (string.Equals(type, "PC", StringComparison.Ordinal))
-                        SetState(twinId, "OnCount", on ? PcUnitCount(twinId, model) : 0f);
 
                     // 【P3】机房整间（`PC/Room_01`）→ **联动 18 个座位点位**。
                     //
@@ -785,6 +930,67 @@ namespace SchoolTwin.Command
                 if (_logEveryCommand)
                     Debug.Log("[TwinCmd] 设备自动复位：「" + a.TwinId + "」的 " + a.Metric + " → 0");
             }
+        }
+
+        /// <summary>
+        /// 把一台 PC 的**全部开关状态**一次性写对（主功率 + 开机台数 + 运行期派生指标）。
+        ///
+        /// ── 为什么必须收成一个方法（P27）────────────────────────────────
+        /// 原来三个写入点各自写 `Power` / `OnCount` 两行，`CPULoad` 三处全漏。
+        /// 主理人 2026-11-03 截图就是那个后果：**关机、0 台、CPU 负载 20.08% 还在跳**。
+        ///
+        /// 三个写入点：
+        ///   ① `SeedOne()` 的 `case "PC"`        —— 开局播种
+        ///   ② `ApplyRoomToSeats()`              —— 整间联动开关
+        ///   ③ `ApplyState()` 的 `SetPower` 分支 —— 单台命令
+        /// 只要有一个漏压派生指标，就会出现"这个入口关的机不会降 CPU"的怪现象 ——
+        /// 而且**只在特定操作路径下复现**，比全错更难查。所以收成一个出口。
+        ///
+        /// ── 关键取舍：开机时用 ClearOverride，不是写死一个值 ──────────────
+        /// 关机的派生指标必须钉死 0（没通电就是 0，这是物理事实）。
+        /// 但开机时**不能**钉成一个常数 —— 那会让 CPU 负载变成一条直线，
+        /// 从"假波动"换成"假静止"，同样是假的，而且更假（真实机器负载一直在变）。
+        /// 所以开机时释放 override，让它回到正弦波的自然波动。
+        /// </summary>
+        /// <param name="twinId">PC 点位。</param>
+        /// <param name="on">是否开机。</param>
+        /// <param name="watt">主功率（开机值由调用方按点位量程算好）。</param>
+        /// <param name="units">开机台数（单台 = 1，整间 = 座位数）。</param>
+        private void SetPcRunning(string twinId, bool on, float watt, float units)
+        {
+            SetState(twinId, "Power", watt);
+            SetState(twinId, "OnCount", on ? units : 0f);
+
+            // 【P27·开机冲刺】开机时清掉这台机器的「开机时刻」，
+            // 让 `MockSignalGenerator` 从头算"开了多久" —— 这样刚点亮时能看到
+            // CPU 负载从 ~80% 指数回落到空闲 11%，而不是直接显示"已经空闲"。
+            //
+            // 不清的后果：BootStart 里记的是上一次开机的时间戳，早过了 5 分钟上限，
+            // 于是新一次开机跳过了启动冲刺 —— "点了开机，CPU 一直是 11%"，
+            // 看起来像没通电，反而比乱跳更容易被误判成 bug。
+            if (on) MockSignalGenerator.ResetBootClock(twinId);
+
+            for (int i = 0; i < PcDerivedMetrics.Length; i++)
+            {
+                string metric = PcDerivedMetrics[i];
+
+                if (on) ClearState(twinId, metric);
+                else SetState(twinId, metric, 0f);
+            }
+        }
+
+        /// <summary>
+        /// 解除某个指标的 override，让它回到模拟波形的自然波动。
+        ///
+        /// 【为什么要连 `_owned` 一起删】`_owned` 是 `OnDestroy` 用来"放开我压过的值"的清单。
+        /// 已经放开的项留着不影响正确性（再清一次是空操作），但会让清单只增不减，
+        /// 也不能反映"现在到底压住了哪些" —— 排查时看到一堆假条目反而误导。
+        /// </summary>
+        private void ClearState(string twinId, string metric)
+        {
+            string key = twinId + "|" + metric;
+            MockDataSource.ClearOverride(twinId, metric);
+            _owned.Remove(key);
         }
 
         /// <summary>把设备的某个指标钉在指定值。这一行就是「设备状态」的全部真相。</summary>

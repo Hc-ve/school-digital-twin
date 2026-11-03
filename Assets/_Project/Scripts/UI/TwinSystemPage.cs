@@ -316,6 +316,17 @@ namespace SchoolTwin.UI
             new List<KeyValuePair<TwinAnchor, float>>(NTopRows + 2);
 
         private Text _nEmpty;
+
+        /// <summary>
+        /// 窄态「能耗 Top3」**块内**空状态（区别于整页的 <see cref="_nEmpty"/>）。
+        ///
+        /// 【2026-11-03 P8 修·拉闸后白框】整栋拉闸后 70 台设备仍在册，
+        /// `_nEmpty` 的判据是"设备数为 0"——不成立，于是不显示；
+        /// 而 Top3 的内容被 `HasPowerReading` 全挡掉（断电无读数），
+        /// 三行全 SetActive(false) → 标题还在、下面一片空白。
+        /// 与全屏 `RefreshStatsPage` 同一个缺陷、同一个修法，两态必须同步。
+        /// </summary>
+        private Text _nTopEmpty;
         private float _nSparkNextAt;
         private float _nSparkLo = -1f;
         private float _nSparkHi = -1f;
@@ -887,6 +898,17 @@ namespace SchoolTwin.UI
             _nEmpty.text = "暂无数据";
             _nEmpty.gameObject.SetActive(false);
 
+            // 「能耗 Top3」块内空状态：居中在 3 行的位置（y 576..654），
+            // 进滚动内容 —— 它不是整页替身，是这一块自己的说明。
+            //
+            // 【2026-11-03 P8】原来没有这个节点：拉闸后三行全隐藏，只留标题，
+            // 主理人截图里就是一块白框。判据见 `RefreshStats` 的 `noRank`。
+            _nTopEmpty = TwinUIFactory.Label(body, "NTopEmpty", TwinTheme.FsCaption,
+                TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_nTopEmpty.rectTransform, 0f, 576f + 26f, RightW - 6f, 22f);
+            _nTopEmpty.text = "当前无耗电设备";
+            _nTopEmpty.gameObject.SetActive(false);
+
             RefreshStats();
         }
 
@@ -1108,6 +1130,18 @@ namespace SchoolTwin.UI
             }
 
             float maxTop = _nTopCache.Count > 0 ? Mathf.Max(1f, _nTopCache[0].Value) : 1f;
+
+            // 【2026-11-03 P8 修·白框】`empty` 判的是"设备数为 0"，
+            // 拉闸时 70 台仍在册 → false；但 `_nTopCache` 被 `HasPowerReading` 清空。
+            // 两个条件都对上才该有内容，否则显示块内空状态。
+            //
+            // ⚠️ 只在 `!empty` 时显示块内空状态：设备数真的是 0 时，
+            //    由整页 `_nEmpty` 一句「暂无数据」覆盖，这里再来一句就是重复。
+            //    所以 `noRank` 取 `!empty && _nTopCache.Count == 0`。
+            //    全屏那边四块是并列的、没有整页盖层，所以它的第 4 块用 `empty || noRank`。
+            bool noRank = !empty && _nTopCache.Count == 0;
+            if (_nTopEmpty != null && _nTopEmpty.gameObject.activeSelf != noRank)
+                _nTopEmpty.gameObject.SetActive(noRank);
 
             for (int i = 0; i < NTopRows; i++)
             {
@@ -2102,11 +2136,21 @@ namespace SchoolTwin.UI
 
                 // 【C-30】选中行高亮 —— 点了没任何视觉反馈，用户会以为"点不动"。
                 // 用行底色表达选中（AccentDim），跟全屏那套保持同一个语义。
+                //
+                // 【2026-11-03 P10 双态同步】全屏那边补强成三层（底 + 边 + 字），
+                // 这里必须同步 —— 两态"本质还是一个面板"。原来两边都只有一层
+                // AccentDim（Accent @0.035，Δ18），在深色行底上几乎看不出变化。
+                // 现在同样是：底 AccentDim / 边 AccentLine / 「详情›」文字转主色。
                 if (_devRowBg[i] != null)
                 {
                     bool sel = ReferenceEquals(SchoolTwin.Interaction.TwinPicker.Selected, a);
                     Color bg = sel ? TwinTheme.AccentDim : Color.clear;
                     _devRowBg[i].SetFill(bg, bg);
+                    // 未选中行保持"无描边"（构建时就是 Color.clear / 0f），
+                    // 只在选中时给 1px 主色边 —— 不能给未选中行补 Border，
+                    // 那样整张表会突然浮出 64 条行框，和窄态原来的观感不同。
+                    _devRowBg[i].SetBorder(sel ? TwinTheme.AccentLine : Color.clear,
+                                           sel ? TwinTheme.StrokeHair.Width : 0f);
                 }
 
                 // 【P0-3】编号列固定 150、名称列 x=170（间隙 8 ≥ 规格要求的 8）。
@@ -2453,7 +2497,7 @@ namespace SchoolTwin.UI
             // 【P5 口径统一】总功率改读**实时求和**，不再是「额定功率 × 台数」的估算。
             //
             // ── 为什么必须改 ──────────────────────────────────────────────
-            // 原来这里用 `TotalWatt()`（估算容量）→ 21.7 kW，
+            // 原来这里用 `TotalWatt()`（估算容量）→ 21.86 kW，
             // 而统计页用 `SumLivePower()`（实时消耗）→ 2.8 kW，
             // 两个 KPI 都叫"总功率"却差 8 倍 —— 主理人 2026-11-02 截图直接指出
             // "同一个面板两种数字"。
