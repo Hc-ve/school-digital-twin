@@ -1092,6 +1092,73 @@ namespace SchoolTwin.Weather
 
             snowAuditStage = 2;
             Debug.Log("[P13][雪天自检] ==== 雪天 4 秒现场快照 ====\n" + BuildSnowAudit());
+            Debug.Log("[P13][横线排查] ==== 与相机等高、且扁平的可疑渲染器 ====\n" + BuildSliverSuspects());
+        }
+
+        /// <summary>
+        /// 找出「横线」的候选物体。
+        ///
+        /// ── 为什么需要这段 ────────────────────────────────────────────────
+        /// 用户报的横线在室内外都有、能穿过建筑、位于**角色头部高度**。
+        /// 这三个特征共同指向：某个**水平面**正好穿过相机的视平线 ——
+        /// 平面与视线近乎平行时，它的投影会收束成一条贯穿画面的扁带。
+        ///
+        /// 已经排除的：雪盘（自检显示竖直面 0 处、纵向跨度 0.20m，几何干净）。
+        /// 所以必须换个办法，把"谁可能是那个面"列出来，而不是继续猜。
+        ///
+        /// ── 判据 ─────────────────────────────────────────────────────────
+        ///   ① 渲染器可见、激活
+        ///   ② 包围盒在 Y 方向**很扁**（高度 &lt; 1.2m）但 XZ 方向**很宽**（&gt; 5m）
+        ///      → 典型水平薄面
+        ///   ③ 它的 Y 范围**跨过相机高度**（minY ≤ camY ≤ maxY）
+        ///      → 视线正好与它共面，投影会收成一条带
+        ///   ④ 渲染队列 ≥ 2500（透明），或用了 ZTest Always
+        ///      → 能盖住本应在前面的物体（"穿透建筑物"）
+        /// 四条全中就是元凶。任一条不中，打印出来也能排除它。
+        /// </summary>
+        private string BuildSliverSuspects()
+        {
+            var sb = new System.Text.StringBuilder(900);
+            if (cam == null) return "    cam = null";
+
+            float camY = cam.transform.position.y;
+            sb.AppendLine("    相机世界 Y = " + camY.ToString("F2"));
+            sb.AppendLine("    判据：Y 向高度 < 1.2m 且 XZ > 5m 且跨过相机高度 且 透明队列/Always");
+
+            Renderer[] all = Object.FindObjectsOfType<Renderer>();
+            int hit = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null || !r.enabled || !r.gameObject.activeInHierarchy) continue;
+
+                Bounds b = r.bounds;
+                if (b.size.y >= 1.2f) continue;                 // 不够扁
+                if (b.size.x < 5f && b.size.z < 5f) continue;   // 不够宽
+                if (b.min.y > camY || b.max.y < camY) continue; // 没跨过视线
+
+                Material m = r.sharedMaterial;
+                int q = (m != null) ? m.renderQueue : -1;
+                bool always = false;
+                if (m != null && m.HasProperty("_ZTest"))
+                    always = m.GetFloat("_ZTest") == (float)CompareFunction.Always;
+
+                bool suspect = q >= 2500 || always;
+                if (!suspect) continue;
+
+                hit++;
+                sb.AppendLine("    ▸ " + r.gameObject.name
+                              + "   队列=" + q
+                              + (always ? "  **ZTest Always**" : "")
+                              + "\n        Y∈[" + b.min.y.ToString("F2") + ", " + b.max.y.ToString("F2")
+                              + "]  高度=" + b.size.y.ToString("F3") + "m"
+                              + "   XZ=" + b.size.x.ToString("F1") + "×" + b.size.z.ToString("F1") + "m"
+                              + "\n        中心=" + b.center.ToString("F2")
+                              + "   材质=" + (m != null ? m.shader.name : "null"));
+            }
+            if (hit == 0) sb.AppendLine("    **一个都没有** —— 横线不在渲染器包围盒层面，");
+            if (hit == 0) sb.AppendLine("    下一步查粒子系统（Billboard 渲染器的 bounds 往往极大）。");
+            return sb.ToString();
         }
 
         /// <summary>
