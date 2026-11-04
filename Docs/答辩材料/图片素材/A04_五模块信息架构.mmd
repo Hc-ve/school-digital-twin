@@ -1,0 +1,47 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#4A5A70","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A04 五模块信息架构 —— 来源：P28 §4 五模块 IA / P00 §3.6 UI 层级
+%% 层级：L0 3D 场景 → L1 总控面板 420 → L2 校园管理系统 640 → L3a 详情卡 470 / L3b 模态 520x320
+flowchart TB
+    L0["<div style='min-width:700px;text-align:center'><b>L0　3D 场景</b>　点击设备直接拾取 · 右上角 48×48 触发钮<br/>TwinUIState 层级仲裁：None / Drawer / Detail / Modal · Esc 逐层退</div>"]
+
+    L1["<div style='min-width:700px;text-align:center'><b>L1　总控面板</b>　宽 420　贴右缘<br/>标题 22 + 副标题 13 + 4 个摘要胶囊 · 图标格 4 列 cell 88×88</div>"]
+
+    L2["<div style='min-width:700px;text-align:center'><b>L2　校园管理系统</b>　宽 640　左侧 5 个模块 Tab<br/>内容区高度硬预算 544 = 720 − 96 头部 − 80 工具行</div>"]
+
+    P1["<div style='min-width:118px;text-align:center'><b>监</b><br/>数据监测</div>"]
+    P2["<div style='min-width:118px;text-align:center'><b>设</b><br/>设备管理</div>"]
+    P3["<div style='min-width:118px;text-align:center'><b>电</b><br/>电力管理</div>"]
+    P4["<div style='min-width:118px;text-align:center'><b>警</b><br/>告警中心</div>"]
+    P5["<div style='min-width:118px;text-align:center'><b>图</b><br/>数据统计</div>"]
+
+    D1["<div style='min-width:210px;text-align:center'>全楼 KPI<br/>楼层健康条<br/>分类视图</div>"]
+    D2["<div style='min-width:210px;text-align:center'>三级树<br/>搜索筛选<br/>影响设备数</div>"]
+    D3["<div style='min-width:210px;text-align:center'>楼栋楼层房间<br/>分级停电<br/>SBO 两步确认</div>"]
+    D4["<div style='min-width:210px;text-align:center'>进行中 n 条<br/>历史筛选分页<br/>点行定位设备</div>"]
+    D5["<div style='min-width:210px;text-align:center'>四张卡<br/>功率曲线<br/>Top5 排行</div>"]
+
+    L3["<div style='min-width:700px;text-align:center'><b>L3a 设备详情卡</b>　宽 470 贴左缘　列表短码 · 详情全码<br/><b>L3b 模态</b>　520×320　仅 Modal 层拦截 3D 拾取</div>"]
+
+    L0 --> L1 --> L2
+    L2 --> P1
+    L2 --> P2
+    L2 --> P3
+    L2 --> P4
+    L2 --> P5
+    P1 --> D1
+    P2 --> D2
+    P3 --> D3
+    P4 --> D4
+    P5 --> D5
+    D1 --> L3
+    D2 --> L3
+    D3 --> L3
+    D4 --> L3
+    D5 --> L3
+
+    classDef lv fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef mod fill:#141E2C,stroke:#4A6FA5,color:#F0F5FC
+    classDef det fill:#121B28,stroke:#39485C,color:#B8C6D8
+    class L0,L1,L2 lv
+    class P1,P2,P3,P4,P5 mod
+    class D1,D2,D3,D4,D5,L3 det

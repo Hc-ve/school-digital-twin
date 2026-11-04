@@ -1,0 +1,33 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#4A5A70","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A05 电力回路三级树 + SBO 两步确认
+%% 来源：TwinSiteLayout.Table 实际 17 个分区 / P00 §2.3（20 节点 = 1 楼栋 + 2 楼层 + 17 房间）
+%% SBO 常量实测：TwinSboGate.cs L81 SelectBudgetSeconds=3f / L87 ArmedSeconds=10f
+flowchart TB
+    ROOT["<div style='min-width:640px;text-align:center'><b>楼栋节点</b>　1 个<br/>TwinCircuit 根 · 断则全楼断电 · ChainOn 向下传播</div>"]
+
+    F1["<div style='min-width:330px;text-align:center'><b>1F 楼层节点</b>　整层批量<br/>11 个房间回路</div>"]
+    F2["<div style='min-width:330px;text-align:center'><b>2F 楼层节点</b>　整层批量<br/>6 个房间回路</div>"]
+
+    F1R["<div style='min-width:330px;text-align:center'>1-2班 · 1-3班 · 1-4班<br/>计算机教室 · 一层走廊<br/>食堂餐厅 · 体育器材室<br/>体育馆中区 · 体育馆东区<br/>体育馆入口 · 篮球场</div>"]
+    F2R["<div style='min-width:330px;text-align:center'>2-1班 · 2-2班<br/>教师办公室 · 主任室<br/>二层走廊 · 礼堂</div>"]
+
+    SUM["<div style='min-width:640px;text-align:center'>合计 <b>20 节点</b> = 1 楼栋 + 2 楼层 + 17 房间<br/>上层断电时下层必须跟着断 · AvailabilityOf 沿「房间→楼层→楼栋」全链合闸才算通电</div>"]
+
+    SBO["<div style='min-width:640px;text-align:center'><b>SBO 两步确认</b>（TwinSboGate）<br/>第一步 选中 → SelectBudget = <b>3s</b> 内按确认 → 进入 Armed<br/>第二步 Armed → ArmedSeconds = <b>10s</b> 内再按执行，超时即 Expired</div>"]
+
+    ROOT --> F1
+    ROOT --> F2
+    F1 --> F1R
+    F2 --> F2R
+    F1R --> SUM
+    F2R --> SUM
+    SUM --> SBO
+
+    classDef root fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef flr fill:#141E2C,stroke:#4A6FA5,color:#F0F5FC
+    classDef rm fill:#121B28,stroke:#39485C,color:#B8C6D8
+    classDef sbo fill:#241E14,stroke:#FF9E26,stroke-width:2px,color:#F0F5FC
+    class ROOT root
+    class F1,F2 flr
+    class F1R,F2R,SUM rm
+    class SBO sbo

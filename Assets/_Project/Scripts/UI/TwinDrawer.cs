@@ -831,13 +831,14 @@ namespace SchoolTwin.UI
             }
 
             // 打开前先保证环境系统存在：没挂 EnvironmentState 时天气切换不会有任何视觉反应，
-            // 用户会以为按钮坏了。Ensure 一下比"什么都不发生"诚实。
-            if (EnvironmentState.Instance == null &&
-                FindObjectOfType<EnvironmentState>(true) == null)
-            {
-                GameObject envGo = new GameObject("Environment");
-                envGo.AddComponent<EnvironmentState>();
-            }
+            // 用户会以为按钮坏了。
+            //
+            // 【P13 订正】原来这里自己 new GameObject("Environment") 兜底，与
+            // TwinWeatherBootstrap 的自举**同样会建一份** —— 两个创建点就是竞态：
+            // 点开面板那一刻，自举建的实例和这里建的实例会在 Awake 里互相 Destroy
+            // （`Instance != this` → Destroy(gameObject)），谁活下来取决于调用顺序。
+            // 现在统一走 TwinWeatherBootstrap.Ensure()，创建点只剩一处。
+            TwinWeatherBootstrap.Ensure();
 
             _timeCard = TwinTimeWeatherCard.Open(_root.parent, OnTimeCardClosed);
         }

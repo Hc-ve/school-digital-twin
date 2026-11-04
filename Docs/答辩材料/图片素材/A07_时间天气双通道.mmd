@@ -1,0 +1,30 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#5C7089","edgeLabelBackground":"#0A1628","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A07 时间天气双通道 —— 来源：P13 方案 F1/F2/F5/F7/F8 + C-43~C-46 裁决 / P13 断点回执 / P13-1 图纸
+flowchart TB
+    CARD["<div style='min-width:640px;text-align:center'><b>TwinTimeWeatherCard</b>　480×360　551 行<br/>表盘直径 200 · 数字标 r=65 · 四按钮 104×40 · ≈68 Graphic<br/>Draw Call ≤ 25</div>"]
+
+    DRAG["<div style='min-width:300px;text-align:center'><b>TwinDialDragArea</b>　49 行<br/>拖动命中区 200×200，最后建</div>"]
+    BRIDGE["<div style='min-width:300px;text-align:center'><b>TwinWeatherBridge</b>　214 行<br/><b>唯一出口</b>，不允许别处直调</div>"]
+
+    D1["<div style='min-width:470px;text-align:center'><b>数据通道 → TwinClimate</b>（576 行）<br/>4 档：Sunny / Cloudy / Rainy / Snowy<br/>日较差 · 湿度 · 供暖三态 · Magnus 饱和含湿量<br/>SetWeather:136 / SetHourOverride:150 原为零调用者，本桥接通</div>"]
+
+    D2["<div style='min-width:470px;text-align:center'><b>视觉通道 → EnvironmentState</b> + WeatherDirector<br/>天空 · 雾 · 星空 · 雨雪粒子 · 地面积水积雪<br/>68 盏 Area 灯为 Baked，无法实时压暗</div>"]
+
+    MAP["<div style='min-width:640px;text-align:center'><b>7 档视觉 → 4 档数据</b>（裁决 C-44 映射表，多对一）<br/>Clear→Sunny　Rain→Rainy　Snow→Snowy　Cloudy / Overcast / Fog / Storm→Cloudy</div>"]
+
+    PP["<div style='min-width:640px;text-align:center'><b>TwinP13PostProcess</b>　250 行　夜间只压三处<br/>平行光实时直射 · ambientIntensity · postExposure<br/>夜间 −1.45　雨雪再 −0.25　黄昏 −0.35</div>"]
+
+    CARD --> DRAG
+    CARD --> BRIDGE
+    DRAG --> BRIDGE
+    BRIDGE --> MAP
+    MAP --> D1
+    MAP --> D2
+    D1 --> PP
+
+    classDef card fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef mid fill:#141E2C,stroke:#4A6FA5,color:#F0F5FC
+    classDef ch fill:#121B28,stroke:#39485C,color:#B8C6D8
+    class CARD card
+    class DRAG,BRIDGE mid
+    class D1,D2,MAP,PP ch

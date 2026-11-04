@@ -150,8 +150,12 @@ namespace SchoolTwin.Weather
                     if (env == null) env = FindObjectOfType<EnvironmentState>();
                     if (env == null)
                     {
-                        var go = new GameObject("EnvironmentState");
-                        env = go.AddComponent<EnvironmentState>();
+                        // 【P13 订正】原来自建 `new GameObject("EnvironmentState")`，
+                        // 这是本项目的**第三个**创建点（另两个在 TwinWeatherBootstrap 与
+                        // 已删掉的 TwinDrawer 兜底里）。多创建点 = 竞态：两份实例在 Awake
+                        // 里因 `Instance != this` 互相 Destroy，谁活下来取决于调用顺序。
+                        // 统一走 TwinWeatherBootstrap.Ensure()，创建点只剩一处。
+                        env = TwinWeatherBootstrap.Ensure();
                     }
                     Subscribe();
                 }

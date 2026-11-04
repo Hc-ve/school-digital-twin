@@ -1,0 +1,18 @@
+﻿[P13] ===== 修后处理死路 =====
+[P13] PostProcessResources：Packages/com.unity.postprocessing/PostProcessing/PostProcessResources.asset
+[P13] 相机：Camera
+[P13] · 相机 HDR 已开
+[P13] · 相机已有 PostProcessLayer（复用）
+[P13] 配置：Assets/_Project/ScriptableObjects/PPS_Bloom.asset
+[P13] ✔ ColorGrading.postExposure 已开启覆盖（初值 0，运行时驱动）
+[P13] ✔ Bloom 已关（雪天会糊成白雾，不是亮度偏移）
+[P13] ✔ Vignette 已关（夜间会把四角压全黑）
+[P13] ✔ 场景里新建全局卷「[PPS] PostProcess」
+[P13] ✔ Volume.sharedProfile = Assets/_Project/ScriptableObjects/PPS_Bloom.asset
+
+[P13] 场景保存：成功
+[P13] 生效判据（用户 play 时可核对）：
+        · 相机 Inspector 上有 Post-process Layer，Resources 非空
+        · 场景里有 [PPS] PostProcess 物体，Is Global 勾上，Profile = PPS_Bloom
+        · PPS_Bloom 里只有 Color Grading 是勾上的（Bloom/Vignette 不勾）
+[P13] ===== 结束 =====

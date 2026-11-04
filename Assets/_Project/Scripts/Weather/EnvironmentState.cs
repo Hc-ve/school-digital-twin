@@ -3,6 +3,24 @@ using System.Collections;
 using System.Reflection;
 using UnityEngine;
 
+// ══════════════════════════════════════════════════════════════════════
+// 【别名：修 CS0104 `'Random' is an ambiguous reference`】
+//
+// 本文件为 P13 的 postExposure 反射软依赖引入了 `using System`（需要 Type / Assembly），
+// 于是 `Random` 同时命中两个类型：
+//     UnityEngine.Random    —— static class，Range(int,int) / Range(float,float)，无状态
+//     System.Random         —— 需要 new 的实例类，Next(...)，不能静态调用
+// `Random.Range(...)` 两种写法名字一样，编译器不猜，直接报二义。
+//
+// 本文件里三处 `Random.Range` 全是"打雷间隔随机"的**视觉抖动**，语义上要的正是
+// Unity 的全局随机（和 Time.deltaTime 同族的引擎侧工具），不是可复现的 System.Random 序列。
+// 所以给 Unity 那个起别名，而不是删 using System（反射还要用）。
+//
+// 这是个"同型病"的又一例：给文件加一个 using，等于往名字空间里塞了一批候选名，
+// 必须顺带扫一遍有没有与本文件已有标识符撞名的。上次 `Object[]` 撞了，这次 `Random` 撞了。
+// ══════════════════════════════════════════════════════════════════════
+using Random = UnityEngine.Random;
+
 namespace SchoolTwin.Weather
 {
     /// <summary>

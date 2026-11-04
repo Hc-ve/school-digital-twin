@@ -94,6 +94,49 @@ namespace SchoolTwin.Weather
         // 相机高度淡出系数：1 = 完全显示雨雪，0 = 高空俯视时关掉
         private float altFade = 1f;
 
+        // ---------------------------------------------------------------
+        // 【P13】只读诊断出口。
+        //
+        // 为什么要把私有字段暴露出来：`indoor` / `altFade` / `snowAccum` 三个值决定了
+        // 雨雪到底显不显示 —— effRain = rain × altFade × shelter、积雪 = snowAccum ×
+        // altFade × indoorFade。而这四个都是 private，诊断工具只能靠"用同一个公式重算"
+        // 去猜，猜不出真实值。
+        //
+        // 踩过的坑：雪天粒子出来了、但地面一点积雪都没有，最可能就是 indoorFade 被
+        // 误判成 0（第三人称相机在玩家身后上方，向上射线可能打到玩家自己的手臂/模型，
+        // 而 IsPlayerCollider 靠 cam.transform.root 判，相机若不是玩家子物体就失效）。
+        // 没有真实值只能猜，所以补这三个属性。只读，不参与任何逻辑。
+        // ---------------------------------------------------------------
+        public bool IndoorNow { get { return indoor; } }
+        public float IndoorFadeNow { get { return indoorFade; } }
+        public float AltFadeNow { get { return altFade; } }
+        public float SnowAccumNow { get { return snowAccum; } }
+        public float SnowAmountNow { get { return snowAmount; } }
+
+        /// <summary>雪盘物体本身在不在、激活没激活、材质是不是拿到了（诊断"雪有量但不显示"）。</summary>
+        public Transform SnowGroundT { get { return snowGround; } }
+        public bool SnowGroundHasMat { get { return snowGroundMat != null; } }
+        public bool SnowGroundShaderOk
+        {
+            get { return snowGroundMat != null && snowGroundMat.shader != null
+                     && snowGroundMat.shader.name == "CampusUI/SnowGround"; }
+        }
+        /// <summary>写进材质的真实 _SnowAmount（诊断"值算出来了但没写进材质"）。</summary>
+        public float SnowAmountInMat
+        {
+            get { return snowGroundMat != null ? snowGroundMat.GetFloat(IdSnowAmount) : -1f; }
+        }
+        /// <summary>雪盘世界坐标（诊断"雪盘被停到天上/地下"）。</summary>
+        public Vector3 SnowGroundWorldPos
+        {
+            get { return snowGround != null ? snowGround.position : Vector3.zero; }
+        }
+        /// <summary>雪盘当前是否在渲染（含父级激活状态）。</summary>
+        public bool SnowGroundVisible
+        {
+            get { return snowGround != null && snowGround.gameObject.activeInHierarchy; }
+        }
+
         // =====================================================================
         // 构建
         // =====================================================================
@@ -738,11 +781,14 @@ namespace SchoolTwin.Weather
                 // 和地面探测共用同一个 0.15s 节流：场景有 6000+ 碰撞体，两条射线每帧打是白给。
                 // distance > 0.3 是为了排除"射线从玩家自己的胶囊里起步"这种情况；
                 // 另外显式跳过玩家碰撞体，避免向上射线打到自己头顶的胶囊内壁。
+                //
+                // 【P13 注意】原来这里传 `cam.transform.root` 当玩家根，第三人称下它是相机自己，
+                // 导致玩家模型永远认不出来 → indoor 恒 true → 积雪恒为 0。现在 IsPlayerCollider
+                // 自己负责认定玩家根（见它的注释），调用方不再传playerRoot。
                 RaycastHit up;
-                Transform playerRoot = (cam != null) ? cam.transform.root : null;
                 indoor = Physics.Raycast(new Ray(camPos, Vector3.up), out up, 40f)
                          && up.distance > 0.3f
-                         && !IsPlayerCollider(up.collider, playerRoot);
+                         && !IsPlayerCollider(up.collider);
             }
 
             if (splashRoot != null)
@@ -909,7 +955,6 @@ namespace SchoolTwin.Weather
         /// </summary>
         private float SampleGroundHeight(float x, float z, float eyeY)
         {
-            Transform playerRoot = (cam != null) ? cam.transform.root : null;
             var origin = new Vector3(x, eyeY + 6f, z);
             int n = Physics.RaycastNonAlloc(new Ray(origin, Vector3.down), groundHits, 12f);
 
@@ -919,7 +964,7 @@ namespace SchoolTwin.Weather
             {
                 RaycastHit h = groundHits[i];
                 if (h.collider == null || h.collider.isTrigger) continue;
-                if (IsPlayerCollider(h.collider, playerRoot)) continue;
+                if (IsPlayerCollider(h.collider)) continue;
                 if (h.point.y > eyeY - 4f && h.point.y < eyeY + 6f)
                 {
                     if (!found || h.point.y > best) { best = h.point.y; found = true; }
@@ -943,7 +988,6 @@ namespace SchoolTwin.Weather
         /// </summary>
         private float ProbeGround(Vector3 camPos)
         {
-            Transform playerRoot = (cam != null) ? cam.transform.root : null;
             int n = Physics.RaycastNonAlloc(new Ray(camPos, Vector3.down), groundHits, 400f);
 
             float best = float.NegativeInfinity;
@@ -952,8 +996,8 @@ namespace SchoolTwin.Weather
             {
                 RaycastHit h = groundHits[i];
                 if (h.collider == null) continue;
-                if (h.collider.isTrigger) continue;                    // 触发器不算地面
-                if (IsPlayerCollider(h.collider, playerRoot)) continue; // 跳过玩家胶囊
+                if (h.collider.isTrigger) continue;              // 触发器不算地面
+                if (IsPlayerCollider(h.collider)) continue;      // 跳过玩家胶囊
                 if (h.point.y < camPos.y - 0.001f)                     // 只取相机下方的地面
                 {
                     if (!found || h.point.y > best) { best = h.point.y; found = true; }
@@ -964,11 +1008,70 @@ namespace SchoolTwin.Weather
             return camPos.y - 1.62f;   // 打不到地面（室内/悬空）就用眼高反推
         }
 
-        /// <summary>判断碰撞体是不是玩家自身（玩家根节点或其子物体）。</summary>
-        private bool IsPlayerCollider(Collider c, Transform playerRoot)
+        /// <summary>
+        /// 判断碰撞体是不是玩家自身。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// 【P13 修的真 bug：第三人称下 indoor 恒定被判 true】
+        ///
+        /// 原实现只认 `cam.transform.root`：
+        ///     Transform playerRoot = cam.transform.root;
+        ///     return c.transform.IsChildOf(playerRoot);
+        ///
+        /// 但这套第三人称相机 **不是玩家的子物体** —— `TwinThirdPersonCamera` 用
+        /// `_target` 跟随玩家、每帧自己算弹簧臂位置（`transform.position = ...`），
+        /// 相机的 parent 是场景根。于是 `cam.transform.root` 返回**相机自己**，
+        /// `IsChildOf` 对玩家身上的任何碰撞体都返回 false。
+        ///
+        /// 后果链（三个现象一条根）：
+        ///   · 向上射线从相机往上打 40m，打到玩家自己的手臂/头 → 没有被识别为玩家
+        ///     → `indoor = true`
+        ///   · `indoorFade → 0`，积雪量 = snowAccum × altFade × **indoorFade** → **恒为 0**
+        ///     ← 这就是"雪天有雪花、地上一点雪都没有"
+        ///   · 雨雪粒子乘的是 `shelter = Lerp(0.25, 1, indoorFade)`，室内留 0.25 底噪
+        ///     → 看着还有一点雨丝，但明显偏稀 ← 这就是"雨有但很稀"
+        ///
+        /// 【修法】玩家根节点不能从相机推，要独立认定。三层判据，从准到宽：
+        ///   ① 找场景里的 `TwinPlayerController`（第三人称玩家的权威来源），取它的 transform
+        ///   ② 退回：找 tag == "Player"
+        ///   ③ 再退回：才用 cam.transform.root（第一人称模式下相机可能在玩家子节点下，这条仍然有效）
+        ///
+        /// 为什么优先 ①：`TwinPlayerController` 是 `[RequireComponent(CharacterController)]`
+        /// 的可移动角色本体，它存在就意味着"场景里有个玩家在跑"，语义最稳，不依赖层级摆放。
+        /// 不用 `FindObjectOfType` 每帧找 —— 结果缓存，只在 `RebindCamera()` 时失效重找一次。
+        /// ══════════════════════════════════════════════════════════════════
+        /// </summary>
+        private bool IsPlayerCollider(Collider c)
         {
-            if (c == null || playerRoot == null) return false;
+            if (c == null) return false;
+
+            Transform playerRoot = PlayerRoot();
+            if (playerRoot == null) return false;
+
             return c.transform.IsChildOf(playerRoot);
+        }
+
+        /// <summary>玩家根节点。结果缓存；相机会换（数字孪生 ↔ 第一人称）时由 RebindCamera 清缓存。</summary>
+        private Transform _playerRoot;
+
+        private Transform PlayerRoot()
+        {
+            if (_playerRoot != null) return _playerRoot;
+
+            // ① 第三人称玩家控制器 —— 最权威。用 FindObjectOfType 全扫一次即缓存。
+            var pc = FindObjectOfType<SchoolTwin.Player.TwinPlayerController>();
+            if (pc != null) { _playerRoot = pc.transform; return _playerRoot; }
+
+            // ② tag 兜底
+            GameObject byTag = null;
+            try { byTag = GameObject.FindGameObjectWithTag("Player"); }
+            catch (UnityException) { /* 项目没定义 Player tag 时 FindGameObjectWithTag 会抛 */ }
+            if (byTag != null) { _playerRoot = byTag.transform; return _playerRoot; }
+
+            // ③ 最后才用相机的根（第一人称模式下相机常挂在玩家下面，这条有效；
+            //    第三人称独立相机走到这里说明前两层都没命中，此时宁可不认，也不要误判整棵树）
+            if (cam != null) _playerRoot = cam.transform.root;
+            return _playerRoot;
         }
 
         private readonly RaycastHit[] groundHits = new RaycastHit[16];
@@ -996,6 +1099,12 @@ namespace SchoolTwin.Weather
         }
 
         /// <summary>相机换了（比如从数字孪生切到第一人称）时重新绑定。</summary>
-        public void RebindCamera() { cam = null; }
+        public void RebindCamera()
+        {
+            cam = null;
+            // 玩家根也要跟着失效：从数字孪生（无玩家/相机在根）切回第三人称时，
+            // 缓存的空值或旧相机根会让 IsPlayerCollider 一直判错，积雪又归零。
+            _playerRoot = null;
+        }
     }
 }

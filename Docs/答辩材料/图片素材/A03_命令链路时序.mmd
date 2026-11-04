@@ -1,0 +1,51 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#5C7089","edgeLabelBackground":"#0A1628","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A03 命令链路四段超时 —— 来源：TwinCommandCenter.cs L35-46 超时常量 + TrySend 拒绝链
+%% 常量实测：_publishTimeout=1f / _ackTimeout=3f / _actuatedTimeout=3f / _readbackTimeout=5f
+flowchart TB
+    UI["<div style='min-width:620px;text-align:center'><b>面板点开关</b>　TwinCommandCenter.TrySend</div>"]
+
+    CHK["<div style='min-width:620px;text-align:center'><b>拒绝链八道校验</b>　回放 → 模型 → 断电 → 动作 → 范围 → 串行锁 → 回读判据 → 白名单<br/>任一道不过即拒绝，日志写明哪一道拒的</div>"]
+
+    R1["<div style='min-width:420px;text-align:center'><b>① 下发</b>　_PublishTimeout = <b>1s</b></div>"]
+    R2["<div style='min-width:420px;text-align:center'><b>② 回执</b>　_AckTimeout = <b>3s</b></div>"]
+    R3["<div style='min-width:420px;text-align:center'><b>③ 执行</b>　_ActuatedTimeout = <b>3s</b></div>"]
+    R4["<div style='min-width:420px;text-align:center'><b>④ 回读</b>　_ReadbackTimeout = <b>5s</b></div>"]
+
+    OK["<div style='min-width:420px;text-align:center'><b>Confirmed</b>　回读值落在期望区间</div>"]
+
+    E1["<div style='min-width:230px;text-align:center'>Failed　下发超时</div>"]
+    E2["<div style='min-width:230px;text-align:center'>Failed　无回执</div>"]
+    E3["<div style='min-width:230px;text-align:center'>Failed　未执行</div>"]
+    E4["<div style='min-width:230px;text-align:center'>Failed　回读超时</div>"]
+    E5["<div style='min-width:230px;text-align:center'>Failed　Mismatch</div>"]
+
+    LOG["<div style='min-width:620px;text-align:center'><b>TwinCommandLog</b>　500 条环形缓冲<br/>每条记录写明失败段与原因，面板显示「无响应」保持 3s</div>"]
+
+    UI --> CHK
+    CHK --> R1
+    R1 --> R2
+    R2 --> R3
+    R3 --> R4
+    R4 --> OK
+
+    R1 -.-> E1
+    R2 -.-> E2
+    R3 -.-> E3
+    R4 -.-> E4
+    R4 -.-> E5
+
+    E1 --> LOG
+    E2 --> LOG
+    E3 --> LOG
+    E4 --> LOG
+    E5 --> LOG
+    OK --> LOG
+
+    classDef ok fill:#152218,stroke:#33CC59,stroke-width:2px,color:#F0F5FC
+    classDef step fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef fail fill:#241618,stroke:#E63333,color:#E8C8C8
+    classDef plain fill:#121B28,stroke:#39485C,color:#B8C6D8
+    class OK ok
+    class CHK,R1,R2,R3,R4 step
+    class E1,E2,E3,E4,E5 fail
+    class UI,LOG plain

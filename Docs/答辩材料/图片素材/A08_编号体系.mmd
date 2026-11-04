@@ -1,0 +1,34 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#5C7089","edgeLabelBackground":"#0A1628","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A08 编号体系三层 + 唯一化前后对比 —— 来源：TwinCode.cs（Full:146 / Short:102 / WithType:111 / TypeMid:204）+ P7 断点
+flowchart TB
+    ID["<div style='min-width:700px;text-align:center'><b>TwinId</b>　内部主键，唯一真实身份<br/><b>编号永不进存储</b>：落盘 / 录像 / 命令日志一律用 TwinId，改命名规则不动数据</div>"]
+
+    L1["<div style='min-width:700px;text-align:center'><b>① 短码　Short()</b>　用于列表，列宽 90px 必须放得下<br/><b>2F203-灯001</b>　房间 + 类型 + 序号</div>"]
+
+    L2["<div style='min-width:700px;text-align:center'><b>② 带类型　WithType()</b>　用于需要说清类型的中间层<br/>用 TypeMid（2~3 字）而非 TypeLabel 全名</div>"]
+
+    L3["<div style='min-width:700px;text-align:center'><b>③ 全码　Full()</b>　仅用于详情卡（宽 300+），全码只在此出现<br/><b>1号教学楼2F203 · 001灯具</b>　楼栋 + 房间 + 房间类型 + 分隔符 + 序号 + 类型</div>"]
+
+    B["<div style='min-width:700px;text-align:center'><b>唯一化之前</b>　短码只到房间层，同房间不同类型设备撞号<br/>2F203-001 · 2F203-002 · 2F203-003 …　70 台里 <b>51 台不可单独指认</b></div>"]
+
+    A["<div style='min-width:700px;text-align:center'><b>唯一化之后</b>　短码补上类型段<br/>2F203-灯001 · 2F203-空调001 · 2F203-传感器001<br/>唯一短码 <b>34 → 70</b>　撞号 <b>15 组 → 0 组</b></div>"]
+
+    R["<div style='min-width:700px;text-align:center'><b>根因</b>：TwinCode.Short() 拆出了 category 却没用<br/><b>行业依据</b>：施耐德 EBO「设备树路径即 ID」→ 列表短码 / 详情全码</div>"]
+
+    ID --> L1
+    L1 --> L2
+    L2 --> L3
+    L3 --> B
+    B --> A
+    A --> R
+
+    classDef key fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef lv fill:#141E2C,stroke:#4A6FA5,color:#F0F5FC
+    classDef bad fill:#241618,stroke:#E63333,color:#E8C8C8
+    classDef good fill:#152218,stroke:#33CC59,color:#F0F5FC
+    classDef note fill:#121B28,stroke:#39485C,color:#B8C6D8
+    class ID key
+    class L1,L2,L3 lv
+    class B bad
+    class A good
+    class R note

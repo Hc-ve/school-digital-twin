@@ -3,7 +3,11 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using SchoolTwin.Data;
+using SchoolTwin.Twin;      // P13：TwinWeatherBridge（唯一写入出口）
 using SchoolTwin.Weather;
+
+// 别名：理由见 TwinWeatherBridge.cs 顶部注释（`SchoolTwin.Weather` 命名空间遮蔽同名枚举）。
+using WeatherKind = SchoolTwin.Weather.Weather;
 
 namespace SchoolTwin.UI
 {
@@ -63,7 +67,7 @@ namespace SchoolTwin.UI
         private const int RandomIndex = 0;
 
         /// <summary>按钮索引 → 视觉档。索引 0（随机）不在这张表里，特判处理。</summary>
-        private static readonly Weather[] PickWeather = { Weather.Clear, Weather.Clear, Weather.Rain, Weather.Snow };
+        private static readonly WeatherKind[] PickWeather = { WeatherKind.Clear, WeatherKind.Clear, WeatherKind.Rain, WeatherKind.Snow };
 
         // ---- 运行时节点 ----
         private RectTransform _card;
@@ -409,7 +413,7 @@ namespace SchoolTwin.UI
             {
                 // "随机"是一个动作而不是一档状态：从视觉 7 档里随机取一个
                 int pick = UnityEngine.Random.Range(0, 7);
-                TwinWeatherBridge.ApplyWeather((Weather)pick);
+                TwinWeatherBridge.ApplyWeather((WeatherKind)pick);
             }
             else
             {
@@ -453,15 +457,15 @@ namespace SchoolTwin.UI
         {
             if (_buttons == null) return;
 
-            Weather cur = TwinWeatherBridge.CurrentVisual;
+            WeatherKind cur = TwinWeatherBridge.CurrentVisual;
 
             // 四档里哪一格"代表"了当前视觉档。注意多对一：
             // 视觉侧是 Overcast/Storm/Fog 时，面板上没有对应格 —— 那就一格都不选中。
             // 这不是缺陷：面板只是"四个快捷入口"，不代表完整状态（完整状态在底行文字里）。
             int sel = -1;
-            if (cur == Weather.Clear) sel = 1;
-            else if (cur == Weather.Rain) sel = 2;
-            else if (cur == Weather.Snow) sel = 3;
+            if (cur == WeatherKind.Clear) sel = 1;
+            else if (cur == WeatherKind.Rain) sel = 2;
+            else if (cur == WeatherKind.Snow) sel = 3;
 
             for (int i = 0; i < _buttons.Length; i++)
             {
@@ -480,7 +484,7 @@ namespace SchoolTwin.UI
         {
             if (_statusText == null) return;
 
-            Weather w = TwinWeatherBridge.CurrentVisual;
+            WeatherKind w = TwinWeatherBridge.CurrentVisual;
             double h = _dragging ? _hour : TwinClimate.HourOfDay;
 
             // 昼 = 06:00–18:00，夜 = 其余（图纸 §2.4 的文案规则，与表盘数字标口径一致）
@@ -513,16 +517,16 @@ namespace SchoolTwin.UI
 
         /// <summary>7 档的中文名。与 EnvironmentState.WeatherLabel 同口径，但那边在 Weather 命名空间，
         /// 这里为了不让 UI 层直接依赖那个静态方法（它还需要 EnvironmentState 存在），单独给一份。</summary>
-        private static string WeatherLabel(Weather w)
+        private static string WeatherLabel(WeatherKind w)
         {
             switch (w)
             {
-                case Weather.Cloudy: return "多云";
-                case Weather.Overcast: return "阴";
-                case Weather.Rain: return "雨";
-                case Weather.Storm: return "雷雨";
-                case Weather.Fog: return "雾";
-                case Weather.Snow: return "雪";
+                case WeatherKind.Cloudy: return "多云";
+                case WeatherKind.Overcast: return "阴";
+                case WeatherKind.Rain: return "雨";
+                case WeatherKind.Storm: return "雷雨";
+                case WeatherKind.Fog: return "雾";
+                case WeatherKind.Snow: return "雪";
                 default: return "晴";
             }
         }

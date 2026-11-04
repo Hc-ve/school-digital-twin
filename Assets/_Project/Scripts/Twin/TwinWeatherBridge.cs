@@ -2,6 +2,25 @@ using UnityEngine;
 using SchoolTwin.Data;
 using SchoolTwin.Weather;
 
+// ══════════════════════════════════════════════════════════════════════
+// 【别名：必须加，否则 CS0118】
+//
+// `SchoolTwin.Weather` 是**命名空间**，它里面那个枚举也叫 `Weather`
+// （全名 `SchoolTwin.Weather.Weather`）。在 `SchoolTwin.Twin` 里裸写 `Weather` 时，
+// C# 的名字解析顺序是：
+//   ① 当前命名空间 SchoolTwin.Twin 的成员   → 没有
+//   ② **外层命名空间 SchoolTwin 的成员**     → 有 `SchoolTwin.Weather`（命名空间）→ 命中！
+//   ③ using 引入的类型                       → 轮不到
+// 所以 `Weather v` 会被判成"拿命名空间当类型用"，报 CS0118。
+//
+// 天气包自己那 8 个文件在 `SchoolTwin.Weather` 内部解析，① 就命中了枚举，
+// 因此它们在移植后不报错 —— 这正是"改命名空间只在外部消费者处暴露"的典型。
+//
+// 修法选别名而不是给枚举改名：`EnvModels.cs` 里的枚举名/顺序是队员包的接口约定
+// （序号会进存档），改名会连带影响移植代码；而别名只影响本文件的可读名。
+// ══════════════════════════════════════════════════════════════════════
+using WeatherKind = SchoolTwin.Weather.Weather;
+
 namespace SchoolTwin.Twin
 {
     /// <summary>
@@ -68,17 +87,17 @@ namespace SchoolTwin.Twin
         // ================================================================ 7 → 4
 
         /// <summary>视觉 7 档 → 数据 4 档。多对一见类注释的表。</summary>
-        public static TwinClimate.Weather ToData(Weather v)
+        public static TwinClimate.Weather ToData(WeatherKind v)
         {
             switch (v)
             {
-                case Weather.Clear: return TwinClimate.Weather.Sunny;
-                case Weather.Cloudy: return TwinClimate.Weather.Cloudy;
-                case Weather.Overcast: return TwinClimate.Weather.Cloudy;
-                case Weather.Rain: return TwinClimate.Weather.Rainy;
-                case Weather.Storm: return TwinClimate.Weather.Rainy;
-                case Weather.Fog: return TwinClimate.Weather.Cloudy;
-                case Weather.Snow: return TwinClimate.Weather.Snowy;
+                case WeatherKind.Clear: return TwinClimate.Weather.Sunny;
+                case WeatherKind.Cloudy: return TwinClimate.Weather.Cloudy;
+                case WeatherKind.Overcast: return TwinClimate.Weather.Cloudy;
+                case WeatherKind.Rain: return TwinClimate.Weather.Rainy;
+                case WeatherKind.Storm: return TwinClimate.Weather.Rainy;
+                case WeatherKind.Fog: return TwinClimate.Weather.Cloudy;
+                case WeatherKind.Snow: return TwinClimate.Weather.Snowy;
                 default: return TwinClimate.Weather.Cloudy;
             }
         }
@@ -86,15 +105,15 @@ namespace SchoolTwin.Twin
         // ================================================================ 4 → 7
 
         /// <summary>数据 4 档 → 视觉 7 档（取代表性档，见类注释）。</summary>
-        public static Weather ToVisual(TwinClimate.Weather v)
+        public static WeatherKind ToVisual(TwinClimate.Weather v)
         {
             switch (v)
             {
-                case TwinClimate.Weather.Sunny: return Weather.Clear;
-                case TwinClimate.Weather.Cloudy: return Weather.Cloudy;
-                case TwinClimate.Weather.Rainy: return Weather.Rain;
-                case TwinClimate.Weather.Snowy: return Weather.Snow;
-                default: return Weather.Cloudy;
+                case TwinClimate.Weather.Sunny: return WeatherKind.Clear;
+                case TwinClimate.Weather.Cloudy: return WeatherKind.Cloudy;
+                case TwinClimate.Weather.Rainy: return WeatherKind.Rain;
+                case TwinClimate.Weather.Snowy: return WeatherKind.Snow;
+                default: return WeatherKind.Cloudy;
             }
         }
 
@@ -123,7 +142,7 @@ namespace SchoolTwin.Twin
         /// 若在回调里读 TwinClimate 会读到**旧的**天气值 —— 那一瞬间两套系统矛盾。
         /// 先写数据侧就没有这个窗口。
         /// </summary>
-        public static void ApplyWeather(Weather v)
+        public static void ApplyWeather(WeatherKind v)
         {
             TwinClimate.SetWeather(ToData(v));
 
@@ -168,7 +187,7 @@ namespace SchoolTwin.Twin
         }
 
         /// <summary>当前视觉档天气。没挂 EnvironmentState 时退回由数据档反推。</summary>
-        public static Weather CurrentVisual
+        public static WeatherKind CurrentVisual
         {
             get
             {

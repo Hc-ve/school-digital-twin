@@ -502,8 +502,8 @@ P12-04d | 告警历史浮层源文件与 meta 都不在 | hasnot:Assets/_Project
 P12-04e | 点位清单 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinPointListPanel.cs.meta
 P12-04f | 告警历史浮层 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs.meta
 P12-05 | ToggleLegacyPanel 已消失（含注释外的全部调用点） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:ToggleLegacyPanel
-P12-06 | 工具行已减为两项 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助" \};
-P12-07 | 工具行两项坐标已重排（长度与项数一致） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f \};
+P12-06 | 工具行无假按钮（P13 后为三项，每项都有实现；见 P13-25/27） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气" \};
+P12-07 | 工具行坐标长度与项数一致（三项，间距 96） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f \};
 P12-08 | 假 Toast「P2 接入」已不再出现 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:P2 接入
 P12-09 | 工具行命中区长度跟随项数（不再写死 4） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_toolHits = new RectTransform\[_toolNames\.Length\]
 P12-10 | 【反向】TwinDetailPanel 仍在——它是浮卡宿主，不许被误删 | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:public class TwinDetailPanel : MonoBehaviour
@@ -575,7 +575,7 @@ P13-05 | 【Shader】WetGround 已改内置管线 ForwardBase | grep:1:Assets/_P
 P13-06 | 【禁止项】不许引入队员包的 UIStyle（会与 TwinTheme 两套主色并存） | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:UIStyle\.
 P13-07 | 【禁止项】不许引入队员包的 UITheme | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:UITheme\.
 P13-08 | 【禁止项】视觉必须走项目 TwinTheme（WeatherPanel 已换成 TwinButton） | grep:1:Assets/_Project/Scripts/Weather/WeatherPanel.cs:using SchoolTwin\.UI;
-P13-09 | 【数据层】7 档视觉到 4 档数据的映射入口唯一 | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:public static void ApplyWeather\(Weather v\)
+P13-09 | 【数据层】7 档视觉到 4 档数据的映射入口唯一（别名 WeatherKind，见 P13-37） | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:public static void ApplyWeather\(WeatherKind v\)
 P13-10 | 【数据层】改天气必须同帧调 TwinClimate.SetWeather（不能只改视觉侧） | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:TwinClimate\.SetWeather\(ToData\(v\)\);
 P13-11 | 【同型病】自动轮换也必须走桥，不许直调 env.SetWeather | grep:1:Assets/_Project/Scripts/Weather/WeatherDirector.cs:TwinWeatherBridge\.ApplyWeather\(PickNext
 P13-12 | 【同型病】队员面板的选天气也必须走桥 | grep:1:Assets/_Project/Scripts/Weather/WeatherPanel.cs:TwinWeatherBridge\.ApplyWeather\(All\[i\]\)
@@ -603,3 +603,20 @@ P13-33 | 【曝光】postExposure 由昼夜档驱动，不是每帧无脑写 | g
 P13-34 | 【曝光】后处理走反射软依赖（删包只掉功能，不瘫痪编译） | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:private void BindPostProcess\(\)
 P13-35 | 【曝光】反射写值必须同时置 overrideState（只写 value 不生效） | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:SetMember\(param, "overrideState", true\);
 P13-36 | 【回归】不许裸写 Object[]（System 与 UnityEngine 二义，CS0104） | grep:0:Assets/_Project/Scripts/Weather/EnvironmentState.cs:(?<!UnityEngine\.)\bObject\[\]
+P13-37 | 【回归】外部命名空间必须用别名引用 7 档枚举（SchoolTwin.Weather 命名空间遮蔽同名枚举 → CS0118） | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:using WeatherKind = SchoolTwin\.Weather\.Weather;
+P13-38 | 【回归】卡片侧同样要别名 | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:using WeatherKind = SchoolTwin\.Weather\.Weather;
+P13-39 | 【Shader】SnowGround 必须 include Lighting.cginc（_LightColor0 不在 UnityCG 里，漏了报 undeclared identifier） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:^            #include "Lighting\.cginc"$
+P13-40 | 【Shader】WetGround 立方图采样必须走 UNITY_SAMPLE_TEXCUBE_LOD（d3d11 下 texCUBElod 找不到 samplerCUBE） | grep:1:Assets/_Project/Scripts/Weather/Resources/WetGround.shader:UNITY_SAMPLE_TEXCUBE_LOD\(unity_SpecCube0, R, _Gloss\)
+P13-41 | 【Shader】WetGround 不许再直接写 texCUBElod（会重现 d3d11 编译错） | grep0:Assets/_Project/Scripts/Weather/Resources/WetGround.shader:texCUBElod\(
+P13-42 | 【回归】EnvironmentState 必须给 UnityEngine.Random 起别名（using System 会与 System.Random 撞名 → CS0104） | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:^using Random = UnityEngine\.Random;$
+P13-43 | 【回归】卡片必须显式 using SchoolTwin.Twin（TwinWeatherBridge 在 Twin，不在 UI → CS0103） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:^using SchoolTwin\.Twin;
+P13-44 | 【回归】Editor 工具也必须用别名引用 7 档枚举（第三次踩 CS0118，见 TwinP13WeatherSetup 顶注） | grep:1:Assets/_Project/Editor/TwinP13WeatherSetup.cs:^using WeatherKind = SchoolTwin\.Weather\.Weather;
+P13-45 | 【回归】诊断工具同样要别名 | grep:1:Assets/_Project/Editor/TwinP13WeatherDiag.cs:^using WeatherKind = SchoolTwin\.Weather\.Weather;
+P13-46 | 【自举】天气系统必须运行时自举（场景里从未挂过 EnvironmentState，按 guid 查四个场景引用数全 0） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:\[RuntimeInitializeOnLoadMethod\(RuntimeInitializeLoadType\.AfterSceneLoad\)\]
+P13-47 | 【自举】用 TwinRuntime.Instance 当孪生场景判据（不硬编码场景名，与 TwinPerfBootstrap 同口径） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:if \(TwinRuntime\.Instance == null\) return false;
+P13-48 | 【自举】必须新建独立物体（挂 TwinRuntime 身上会把 Bus/数据源线程一起带进 DontDestroyOnLoad） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:GameObject go = new GameObject\(RootName\);
+P13-49 | 【同型病】EnvironmentState 创建点必须唯一（多创建点会在 Awake 里互相 Destroy） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:EnvironmentState env = go\.AddComponent<EnvironmentState>\(\);
+P13-50 | 【同型病】抽屉兜底必须走 Ensure，不许自己 new（删掉的那个创建点，防回潮） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:new GameObject\("Environment"\)
+P13-51 | 【同型病】WeatherPanel 同样不许自建 EnvironmentState | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:new GameObject\("EnvironmentState"\)
+P13-52 | 【同型病】数据侧默认 Cloudy、视觉侧默认 Clear，自举时必须对齐（否则天上大太阳、室温按多云算） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:TwinWeatherBridge\.ApplyWeather\(env\.weather\);
+P13-53 | 【禁令】不许用 Editor 菜单往场景挂天气组件（P13 任务包明令禁止手动摆物件） | grep0:Assets/_Project/Editor/TwinP13WeatherSetup.cs:AddComponent<EnvironmentState>

@@ -1,0 +1,37 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#5C7089","edgeLabelBackground":"#0A1628","transitionColor":"#9EB0C9","transitionLabelColor":"#C8D4E2","labelColor":"#C8D4E2","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"}}}%%
+%% A06 告警与设备状态机 —— 来源：TwinAnchor.cs L35-40 / TwinAlarmCenter.cs L21-58 / P28 §4.4
+%% 阈值实测：Stale 3s / Offline 5s / 抖动抑制 0.05s / 告警轮询 0.2s
+stateDiagram-v2
+    direction LR
+    [*] --> Normal: 数据到达
+
+    Normal --> Warning: 越 Warning 线
+    Warning --> Normal: 回落基线内
+    Warning --> Alarm: 越 Alarm 线
+    Alarm --> Warning: 回落仍越警线
+    Alarm --> Normal: 完全回落
+
+    Normal --> Stale: 沉默 3s
+    Warning --> Stale: 沉默 3s
+    Alarm --> Stale: 沉默 3s
+    Stale --> Offline: 继续沉默 5s
+    Stale --> Normal: 数据恢复
+    Offline --> Normal: 数据恢复
+
+    Normal --> Suppressed: 回路断开
+    Warning --> Suppressed: 回路断开
+    Suppressed --> Normal: 回路合闸
+
+    classDef normal fill:#152218,stroke:#33CC59,stroke-width:2px,color:#F0F5FC
+    classDef warn fill:#241E14,stroke:#FF9E26,stroke-width:2px,color:#F0F5FC
+    classDef alarm fill:#241618,stroke:#E63333,stroke-width:2px,color:#F0F5FC
+    classDef stale fill:#1C1C22,stroke:#808090,stroke-width:2px,color:#C8C8D0
+    classDef offline fill:#161619,stroke:#474754,stroke-width:2px,color:#9090A0
+    classDef sup fill:#1A1A24,stroke:#5A6B80,stroke-width:2px,color:#B8C6D8
+
+    class Normal normal
+    class Warning warn
+    class Alarm alarm
+    class Stale stale
+    class Offline offline
+    class Suppressed sup

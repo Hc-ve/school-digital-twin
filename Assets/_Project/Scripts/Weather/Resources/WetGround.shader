@@ -169,9 +169,20 @@ Shader "CampusUI/WetGround"
                 // 解析天空：反射方向越朝上越接近天顶色
                 float3 sky = lerp(_HorizonColor.rgb, _SkyColor.rgb, saturate(R.y * 1.5));
 
-                // 立方图采样：内置管线用 texCUBElod（URP 的 SAMPLE_TEXTURECUBE_LOD 同价）。
-                // DecodeHDREnvironment 来自 UnityCG.cginc，兄弟参数 unity_SpecCube0_HDR 由 Unity 自动绑定。
-                half4 enc = texCUBElod(unity_SpecCube0, float4(R, _Gloss));
+                // 立方图采样：**不能直接写 texCUBElod**。
+                //
+                // 【根因】d3d11 下 Unity 把反射探针拆成两半：
+                //     TextureCube  unity_SpecCube0;
+                //     SamplerState unity_SpecCube0_sampler;   ← 独立 SamplerState
+                // 而 `texCUBElod(samplerCUBE, float4)` 要求纹理与采样器**合并成一个
+                // samplerCUBE 对象**，两半拆开时 d3d11 就会报
+                //     "texCUBElod: no matching 2 parameter intrinsic function"
+                // （列出的四个候选全是 samplerCUBE 版本，一个都用不上）。
+                //
+                // 正确写法是走 Unity 的封装宏，它按平台自行决定"合并采样"还是"分离采样"：
+                //     UNITY_SAMPLE_TEXCUBE_LOD(tex, coord)   →  带 mip 的立方图采样
+                // 底层的 unity_SpecCube0_HDR 由 Unity 自动绑定，不用自己声明。
+                half4 enc = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, R, _Gloss);
                 float3 env = DecodeHDR(enc, unity_SpecCube0_HDR);
 
                 float lum = dot(env, float3(0.299, 0.587, 0.114));

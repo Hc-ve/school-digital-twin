@@ -65,6 +65,15 @@ Shader "CampusUI/SnowGround"
             #pragma multi_compile_fog
 
             #include "UnityCG.cginc"
+            // 【必须的三个 include，少一个都编译不过】
+            //   UnityCG.cginc     —— 坐标变换、TRANSFORM_TEX、fog 宏、ShadeSH9
+            //   Lighting.cginc    —— _LightColor0 / _WorldSpaceLightPos0 / _LightMatrix0
+            //                        （这两个变量**不在** UnityCG 里。URP 版里它们由
+            //                         Light 结构体带进来，改写时最容易漏掉的就是这一句，
+            //                         表现为 d3d11 上 "undeclared identifier '_LightColor0'"）
+            //   AutoLight.cginc   —— SHADOW_COORDS / TRANSFER_SHADOW / UNITY_LIGHT_ATTENUATION
+            //                        它自身 include 了 UnityShadowLibrary，但**不含** _LightColor0
+            #include "Lighting.cginc"
             #include "AutoLight.cginc"
 
             sampler2D _SnowTex;

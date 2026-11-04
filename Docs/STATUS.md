@@ -1,18 +1,18 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-04 11:54:19**
+> 生成时间：**2026-11-04 12:38:52**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**断点正在施工**：最后改动 `TwinTimeWeatherCard.cs`（5 秒前）。未提交代码文件 **6** 个。
+**断点正在施工**：最后改动 `WeatherPanel.cs`（5 分钟前）。未提交代码文件 **11** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
-共 **256** 条判据：**254 通过** / 2 未过 / 0 无法判定。
+共 **273** 条判据：**273 通过** / 0 未过 / 0 无法判定。
 
 > 判据来自 `Tools/status_checks.txt`，全部是 `grep` / 文件存在性这类**机器可验证**的东西。
 > 没有「完成 80%」这种只能人填的数 —— 那种数一定滞后、一定美化。
@@ -174,8 +174,8 @@
 | `P12-04e` | 点位清单 .meta 已删 | ✅ 通过 | 不存在 |
 | `P12-04f` | 告警历史浮层 .meta 已删 | ✅ 通过 | 不存在 |
 | `P12-05` | ToggleLegacyPanel 已消失（含注释外的全部调用点） | ✅ 通过 | 0 处 ✔ |
-| `P12-06` | 工具行已减为两项 | ❌ 未过 | 0 处（需 =1） |
-| `P12-07` | 工具行两项坐标已重排（长度与项数一致） | ❌ 未过 | 0 处（需 =1） |
+| `P12-06` | 工具行无假按钮（P13 后为三项，每项都有实现；见 P13-25/27） | ✅ 通过 | 1 处（需 =1） |
+| `P12-07` | 工具行坐标长度与项数一致（三项，间距 96） | ✅ 通过 | 1 处（需 =1） |
 | `P12-08` | 假 Toast「P2 接入」已不再出现 | ✅ 通过 | 0 处 ✔ |
 | `P12-09` | 工具行命中区长度跟随项数（不再写死 4） | ✅ 通过 | 1 处（需 =1） |
 | `P12-10` | 【反向】TwinDetailPanel 仍在——它是浮卡宿主，不许被误删 | ✅ 通过 | 1 处（需 =1） |
@@ -247,7 +247,7 @@
 | `P13-06` | 【禁止项】不许引入队员包的 UIStyle（会与 TwinTheme 两套主色并存） | ✅ 通过 | 0 处 ✔ |
 | `P13-07` | 【禁止项】不许引入队员包的 UITheme | ✅ 通过 | 0 处 ✔ |
 | `P13-08` | 【禁止项】视觉必须走项目 TwinTheme（WeatherPanel 已换成 TwinButton） | ✅ 通过 | 1 处（需 =1） |
-| `P13-09` | 【数据层】7 档视觉到 4 档数据的映射入口唯一 | ✅ 通过 | 1 处（需 =1） |
+| `P13-09` | 【数据层】7 档视觉到 4 档数据的映射入口唯一（别名 WeatherKind，见 P13-37） | ✅ 通过 | 1 处（需 =1） |
 | `P13-10` | 【数据层】改天气必须同帧调 TwinClimate.SetWeather（不能只改视觉侧） | ✅ 通过 | 1 处（需 =1） |
 | `P13-11` | 【同型病】自动轮换也必须走桥，不许直调 env.SetWeather | ✅ 通过 | 1 处（需 =1） |
 | `P13-12` | 【同型病】队员面板的选天气也必须走桥 | ✅ 通过 | 1 处（需 =1） |
@@ -275,8 +275,25 @@
 | `P13-34` | 【曝光】后处理走反射软依赖（删包只掉功能，不瘫痪编译） | ✅ 通过 | 1 处（需 =1） |
 | `P13-35` | 【曝光】反射写值必须同时置 overrideState（只写 value 不生效） | ✅ 通过 | 1 处（需 =1） |
 | `P13-36` | 【回归】不许裸写 Object[]（System 与 UnityEngine 二义，CS0104） | ✅ 通过 | 0 处（需 =0） |
+| `P13-37` | 【回归】外部命名空间必须用别名引用 7 档枚举（SchoolTwin.Weather 命名空间遮蔽同名枚举 → CS0118） | ✅ 通过 | 1 处（需 =1） |
+| `P13-38` | 【回归】卡片侧同样要别名 | ✅ 通过 | 1 处（需 =1） |
+| `P13-39` | 【Shader】SnowGround 必须 include Lighting.cginc（_LightColor0 不在 UnityCG 里，漏了报 undeclared identifier） | ✅ 通过 | 1 处（需 =1） |
+| `P13-40` | 【Shader】WetGround 立方图采样必须走 UNITY_SAMPLE_TEXCUBE_LOD（d3d11 下 texCUBElod 找不到 samplerCUBE） | ✅ 通过 | 1 处（需 =1） |
+| `P13-41` | 【Shader】WetGround 不许再直接写 texCUBElod（会重现 d3d11 编译错） | ✅ 通过 | 0 处 ✔ |
+| `P13-42` | 【回归】EnvironmentState 必须给 UnityEngine.Random 起别名（using System 会与 System.Random 撞名 → CS0104） | ✅ 通过 | 1 处（需 =1） |
+| `P13-43` | 【回归】卡片必须显式 using SchoolTwin.Twin（TwinWeatherBridge 在 Twin，不在 UI → CS0103） | ✅ 通过 | 1 处（需 =1） |
+| `P13-44` | 【回归】Editor 工具也必须用别名引用 7 档枚举（第三次踩 CS0118，见 TwinP13WeatherSetup 顶注） | ✅ 通过 | 1 处（需 =1） |
+| `P13-45` | 【回归】诊断工具同样要别名 | ✅ 通过 | 1 处（需 =1） |
+| `P13-46` | 【自举】天气系统必须运行时自举（场景里从未挂过 EnvironmentState，按 guid 查四个场景引用数全 0） | ✅ 通过 | 1 处（需 =1） |
+| `P13-47` | 【自举】用 TwinRuntime.Instance 当孪生场景判据（不硬编码场景名，与 TwinPerfBootstrap 同口径） | ✅ 通过 | 1 处（需 =1） |
+| `P13-48` | 【自举】必须新建独立物体（挂 TwinRuntime 身上会把 Bus/数据源线程一起带进 DontDestroyOnLoad） | ✅ 通过 | 1 处（需 =1） |
+| `P13-49` | 【同型病】EnvironmentState 创建点必须唯一（多创建点会在 Awake 里互相 Destroy） | ✅ 通过 | 1 处（需 =1） |
+| `P13-50` | 【同型病】抽屉兜底必须走 Ensure，不许自己 new（删掉的那个创建点，防回潮） | ✅ 通过 | 0 处 ✔ |
+| `P13-51` | 【同型病】WeatherPanel 同样不许自建 EnvironmentState | ✅ 通过 | 0 处 ✔ |
+| `P13-52` | 【同型病】数据侧默认 Cloudy、视觉侧默认 Clear，自举时必须对齐（否则天上大太阳、室温按多云算） | ✅ 通过 | 1 处（需 =1） |
+| `P13-53` | 【禁令】不许用 Editor 菜单往场景挂天气组件（P13 任务包明令禁止手动摆物件） | ✅ 通过 | 0 处 ✔ |
 
-> ❌ 有 **2** 条未过 —— 说明对应工作**确实还没做完**，不是「快好了」。
+> ✅ **全部判据通过。** 可以进入验收（但不能替代 play 视觉验收）。
 
 ## 1. 代码是否已生效（基线 §6.8 唯一判据）
 
@@ -284,36 +301,45 @@
 
 | 项 | 时间 |
 |---|---|
-| 最后一个 .cs 改动 | 11-04 11:54:14（`TwinTimeWeatherCard.cs`） |
-| dll 编译时间 | 11-04 10:43:20 |
+| 最后一个 .cs 改动 | 11-04 12:33:44（`WeatherPanel.cs`） |
+| dll 编译时间 | 11-04 12:34:13 |
 
-> ❌ **未生效**：最后一个 .cs 比 dll 新了 **4254 秒**。
-> 说明改完还没触发编译（或无 Auto Refresh）。**现在 play 看到的不是最新代码。**
+> ✅ **已生效**，编译晚于最后改动 29 秒。可以 play 验收。
 
 ## 2. 未提交改动（= 有丢失风险的工作）
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **10** 个文件未提交（代码 6 / 文档与其他 1）。
+共 **20** 个文件未提交（代码 11 / 文档与其他 2）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 代码 | `Assets/_Project/Scripts/UI/TwinDrawer.cs` | 7 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinTheme.cs` | 6 秒前 |
-| 文档 | `Docs/STATUS.md` | 57 秒前 |
-| 其他 | `tools/status_checks.txt` | 0 秒前 |
-| 代码 | `Assets/_Project/Editor/TwinP13PostProcess.cs` | 4 分钟前 |
-| 代码 | `Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs` | 9 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinDialDragArea.cs` | 7 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs` | 5 秒前 |
-| 其他 | `Assets/_Project/Scripts/Weather` | 12 分钟前 |
-| 文档 | `Docs/P13-1_时间天气面板设计图纸_见微.md` | 8 分钟前 |
+| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity` | 22 分钟前 |
+| 其他 | `Assets/_Project/ScriptableObjects/PPS_Bloom.asset` | 22 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs` | 41 分钟前 |
+| 代码 | `Assets/_Project/Scripts/UI/TwinDrawer.cs` | 8 分钟前 |
+| 代码 | `Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs` | 29 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/EnvironmentState.cs` | 29 分钟前 |
+| 其他 | `Assets/_Project/Scripts/Weather/Resources/SnowGround.shader` | 40 分钟前 |
+| 其他 | `Assets/_Project/Scripts/Weather/Resources/WetGround.shader` | 40 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/WeatherPanel.cs` | 5 分钟前 |
+| 文档 | `Docs/STATUS.md` | 1 分钟前 |
+| 其他 | `tools/status_checks.txt` | 4 分钟前 |
+| 代码 | `Assets/_Project/Editor/TwinP13WeatherDiag.cs` | 7 分钟前 |
+| 其他 | `Assets/_Project/Editor/TwinP13WeatherDiag.cs.meta` | 5 分钟前 |
+| 代码 | `Assets/_Project/Editor/TwinP13WeatherSetup.cs` | 7 分钟前 |
+| 其他 | `Assets/_Project/Editor/TwinP13WeatherSetup.cs.meta` | 5 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs` | 7 分钟前 |
+| 其他 | `Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs.meta` | 5 分钟前 |
+| 文档 | `Docs/P13_时间天气融合_断点.md` | 1 分钟前 |
+| 其他 | `Docs/答辩材料` | 19 分钟前 |
+| 其他 | `p13_postprocess.txt` | 22 分钟前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `TwinTimeWeatherCard.cs` | 5 秒前 | 🔥 正在干 |
+| 断点 | `WeatherPanel.cs` | 5 分钟前 | 🔥 正在干 |
 | 见微 | `08_数据统计_全屏.png` | 1 天前 | 歇着 |
 | 心跳 | `P3_时序历史层_调研报告_断点.md` | 3 天前 | 歇着 |
 | 挑刺 | `P30_light_probe_exp.png` | 4 天前 | 歇着 |
@@ -323,6 +349,7 @@
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11:56 | `c3871f9` | docs(P00): P13-1 面板图纸通过 —— 裁决 C-48/49/50，主色口径以代码为准 |
 | 11:49 | `7a85cfc` | docs(P00): 登记答辩团队真实情况与分工处理原则 C-47（最高风险） |
 | 11:29 | `8e10df1` | docs(P13): 面板图纸改由见微出 —— 异环截图是移动端，像素不可照搬 |
 | 11:19 | `366fa1a` | docs(P13): 时间天气系统融合方案 + 基线 v1.24 + P30 死路真因 |
@@ -334,13 +361,15 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `STATUS.md` | 380 | 57 秒前 | ✅ 新鲜 |
-| `P00_项目总览_交接基线.md` | 1107 | 5 分钟前 | ✅ 新鲜 |
-| `P13-1_时间天气面板设计图纸_见微.md` | 265 | 8 分钟前 | ✅ 新鲜 |
-| `P13_时间天气系统融合方案_定盘.md` | 209 | 24 分钟前 | ✅ 新鲜 |
+| `P13_时间天气融合_断点.md` | 608 | 1 分钟前 | ✅ 新鲜 |
+| `STATUS.md` | 408 | 1 分钟前 | ✅ 新鲜 |
+| `PPT_逐页内容稿.md` | 382 | 19 分钟前 | ✅ 新鲜 |
+| `P00_项目总览_交接基线.md` | 1108 | 42 分钟前 | ✅ 新鲜 |
+| `P13-1_时间天气面板设计图纸_见微.md` | 265 | 53 分钟前 | ✅ 新鲜 |
+| `P13_时间天气系统融合方案_定盘.md` | 209 | 1 小时前 | ✅ 新鲜 |
 | `P12_旧面板清理_断点.md` | 737 | 1 小时前 | ✅ 新鲜 |
-| `P27_数据真实性_踩坑日志.md` | 807 | 1 小时前 | ✅ 新鲜 |
-| `P7_设备编号唯一化_断点.md` | 1091 | 13 小时前 | ✅ 新鲜 |
+| `P27_数据真实性_踩坑日志.md` | 807 | 2 小时前 | ✅ 新鲜 |
+| `P7_设备编号唯一化_断点.md` | 1091 | 14 小时前 | ✅ 新鲜 |
 | `P6_D5单位归一与D6量程核对_断点.md` | 353 | 1 天前 | ⚠️ 超 24h |
 | `机房交互_技术实现汇报.md` | 296 | 1 天前 | ⚠️ 超 24h |
 | `P5-5_统计页收尾任务包_断点.md` | 301 | 1 天前 | ⚠️ 超 24h |
@@ -357,13 +386,12 @@
 | `机房交互逻辑总表.md` | 355 | 2 天前 | ⚠️ 超 24h |
 | `README.md` | 123 | 2 天前 | ⚠️ 超 24h |
 | `WeatherSystem_TechDoc.md` | 4942 | 2 天前 | ⚠️ 超 24h |
-| `P3_时序历史层_调研报告_断点.md` | 340 | 3 天前 | ❌ 超 72h |
-| `P30_昼夜光照预设_执行记录_打光.md` | 126 | 4 天前 | ❌ 超 72h |
 
 ## 6. 最近 10 次提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11-04 11:56 | `c3871f9` | docs(P00): P13-1 面板图纸通过 —— 裁决 C-48/49/50，主色口径以代码为准 |
 | 11-04 11:49 | `7a85cfc` | docs(P00): 登记答辩团队真实情况与分工处理原则 C-47（最高风险） |
 | 11-04 11:29 | `8e10df1` | docs(P13): 面板图纸改由见微出 —— 异环截图是移动端，像素不可照搬 |
 | 11-04 11:19 | `366fa1a` | docs(P13): 时间天气系统融合方案 + 基线 v1.24 + P30 死路真因 |
@@ -373,7 +401,6 @@
 | 11-02 20:23 | `b4c5f8c` | docs(P00): 看板与统计页视觉快照刷新 |
 | 11-02 20:22 | `d2e84f2` | fix(Tools): 判据工具剔除注释行 —— 同一天误报三次的根因 |
 | 11-02 20:22 | `e09fb09` | feat(P5+P31): 统计页七条验收收口 + 告警点击定位打通 |
-| 11-02 19:55 | `326dd8a` | docs(P00): P5 统计页收口 —— 登记 D7、裁决 C-39、新增三条自查教训 |
 
 ---
 

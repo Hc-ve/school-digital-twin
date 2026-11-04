@@ -1,0 +1,39 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#0A1628","primaryTextColor":"#F0F5FC","primaryBorderColor":"#33BFFF","lineColor":"#4A5A70","fontFamily":"Microsoft YaHei, PingFang SC, sans-serif","fontSize":"15px"},"flowchart":{"htmlLabels":true}}}%%
+%% A02 数据流向 —— 来源：P00 §2.4 数据与通信 / DataSourceBase.cs / TwinRuntime.cs
+%% 双源 = MockDataSource（10Hz 本地仿真，断网兜底）+ MqttDataSource（回环）
+%% 单挂点事实：TwinRuntime.Sink 同一时刻只能挂一个 IDataSink，TwinFanoutSink 属 P28 规划、尚未实现
+flowchart TB
+    S1["<div style='min-width:600px;text-align:center'><b>MockDataSource</b>　10Hz 后台线程本地仿真<br/>已注册且在跑 · 答辩断网兜底靠它</div>"]
+    S2["<div style='min-width:600px;text-align:center'><b>MqttDataSource</b> + MqttLoopbackPublisher<br/>回环模式，<b>未接真实 MQTT 设备</b></div>"]
+
+    BASE["<div style='min-width:600px;text-align:center'><b>DataSourceBase.RegisterSource</b>　注册进 TwinRuntime.Sources<br/>m_Enabled = 0 的组件不进 Sources</div>"]
+
+    SINK["<div style='min-width:600px;text-align:center'><b>TwinRuntime.Sink</b>　单挂点<br/>同刻只能挂一个 IDataSink：数据总线 Bus（默认）或 TwinRecorder（录像时 RedirectSinkTo）<br/>⚠ TwinFanoutSink 是 P28 规划项，代码中尚不存在</div>"]
+
+    BUS["<div style='min-width:600px;text-align:center'><b>TwinDataBus.Flush 4096</b>　每帧刷新<br/>Core/TwinDataBus.cs 实现 IDataSink</div>"]
+
+    A1["<div style='min-width:250px;text-align:center'><b>TwinAnchor</b><br/>点位状态落值</div>"]
+    A2["<div style='min-width:250px;text-align:center'><b>TwinMetricHistory</b><br/>300 点环形缓冲</div>"]
+    A3["<div style='min-width:250px;text-align:center'><b>TwinRecorder</b><br/>jsonl 落盘可回放</div>"]
+
+    D1["<div style='min-width:250px;text-align:center'><b>UI 面板</b><br/>五模块页读 Registry</div>"]
+    D2["<div style='min-width:250px;text-align:center'><b>TwinAlarmCenter</b><br/>0.2s 轮询判阈</div>"]
+    D3["<div style='min-width:250px;text-align:center'><b>TwinDeviceStats</b><br/>总数/在线/告警</div>"]
+
+    S1 --> BASE
+    S2 --> BASE
+    BASE --> SINK
+    SINK --> BUS
+    BUS --> A1
+    BUS --> A2
+    BUS --> A3
+    A1 --> D1
+    A1 --> D2
+    A1 --> D3
+
+    classDef src fill:#121B28,stroke:#39485C,color:#B8C6D8
+    classDef key fill:#1A2534,stroke:#33BFFF,stroke-width:2px,color:#F0F5FC
+    classDef warn fill:#1F1A14,stroke:#FF9E26,color:#F0F5FC
+    class S1,S2,A2,A3,D1,D2,D3 src
+    class BASE,BUS,A1 key
+    class SINK warn
