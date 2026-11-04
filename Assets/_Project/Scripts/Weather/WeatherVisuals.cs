@@ -738,14 +738,28 @@ namespace SchoolTwin.Weather
         }
 
         /// <summary>
-        /// 自动挂载树根积雪组件：在 WeatherVisuals 下生成一个子物体并挂上 SnowOnTrees，免去手动配置。
-        /// 若场景里已经存在 SnowOnTrees 子物体(用户手动挂的)则跳过。
+        /// 自动挂载树根积雪组件：生成一个 TreeSnowPiles 物体并挂上 SnowOnTrees，免去手动配置。
+        /// 若场景里已经存在 SnowOnTrees（用户手动挂的）则跳过。
+        ///
+        /// ⚠️【P13】不能再用 GetComponentInChildren 判存在 —— 原因见下：
+        /// SnowOnTrees 的顶点全部是**世界坐标**，它必须钉在世界原点，
+        /// 而本组件的 LateUpdate 每帧把 transform 搬到相机位置。
+        /// 若把它挂成本组件的子节点，整块树根雪堆会跟着相机平移，
+        /// 几十块同高的水平圆盘与相机眼高共面 → 屏幕上收束成一条横贯全屏的白线
+        /// （2026-11-04 主理人反复反馈的"诡异白线"，成因即此）。
+        ///
+        /// 所以 SnowOnTrees.Build() 里会自行 SetParent(null) 摆脱本层级。
+        /// 一旦脱离父节点，GetComponentInChildren 就找不到了，
+        /// 每次重建都会再生成一个 → 必须改为**全场景**查找。
         /// </summary>
         private void EnsureTreeSnow()
         {
-            if (GetComponentInChildren<SnowOnTrees>() != null) return;
+            // 全场景查找（含未激活），避免"已存在但已脱离本层级"导致重复创建
+            if (Object.FindObjectOfType<SnowOnTrees>(true) != null) return;
             var tgo = new GameObject("TreeSnowPiles");
-            tgo.transform.SetParent(transform, false);
+            // 不再挂成本组件的子节点：SnowOnTrees 用世界坐标建 mesh，
+            // 父节点的任何平移都会让雪堆整体错位。这里直接放到场景根。
+            tgo.transform.position = Vector3.zero;
             tgo.AddComponent<SnowOnTrees>();
         }
 
@@ -1118,47 +1132,127 @@ namespace SchoolTwin.Weather
         /// </summary>
         private string BuildSliverSuspects()
         {
-            var sb = new System.Text.StringBuilder(900);
+            var sb = new System.Text.StringBuilder(1400);
             if (cam == null) return "    cam = null";
 
-            float camY = cam.transform.position.y;
-            sb.AppendLine("    相机世界 Y = " + camY.ToString("F2"));
-            sb.AppendLine("    判据：Y 向高度 < 1.2m 且 XZ > 5m 且跨过相机高度 且 透明队列/Always");
+            Vector3 camPos = cam.transform.position;
+            float camY = camPos.y;
+            sb.AppendLine("    相机世界坐标 = " + camPos.ToString("F3"));
+            sb.AppendLine("    判据：包围盒在 Y 方向很扁(<1.5m) 且宽(>4m) 且**跨过相机高度**");
+
+            // ── 先打两个穹顶的实际状态 ──────────────────────────────────
+            // 穹顶半径 380m、球心就在相机上。它的"地平线过渡带"在视平线附近
+            // 会投影成一条窄带 —— 这是本次最需要排除/确认的候选。
+            AppendDomeState(sb, "CloudDome", cloudDome, cloudMat);
+            AppendDomeState(sb, "StarDome", starDome, starMat);
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13】树根雪堆的位置自检 —— 白线的直接元凶就藏在这里
+            //
+            // 判据：它的顶点是**世界坐标**，所以 transform 必须停在原点。
+            // 若 position 跟着相机跑（历史上就是，因为被 SetParent 到本组件下，
+            // 而本组件每帧 transform.position = cam.position），
+            // 几十块同高水平圆盘会与相机眼高共面 → 屏幕上收束成一条横线。
+            // 这里把 transform 位置和「是否仍在跟随层级里」都打出来，
+            // 以后看一眼日志就能判断白线有没有回来。
+            // ══════════════════════════════════════════════════════════════
+            var treeSnow = Object.FindObjectOfType<SnowOnTrees>(true);
+            if (treeSnow == null)
+            {
+                sb.AppendLine("    [TreeSnowPiles] = null（未创建 / 场景无树）");
+            }
+            else
+            {
+                Transform tt = treeSnow.transform;
+                Vector3 tp = tt.position;
+                bool detached = tt.parent == null;
+                bool atOrigin = tp.sqrMagnitude < 0.0001f;
+                var tr = treeSnow.GetComponent<Renderer>();
+                string bbTxt = "n/a";
+                if (tr != null)
+                {
+                    Bounds tb = tr.bounds;
+                    bbTxt = "Y∈[" + tb.min.y.ToString("F2") + ", " + tb.max.y.ToString("F2")
+                          + "]  高=" + tb.size.y.ToString("F2") + "m";
+                }
+                sb.AppendLine("    [TreeSnowPiles] pos=" + tp.ToString("F2")
+                              + "  parent=" + (detached ? "null(已脱离，正确)" : tt.parent.name + " **仍在跟随层级里**")
+                              + "\n        transform归零=" + (atOrigin ? "是(正确)" : "**否 → 顶点是世界坐标，必须归零**")
+                              + "   渲染器enabled=" + (tr != null ? tr.enabled.ToString() : "?")
+                              + "\n        包围盒 " + bbTxt
+                              + "\n        ⚠️ 若包围盒 Y 区间**跨过相机高度**，且高很小(<1m) → 就是那条白线");
+            }
 
             Renderer[] all = Object.FindObjectsOfType<Renderer>();
+            sb.AppendLine("    场景渲染器总数 = " + all.Length);
             int hit = 0;
+            // ── 列出所有"跨过相机高度"的渲染器，按 Y 尺寸升序（越扁越靠前）──
+            // 为什么不再预先筛"扁 + 宽"：前一轮这么筛，一个都没命中，
+            // 说明真凶可能是个薄但不太宽的东西（横杆、贴片）。
+            // 现在只留一条硬条件 —— 包围盒必须跨过相机高度，因为横线就长在视平线上。
+            var list = new System.Collections.Generic.List<Renderer>();
             for (int i = 0; i < all.Length; i++)
             {
                 Renderer r = all[i];
                 if (r == null || !r.enabled || !r.gameObject.activeInHierarchy) continue;
-
                 Bounds b = r.bounds;
-                if (b.size.y >= 1.2f) continue;                 // 不够扁
-                if (b.size.x < 5f && b.size.z < 5f) continue;   // 不够宽
-                if (b.min.y > camY || b.max.y < camY) continue; // 没跨过视线
+                if (b.min.y > camY || b.max.y < camY) continue;          // 没跨过视平线
+                if (Mathf.Abs(b.center.x - camPos.x) > 120f) continue;
+                if (Mathf.Abs(b.center.z - camPos.z) > 120f) continue;
+                list.Add(r);
+            }
+            list.Sort((x, y) => x.bounds.size.y.CompareTo(y.bounds.size.y));
 
+            sb.AppendLine("    跨过视平线、水平 120m 内的渲染器 = " + list.Count + " 个");
+            for (int i = 0; i < list.Count && i < 25; i++)
+            {
+                Renderer r = list[i];
+                Bounds b = r.bounds;
                 Material m = r.sharedMaterial;
                 int q = (m != null) ? m.renderQueue : -1;
                 bool always = false;
                 if (m != null && m.HasProperty("_ZTest"))
                     always = m.GetFloat("_ZTest") == (float)CompareFunction.Always;
-
-                bool suspect = q >= 2500 || always;
-                if (!suspect) continue;
+                bool transparent = q >= 2500;
 
                 hit++;
-                sb.AppendLine("    ▸ " + r.gameObject.name
-                              + "   队列=" + q
-                              + (always ? "  **ZTest Always**" : "")
-                              + "\n        Y∈[" + b.min.y.ToString("F2") + ", " + b.max.y.ToString("F2")
-                              + "]  高度=" + b.size.y.ToString("F3") + "m"
-                              + "   XZ=" + b.size.x.ToString("F1") + "×" + b.size.z.ToString("F1") + "m"
-                              + "\n        中心=" + b.center.ToString("F2")
-                              + "   材质=" + (m != null ? m.shader.name : "null"));
+                sb.AppendLine("    " + i.ToString().PadLeft(2) + ". " + r.gameObject.name
+                              + "   高=" + b.size.y.ToString("F3") + "m"
+                              + "  XZ=" + b.size.x.ToString("F0") + "×" + b.size.z.ToString("F0") + "m"
+                              + "  Y∈[" + b.min.y.ToString("F2") + "," + b.max.y.ToString("F2") + "]"
+                              + "\n        队列=" + q + (transparent ? "(透明)" : "")
+                              + (always ? " **ZTestAlways**" : "")
+                              + "  距=" + Vector3.Distance(camPos, b.center).ToString("F1") + "m"
+                              + "  " + (m != null ? m.shader.name : "null"));
             }
-            if (hit == 0) sb.AppendLine("    **一个都没有** —— 横线不在渲染器包围盒层面，");
-            if (hit == 0) sb.AppendLine("    下一步查粒子系统（Billboard 渲染器的 bounds 往往极大）。");
+            if (hit == 0)
+            {
+                sb.AppendLine("    **一个都没有** —— 说明横线不在 3D 渲染器里，");
+                sb.AppendLine("    下一步查 Canvas 上的全屏 Image（UI 是屏幕空间，恒在同一位置）。");
+            }
             return sb.ToString();
+        }
+
+        /// <summary>打印一个跟随相机的穹顶的当前状态。</summary>
+        private void AppendDomeState(System.Text.StringBuilder sb, string label, Transform dome, Material mat)
+        {
+            if (dome == null)
+            {
+                sb.AppendLine("    [" + label + "] = null（未构建或已销毁）");
+                return;
+            }
+            sb.AppendLine("    [" + label + "] activeInHier=" + dome.gameObject.activeInHierarchy
+                          + "  localScale=" + dome.localScale.x.ToString("F1")
+                          + "  worldPos=" + dome.position.ToString("F2"));
+            if (mat == null) { sb.AppendLine("        材质 = null"); return; }
+
+            sb.AppendLine("        材质 = " + mat.shader.name + "  队列=" + mat.renderQueue);
+            if (mat.HasProperty("_Opacity"))
+                sb.AppendLine("        _Opacity=" + mat.GetFloat("_Opacity").ToString("F3")
+                              + "   _Overcast=" + (mat.HasProperty("_Overcast")
+                                  ? mat.GetFloat("_Overcast").ToString("F3") : "n/a")
+                              + "   _HorizonFade=" + (mat.HasProperty("_HorizonFade")
+                                  ? mat.GetFloat("_HorizonFade").ToString("F3") : "n/a"));
         }
 
         /// <summary>
@@ -1220,6 +1314,38 @@ namespace SchoolTwin.Weather
                                   ? "   **就是横线**，最大高差 " + lastSteepMaxDy.ToString("F2")
                                     + "m（间距 " + lastSteepStepM.ToString("F2") + "m）"
                                   : "   （应为 0；非 0 即横线来源）"));
+
+                // ══════════════════════════════════════════════════════════
+                // 【P13】最决定性的一条：雪面世界高度 vs 相机眼高
+                //
+                // 一段水平的半透明面片，只要它的高度**穿过相机眼高**，
+                // 透视下就会退化成一条横贯全屏的线：
+                //   · 面片高于眼高 → 看到它的下表面，仍是一条线；
+                //   · 面片正好等于眼高 → 视线与面共面，面积铺满整个屏幕，
+                //     亮度增量最大、上边缘最锐利 —— 正是截图里的样子。
+                // 这个判据不需要看截图也能定性，所以必须打进日志。
+                // ══════════════════════════════════════════════════════════
+                if (snowGround != null && cam != null)
+                {
+                    float snowWorldY = snowGround.position.y + bb.center.y;
+                    float camY2 = cam.transform.position.y;
+                    float gap = snowWorldY - camY2;
+                    sb.AppendLine("    雪面世界Y    = " + snowWorldY.ToString("F3")
+                                  + "    相机眼高 = " + camY2.ToString("F3")
+                                  + "    差 = " + gap.ToString("F3") + "m"
+                                  + (Mathf.Abs(gap) < 0.30f
+                                      ? "\n        ⚠️⚠️ **相差不足 0.3m —— 水平雪面与视线共面，"
+                                        + "必然在屏幕上收成一条横线**"
+                                      : "\n        差值足够，雪面不会与视线共面"));
+                }
+                if (snowGroundFar != null && cam != null)
+                {
+                    float farWorldY = snowGroundFar.position.y + snowMeshFar.bounds.center.y;
+                    float gap2 = farWorldY - cam.transform.position.y;
+                    sb.AppendLine("    远场雪面世界Y = " + farWorldY.ToString("F3")
+                                  + "    与眼高差 = " + gap2.ToString("F3") + "m"
+                                  + (Mathf.Abs(gap2) < 0.30f ? "   ⚠️ **同样共面**" : ""));
+                }
             }
 
             sb.AppendLine("  用户报过的问题对照：");

@@ -52,6 +52,34 @@ namespace SchoolTwin.Weather
             var instances = td.treeInstances;
             if (instances == null || instances.Length == 0) { enabled = false; return; }
 
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13 修的真 bug：室内外那条横贯全屏的"诡异白线"就是这里来的】
+            //
+            // 下面所有顶点都用**世界坐标**写进 mesh（wx/wz/wy 都是世界量），
+            // 所以这个物件的 transform 必须停在**世界原点**。但它是被
+            // WeatherVisuals.EnsureTreeSnow() 用 SetParent(transform, false)
+            // 挂成子节点的，而 WeatherVisuals 的 LateUpdate 每帧执行：
+            //       transform.position = cam.transform.position;
+            // → 整块树根雪堆被额外平移了"相机那么多"，位置彻底错乱。
+            //
+            // ── 为什么错乱之后表现为一条横线（而不是一片雪堆乱飞）──────────
+            // 每棵树的雪堆都是一块 pileRadius=3m 的**水平圆盘**，所有盘的
+            // y 都相同（见下面 wy 的修法，原来还会整体偏高 0.5m）。
+            // 一堆共面、同高的水平圆盘，当相机眼高正好穿过这个平面时，
+            // 视线与平面**共面** → 透视把这些盘全部压扁、收束成**一条横线**，
+            // 横贯整个屏幕、随视角平滑滑动，且能盖住墙体与树木
+            // （材质 renderQueue=2997，排在所有雪盘之上）。
+            // 这就是主理人 2026-11-04 反复截图反映的那条白线的全部成因。
+            //
+            // 修法：构建前先把自己从跟随相机的层级里摘出来，钉死在世界原点。
+            //       SetParent(null, true) 保持世界位置不变（不产生瞬移），
+            //       随后把世界位置归零，顶点里的世界坐标才与 transform 一致。
+            // ══════════════════════════════════════════════════════════════════
+            transform.SetParent(null, true);
+            transform.position = Vector3.zero;
+            transform.rotation = Quaternion.identity;
+            transform.localScale = Vector3.one;
+
             var tpos = terrain.GetPosition();
             float w = td.size.x, d = td.size.z;
 
@@ -70,7 +98,14 @@ namespace SchoolTwin.Weather
                 var inst = instances[t];
                 float wx = tpos.x + inst.position.x * w;
                 float wz = tpos.z + inst.position.z * d;
-                float wy = terrain.SampleHeight(new Vector3(wx, 0f, wz)) + 0.02f;
+                // ⚠️【P13】必须加 terrain.GetPosition().y
+                // Terrain.SampleHeight() 返回的是**相对地形的高度**（地形自身局部坐标），
+                // 不是世界高度。本场景 Terrain 的 m_LocalPosition.y = -0.5，
+                // 所以漏加这一项会让所有雪堆整体**抬高 0.5m**，浮在草皮上方。
+                // 抬高 0.5m 之后，雪堆平面正好压在相机眼高（约 -0.48）附近，
+                // 与上一条 SetParent 的平移叠加，白线就被推到画面正中，
+                // 表现为"一条悬在空中、遮挡一切"的亮带。
+                float wy = tpos.y + terrain.SampleHeight(new Vector3(wx, 0f, wz)) + 0.02f;
 
                 int idx0 = vOff;
                 for (int z = 0; z <= seg; z++)
