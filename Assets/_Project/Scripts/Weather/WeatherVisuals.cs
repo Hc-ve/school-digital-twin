@@ -50,12 +50,23 @@ namespace SchoolTwin.Weather
         private const float SnowGroundLiftFar = 0.35f;
 
         // 室内判定阈值（见 UpdateGround 里的长注释）
-        //   离头顶多远以内算"有天花板"：建筑层高 3.3~4.5m，留余量取 6m。
-        //     树冠一般也在 4~6m，所以单靠距离分不开，必须再靠法线。
-        //   天花板下表面的法线应接近 (0,-1,0)，取 -0.7（约 45° 内含）作为门槛。
-        //     树冠球体下缘的外法线是"下外侧"，n.y 多在 -0.1~-0.6，会被排除。
-        private const float IndoorCeilHeight = 6f;
-        private const float IndoorCeilNormalY = -0.7f;
+        //
+        // 【P13 收紧】原值 6m / -0.7 是在**不命中背面**的前提下定的。
+        // 现在为了能打中单层天花板，射线开启了 queriesHitBackfaces，
+        // 于是树冠的**背面**也会被命中 —— 而背面法线在 CG 里是把正面法线取反，
+        // 树冠下缘的背面法线指向正下方（n.y 接近 -1），完全能通过 -0.7 的门槛。
+        // 不收紧的话，站在树下就会被判成室内，雨雪全关 —— 又回到之前那个硬伤。
+        //
+        // 收紧成两道：
+        //   ① 天花板必须**真的在头顶很近处**：建筑层高 3.3~4.5m，
+        //      取 4.6m（层高上限 + 一点余量）。树冠底面通常 2.2m 起、中心在 5m+，
+        //      4.6m 内确实可能命中树冠下缘，所以还要靠 ②。
+        //   ② 天花板必须是**接近水平的平面**：n.y ≤ -0.92（约 ±23°）。
+        //      树冠是球面，即便在下缘最正的那个点，相邻三角面的法线也会散开；
+        //      取 -0.92 能滤掉绝大部分球面片，而平整楼板稳定在 -1.00。
+        // 代价：拱形/斜面天花板的房间会漏判。本项目教学楼走廊都是平顶，可接受。
+        private const float IndoorCeilHeight = 4.6f;
+        private const float IndoorCeilNormalY = -0.92f;
 
         private ParticleSystem rainPs, snowPs;
         private ParticleSystem splashPs;
@@ -1015,6 +1026,8 @@ namespace SchoolTwin.Weather
 
         private int snowAuditStage;        // 0=待触发 1=已排程 2=已打完
         private float snowAuditTimer;
+        private bool indoorAuditDone;      // 室内快照是否已打过
+        private float indoorAuditTimer = 1.5f;
         private float rainLifeTimer;       // 雨丝寿命重算的节流计时（见 UpdateRainLifetime）
         private float snowLifeTimer;       // 雪花寿命重算的节流计时（见 UpdateSnowLifetime）
 
@@ -1034,6 +1047,28 @@ namespace SchoolTwin.Weather
         /// </summary>
         private void TickSnowAudit(float dt, float snow)
         {
+            // 室内单独打一次快照。
+            //
+            // 为什么必须单独打：室外那次是在 snow>0.5 后 4 秒触发的，
+            // 而"室内还有粒子 / 室内有横线"这类问题**只在室内复现**。
+            // 用户在室内遇到问题时，室外那一次早就打完了（snowAuditStage==2），
+            // 什么日志都拿不到，只能靠截图猜。这里补一条独立的室内取证。
+            if (snow > 0.5f && indoor && !indoorAuditDone)
+            {
+                indoorAuditTimer -= dt;
+                if (indoorAuditTimer <= 0f)
+                {
+                    indoorAuditDone = true;
+                    Debug.Log("[P13][室内自检] ==== 室内（或在楼里）现场快照 ====\n" + BuildIndoorAudit());
+                }
+            }
+            else if (!indoor)
+            {
+                // 出门后重置，方便下次进楼再取一次
+                indoorAuditDone = false;
+                indoorAuditTimer = 1.5f;
+            }
+
             if (snowAuditStage == 2) return;
 
             if (snowAuditStage == 0)
@@ -1049,6 +1084,50 @@ namespace SchoolTwin.Weather
 
             snowAuditStage = 2;
             Debug.Log("[P13][雪天自检] ==== 雪天 4 秒现场快照 ====\n" + BuildSnowAudit());
+        }
+
+        /// <summary>
+        /// 室内现场快照。只回答一个问题：**为什么人已经在楼里，雪/雨/水还看得见**。
+        ///
+        /// 关键几项：
+        ///   · 头顶射线命中详情 —— 没命中 = 天花板是单层网格且背面没被算进来，
+        ///     这正是"室内还有粒子"的根因（queriesHitBackfaces 默认 false）。
+        ///   · indoorFade —— 它 0.33 秒才走完，刚进门那一瞬间仍是 1，属正常。
+        ///   · 雪盘锚点与世界高度 —— 判断那条"室内横线"是不是浮起来的雪面。
+        ///   · 雪盘顶点里有多少个被判定为"非地面"（楼板/屋顶）而沉到地下。
+        /// </summary>
+        private string BuildIndoorAudit()
+        {
+            var sb = new System.Text.StringBuilder(700);
+            sb.AppendLine("    indoor     = " + indoor + "   / indoorFade = " + indoorFade.ToString("F3"));
+            sb.AppendLine("    头顶射线   = " + (ceilDist < 0f
+                              ? "**什么都没打到** ← 天花板没被命中，这就是室内还有粒子的原因"
+                              : ceilName + "  " + ceilDist.ToString("F2") + "m  法线Y=" + ceilNormalY.ToString("F2"))
+                          + "   （要求：距离 ≤ " + IndoorCeilHeight.ToString("F1")
+                          + " 且 法线Y ≤ " + IndoorCeilNormalY.ToString("F2") + "）");
+            sb.AppendLine("    rainPs      = " + (rainPs != null ? rainPs.emission.rateOverTime.constantMax.ToString("F1") + " 粒/秒" : "null"));
+            sb.AppendLine("    snowPs      = " + (snowPs != null ? snowPs.emission.rateOverTime.constantMax.ToString("F1") + " 粒/秒" : "null")
+                          + "   （室内应接近 0）");
+
+            sb.AppendLine("  雪盘：");
+            if (snowGround != null)
+            {
+                sb.AppendLine("    worldPos     = " + snowGround.position.ToString("F2"));
+                sb.AppendLine("    anchor       = (" + snowAnchor.x.ToString("F2") + ", " + snowAnchor.z.ToString("F2") + ")"
+                              + (indoorFade > 0.5f ? "   跟随" : "   **已冻结**"));
+                sb.AppendLine("    室外地面 Y   = " + outdoorGroundY.ToString("F2")
+                              + "   相机脚下 groundY = " + groundY.ToString("F2"));
+                sb.AppendLine("    activeInHier = " + SnowGroundVisible);
+                sb.AppendLine("    _SnowAmount  = " + SnowAmountInMat.ToString("F3"));
+            }
+            else sb.AppendLine("    snowGround = null");
+
+            sb.AppendLine("  用户报过的问题对照：");
+            sb.AppendLine("    · 室内有横线 → 看上面 worldPos.y 是否贴近 currentGroundY+1.0"
+                          + "（那是被 clamp 压上来的楼板采样，现已改为沉到 -10m）");
+            sb.AppendLine("    · 室内有粒子 → 看头顶射线是否 '什么都没打到'"
+                          + "（已开启 queriesHitBackfaces 以命中单层天花板）");
+            return sb.ToString();
         }
 
         /// <summary>
@@ -1201,8 +1280,15 @@ namespace SchoolTwin.Weather
             {
                 playerSnowProbeTimer = 0.15f;
                 Vector3 pp = playerRoot.position;
-                // 脚下雪面顶 = 射线地面 + 雪盘抬升量（与 DrapeSnow 完全同源）
-                playerSnowTopY = ProbePlayerGround(pp) + SnowGroundLiftNear;
+                // 脚下雪面顶 —— 必须与 DrapeSnow 用**同一套采样**，否则人会浮空/陷脚。
+                //
+                // DrapeSnow 的顶点高度是：
+                //     SampleGroundHeight(x,z, outdoorGroundY+1.6) + SnowGroundLiftNear
+                // 而 SampleGroundHeight 的 refY 也是 outdoorGroundY。所以这里照抄这个式子，
+                // 而不是取"角色脚下最高的朝上面" —— 那站在花坛/台阶上会比雪盘基准
+                // 高出 0.4~1.0m，角色就会悬在半空。雪盘是世界平铺的，人也得按同一基准。
+                playerSnowTopY = SampleGroundHeight(pp.x, pp.z, outdoorGroundY + 1.6f)
+                                 + SnowGroundLiftNear;
                 playerSnowBaseY = pp.y;
             }
 
@@ -1371,38 +1457,45 @@ namespace SchoolTwin.Weather
         }
 
         /// <summary>
-        /// 角色正脚下方的地面高度（世界 y）。
+        /// 室外**地面**（世界 y）。用于给雪盘定位与铺地形提供基准高度。
         ///
-        /// ── 为什么不复用 SampleGroundHeight ──────────────────────────────
-        /// 那个方法是给雪盘顶点用的，判据是"离 refY 最近的面"，refY 取自**相机脚下**。
-        /// 第三人称相机在角色身后 4~5m 且高 2m，两者可能站在不同的台面上
-        /// （角色在台阶下、相机在台阶上）：此时 refY 已经在台阶面，台阶面距离 0，
-        /// 必然被选中，角色脚下的真实地面被漏掉 → 抬升量算错一整级台阶。
+        /// ── 为什么不能用 groundY ─────────────────────────────────────────
+        /// groundY = 相机正下方第一个面。它有三个不该有的行为：
+        ///   ① 二楼室内 → 取到 2F 楼板（雪面被抬到二楼高度）；
+        ///   ② 二楼**外廊/阳台**（indoorFade 仍是 1，因为头顶是天空）→ 取到
+        ///      阳台地板，同样把整片雪抬到 4m 高的空中；
+        ///   ③ 站在花坛/台阶上 → 取到花坛顶，雪面基准每步都跳一下。
+        /// 雪盘代表的是"整个校园地面的积雪"，基准必须是**地形基底**，与站在哪无关。
         ///
-        /// 这里改用"从脚底稍上方往下打，取最高命中"：
-        ///   · 起点只高 0.6m —— 高过 CharacterController 的 stepOffset（0.35m），
-        ///     保证台阶前那一步也能采到台面；又低于任何树冠/雨棚，不会误采。
-        ///   · 取最高命中 = 踩在最上面那层（台阶/花坛），与实际站姿一致。
-        ///   · 射程 4m，够穿到下沉广场，又不会一路打到地下车库。
+        /// ── 实现：优先 Terrain，退化到长射线 ─────────────────────────────
+        /// Terrain 是校园的连续基底，SampleHeight 不受建筑/花坛干扰，
+        /// 也完全不受相机在楼里还是楼外影响。没有 Terrain 时才用一条长射线，
+        /// 并显式跳过玩家自己的胶囊。
         /// </summary>
-        private float ProbePlayerGround(Vector3 playerPos)
+        private float ProbeOutdoorGround(Vector3 at)
         {
-            Vector3 origin = playerPos + Vector3.up * 0.6f;
-            int n = Physics.RaycastNonAlloc(new Ray(origin, Vector3.down), groundHits, 4f);
+            Terrain t = Terrain.activeTerrain;
+            if (t != null && t.terrainData != null)
+            {
+                // SampleHeight 返回的是**地形相对高度**（相对地形原点/最低点），
+                // 必须加地形自身的位置才是世界 y。这是 Terrain API 最常见的错用点。
+                Vector3 tp = t.GetPosition();
+                return tp.y + t.SampleHeight(new Vector3(at.x, 0f, at.z));
+            }
 
+            // 退化路径：从高处往下打一条长射线，只认朝上的面
+            Vector3 origin = new Vector3(at.x, at.y + 60f, at.z);
+            int n = Physics.RaycastNonAlloc(new Ray(origin, Vector3.down), groundHits, 200f);
             float best = float.NegativeInfinity;
             for (int i = 0; i < n; i++)
             {
                 RaycastHit h = groundHits[i];
                 if (h.collider == null || h.collider.isTrigger) continue;
                 if (IsPlayerCollider(h.collider)) continue;
-                if (h.normal.y < 0.6f) continue;              // 只认朝上的面
+                if (h.normal.y < 0.6f) continue;
                 if (h.point.y > best) best = h.point.y;
             }
-
-            // 一个都没打到（站在悬空处 / 刚传送）→ 认为地面就在脚底，抬升为 0。
-            // 不能返回 0 或 -inf：那会让角色忽然被拽下去 1m 多。
-            return float.IsNegativeInfinity(best) ? playerPos.y : best;
+            return float.IsNegativeInfinity(best) ? at.y : best;
         }
 
         /// <summary>清空脚印历史（含材质里的 _PrintCount）。</summary>
@@ -1534,7 +1627,7 @@ namespace SchoolTwin.Weather
         {
             sb.AppendLine("  七、角色站立与脚印");
             sb.AppendLine("    雪面顶 - 脚底 = " + (playerSnowTopY - playerSnowBaseY).ToString("F3") + " m"
-                          + "   （= ProbePlayerGround + " + SnowGroundLiftNear.ToString("F2") + " - rootY）");
+                          + "   （= SampleGroundHeight + " + SnowGroundLiftNear.ToString("F2") + " - rootY）");
             sb.AppendLine("    已抬升       = " + playerLiftNow.ToString("F3") + " m"
                           + (Mathf.Abs(playerLiftNow - Mathf.Max(0f, playerSnowTopY - playerSnowBaseY)) > 0.03f
                               ? "   ← 还在追（平滑中）" : "   ← 到位"));
@@ -1785,7 +1878,26 @@ namespace SchoolTwin.Weather
                 // ══════════════════════════════════════════════════════════════
                 RaycastHit up;
                 indoor = false;
+
+                // ══════════════════════════════════════════════════════════
+                // 【P13】室内判定：向上射线必须能命中**背面**
+                //
+                // Physics.queriesHitBackfaces 默认是 false —— 射线不会命中
+                // 三角面的背面。而建筑的天花板通常是**单层**mesh：从下方往上看，
+                // 看到的是它的背面。于是这条向上射线在二楼走廊里直接穿过去了，
+                // 打了 6m 什么都没命中 → indoor = false → 雪花照常在室内飘。
+                //
+                // 这正是"室内偶尔还有粒子飘落"的根因：不是判定阈值不对，
+                // 是射线根本没碰到天花板。
+                //
+                // 修法：只在这一次查询里临时打开背面命中，查完立刻恢复原值，
+                // 不影响项目里其他任何射线（地形采样、拾取都依赖默认行为）。
+                // ══════════════════════════════════════════════════════════
+                bool prevBackfaces = Physics.queriesHitBackfaces;
+                Physics.queriesHitBackfaces = true;
                 bool hitUp = Physics.Raycast(new Ray(camPos, Vector3.up), out up, IndoorCeilHeight);
+                Physics.queriesHitBackfaces = prevBackfaces;
+
                 if (hitUp)
                 {
                     ceilDist = up.distance;
@@ -1833,10 +1945,10 @@ namespace SchoolTwin.Weather
 
             if (indoorFade > 0.5f)
             {
-                // 室外：重新锚定。groundY 此刻就是可信的室外地平面。
+                // 室外：重新锚定。
                 snowAnchor = new Vector3(anchorSrc.x, 0f, anchorSrc.z);
                 snowAnchorValid = true;
-                outdoorGroundY = groundY;
+                outdoorGroundY = ProbeOutdoorGround(anchorSrc);
                 outdoorGroundValid = true;
             }
 
@@ -1907,6 +2019,34 @@ namespace SchoolTwin.Weather
                 float wx = px + b.x * sx;
                 float wz = pz + b.z * sx;
                 float th = SampleGroundHeight(wx, wz, probeEyeY);
+
+                // ══════════════════════════════════════════════════════
+                // 【P13】淘汰"非地面"采样：楼板 / 屋顶 / 树冠
+                //
+                // 只靠下面的 clamp(+1.0) 挡不住楼板 —— 二楼楼板比室外地平面高 3.6m，
+                // 采样到它之后会被 clamp 硬压到 baseY+1.0，于是在**室内**形成一片
+                // 浮在二楼地板以上 1 米的水平雪面，从走廊侧面看就是一条横线
+                // （用户报的"室内看有一点条线"）。
+                //
+                // 判据：拿该点的**地形基底**做参照。花坛/台阶最多高出 1.0m，
+                // 一旦采样高度超出地形 1.5m 以上，那一定是楼板或屋顶，不是地面。
+                // 这类顶点直接压到地下 10m（而不是 clamp 到 +1.0），让它在室内彻底不可见。
+                //
+                // Terrain.SampleHeight 是查表，3249 个顶点调用一次总共几十微秒，
+                // 且只在锚点移动 4m 或雪量变化 0.04 时才重铺，开销可忽略。
+                // ══════════════════════════════════════════════════════
+                float terrainY = ProbeOutdoorGround(new Vector3(wx, 0f, wz));
+                if (th - terrainY > 1.5f)
+                {
+                    // 楼板 / 屋顶 / 树冠 —— 不是地面，沉到地下看不见
+                    if (Mathf.Abs(snowWorkVerts[i].y - (-10f)) > 0.01f)
+                    {
+                        snowWorkVerts[i].y = -10f;
+                        changed = true;
+                    }
+                    continue;
+                }
+
                 // 严格按地形平铺：顶点抬到"射线地面 + 抬升量"上方。
                 // 抬升量(SnowGroundLiftNear)必须盖过脚下可见铺装/砖面的凸起，否则砖面会戳穿雪面。
                 // 不再叠加任何程序化雪堆 —— 用户反馈"取消堆叠的一团，按地形平铺就行"。
