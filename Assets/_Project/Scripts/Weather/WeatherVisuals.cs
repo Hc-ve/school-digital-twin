@@ -75,6 +75,18 @@ namespace SchoolTwin.Weather
         private float groundSnowAmount;
         private float lastDrapeAmount = -1f;
 
+        /// <summary>
+        /// 角色「脚下有没有雪」的系数 = groundSnowAmount × indoorFade。
+        ///
+        /// 为什么必须和 groundSnowAmount 分开：
+        ///   · 地面雪是**世界属性** —— 我进不进楼，外面该有的雪都在（用 groundSnowAmount）。
+        ///   · 角色站不站在雪上、踩不踩得出脚印，是**局部属性** —— 室内的地板上没有雪，
+        ///     人不能凭空浮起 30cm、也不该在瓷砖上踩出雪印（用这个值）。
+        /// 把这两个混成一个系数，就是上一版"进楼整片雪消失"的原因；
+        /// 反过来若全用 groundSnowAmount，人会浮在大堂天花板上、室内满地脚印。
+        /// </summary>
+        private float playerSnowAmount;
+
         // ══════════════════════════════════════════════════════════════════
         // 【P13】雪盘的世界锚点
         //
@@ -980,10 +992,12 @@ namespace SchoolTwin.Weather
             }
 
             // ---- 【P13】角色站到雪面上（视觉抬升，不动物理）----
-            UpdatePlayerOnSnow(dt, groundSnowAmount);
+            // 用 playerSnowAmount（含 indoorFade）：室内地板没有雪，人不能浮起来。
+            playerSnowAmount = groundSnowAmount * indoorFade;
+            UpdatePlayerOnSnow(dt, playerSnowAmount);
 
             // ---- 【P13】雪地脚印 ----
-            UpdateFootprints(groundSnowAmount);
+            UpdateFootprints(playerSnowAmount);
 
             // ---- 【P13】雪天自检：切到雪天后自动打一次现场快照 ----
             // 为什么不做成菜单：雪天"有粒子无积雪"这种故障，必须看**当时的**运行时值。
@@ -1795,18 +1809,32 @@ namespace SchoolTwin.Weather
             }
 
             // ══════════════════════════════════════════════════════════════════
-            // 【P13】雪盘锚点更新：只在**室外**才跟随相机
+            // 【P13】雪盘锚点更新：锚在**角色**身上，且只在室外跟随
             //
-            // 进楼后（indoorFade < 0.5）就冻结，理由见 snowAnchor 的字段注释：
-            //   · 雪盘覆盖 90m，中心跟着进屋会把雪铺到室内的地板上；
-            //   · 相机在室内绕角色摆动时，groundY 在地板/平台间跳 → 雪盘闪。
-            // 用 indoorFade 而不是 indoor 布尔量做判据，是为了带一点迟滞：
-            // 穿过门洞那一两帧 indoor 会反复抖，直接切布尔量会让雪盘瞬移两次。
+            // ── 为什么锚角色而不是相机（这是"雪地随视角移动"的根因）──────
+            // 原实现用 camPos。第三人称相机绕角色做 orbital 旋转，镜头一摆
+            // camPos 就在半径 4~5m 的圆弧上移动。雪盘钉在 camPos 上，
+            // 于是"只转头不动人"也会让整片雪地横着滑移 ——
+            // 用户看到的就是"雪地随视角变化移动"。
+            // 角色的 XZ 在转头时**完全不变**，锚它就彻底没有这个问题。
+            //
+            // ── 为什么进楼要冻结 ─────────────────────────────────────────
+            // 雪盘覆盖 90m，中心若跟着进屋，一半雪就铺到室内地板上了。
+            // 冻结在进楼前的位置，雪正好留在楼外：从窗户望出去仍然一片白，
+            // 室内地板干干净净，而室内本来就不该有雪。
+            //
+            // ── 为什么用 indoorFade 而不是 indoor 布尔量 ─────────────────
+            // 穿过门洞那一两帧 indoor 会反复抖，布尔量会让雪盘瞬移两次。
+            // indoorFade 是 0.33 秒的平滑过渡，天然带迟滞。
             // ══════════════════════════════════════════════════════════════════
+            Vector3 anchorSrc = camPos;
+            Transform pr = PlayerRoot();
+            if (pr != null) anchorSrc = pr.position;   // 有角色就锚角色，转头不再移动雪盘
+
             if (indoorFade > 0.5f)
             {
                 // 室外：重新锚定。groundY 此刻就是可信的室外地平面。
-                snowAnchor = new Vector3(camPos.x, 0f, camPos.z);
+                snowAnchor = new Vector3(anchorSrc.x, 0f, anchorSrc.z);
                 snowAnchorValid = true;
                 outdoorGroundY = groundY;
                 outdoorGroundValid = true;
