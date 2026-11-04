@@ -21,9 +21,13 @@ namespace SchoolTwin.UI
     /// │        页栈（首页/模块页）    │  内容区
     /// │                              │
     /// ├──────────────────────────────┤
-    /// │ 数据源   录制   帮助   设置   │  工具行 56
+    /// │ 数据源   帮助                 │  工具行 80
     /// └──────────────────────────────┘
     /// ```
+    ///
+    /// 【2026-11-04 P12】工具行由「数据源 录制 帮助 设置」四项减为「数据源 帮助」两项，
+    /// 行高仍是 80（C-2 裁决值）。这张图原写"工具行 56"，与代码里的 ToolRowH=80 不符 ——
+    /// 那是 P29-1 时期的旧值，一并改正（G5：注释描述的实现必须和代码是同一件事）。
     ///
     /// ── 为什么宽度会变（420 ↔ 640）──────────────────────────────────
     /// 首页是 4 列图标格，420 够用；模块页有表格/图表，420 太窄。
@@ -146,11 +150,60 @@ namespace SchoolTwin.UI
         private GameObject[] _toolUnderlineObjects;
         private int _toolSelected = -1;
 
-        /// <summary>工具行四项，顺序固定。改动顺序会破坏 L1/L2 的逐像素一致。</summary>
-        private static readonly string[] _toolNames = { "数据源", "录制", "帮助", "设置" };
+        /// <summary>
+        /// 工具行两项，顺序固定。
+        ///
+        /// 【2026-11-04 P12 从四项减到两项】原为 { 数据源, 录制, 帮助, 设置 }，四项无一有真功能：
+        ///   · 「录制」→ Toast "录制：P2 接入"。
+        ///     这一项**必须删**：它和窄态浮卡底部那条真横条里的「录制」**同名但能力完全不同**，
+        ///     浮卡那条走 TwinSourceSwitcher.ToggleRecord()（自研 TwinRecorder 落 JSONL，
+        ///     喂 TwinPlayer 回放），是真功能；抽屉这条只会弹假 Toast。
+        ///     同一个词在同一个屏幕上两种行为，是答辩现场最容易被追问的一类问题。
+        ///   · 「设置」→ 唯一存活的行为是 ToggleLegacyPanel() 打开旧 TwinControlPanel，
+        ///     而那个面板本轮已删，它连假 Toast 都不剩，只会弹"旧总控面板未创建"。
+        ///     设置本身也确实没有内容可设（亮度/语言/分辨率一概没有实现）。
+        ///   · 「数据源」「帮助」原来是 Toast 占位，本轮**都接上了真实现**，见 OnToolClicked。
+        ///
+        /// 保留两项的顺序不能换：「数据源」在左，是四项时期就在的位置（x=34），
+        /// 观众的记忆和截图对照都靠这个锚。换序会让"工具行变短了"看起来像"整行挪位了"。
+        /// </summary>
+        private static readonly string[] _toolNames = { "数据源", "帮助" };
 
-        /// <summary>四项的绝对 x（§4.1）。间距 96，从左边距 34 起排。</summary>
-        private static readonly float[] ToolXs = { 34f, 130f, 226f, 322f };
+        /// <summary>
+        /// 各项的绝对 x（§4.1）。间距 96，从左边距 34 起排。
+        ///
+        /// 【为什么是两项绝对 x 而不是"居中均分"】这条是刻意选的左对齐，理由三条：
+        ///   1. 抽屉左边缘的头部（标题/副标）和工具行原本就是同一个 34 左边距，
+        ///      左对齐后整条竖线的视觉重量是连续的；居中会让工具行与头部错开。
+        ///   2. 两项居中后位置会落在 x≈110 和 x≈206，**每加一项都要全行重算**，
+        ///      而且和四项时期的截图完全对不上，验收时无法逐像素对照。
+        ///   3. 用户视线从左侧主入口按钮进来，工具行靠左更顺 —— 右侧那一大片
+        ///      留给以后真正需要的功能（比如"演示模式"开关），不预占。
+        /// 所以：仍从 34 起排，间距仍 96（**沿用原值，不为了显得紧凑去改**）。
+        /// 长度必须与 _toolNames 一致，否则 ApplyToolXs 里按 i 取值会越界。
+        /// </summary>
+        private static readonly float[] ToolXs = { 34f, 130f };
+
+        /// <summary>「帮助」浮层。null = 没开。每次打开重建、点任意处或 Esc 即销毁。</summary>
+        private RectTransform _helpOverlay;
+
+        /// <summary>
+        /// 工具行「数据源」的轮换游标：上次**尝试**切到哪个源（不是"当前生效的源"）。
+        /// -1 = 还没点过，首次点击时用 switcher 的真实当前值作起点。
+        ///
+        /// 【为什么不用 _switcher.CurrentKind 当基准】切换失败时它是**不变**的
+        /// （SwitchTo 只在成功路径上写 _current）。若拿它推下一个，
+        /// "当前 MQTT + 回放无录像"会永久卡在"每点一次都去试回放、每次都失败"，
+        /// 用户再也回不到 Mock。详见 CycleDataSource 里的实算记录。
+        /// </summary>
+        private int _srcCursor = -1;
+
+        /// <summary>
+        /// 工具行「数据源」用的切换器。**与窄态浮卡底部那条横条是同一个组件** ——
+        /// 懒查 FindObjectOfType，找不到才在自身上挂一个（切换器的依赖都能自找，
+        /// 不需要 Inspector 配置，这一点与 TwinDetailPanel.EnsureSwitcher 同口径）。
+        /// </summary>
+        private TwinSourceSwitcher _switcher;
 
         private TwinTriggerButton _trigger;
 
@@ -270,7 +323,9 @@ namespace SchoolTwin.UI
             // 【为什么撤销】上一版把高度写死 720 并垂直居中，理由是「保证内容区稳定拿到 544」。
             // 实测 1069×654 窗口下画布只有 1004×614 —— 720 高的抽屉上下各溢 53px，
             // 结果**头部 96 被裁掉上半（标题、关闭 × 看不见）、工具行 80 被裁掉下半
-            // （数据源/录制/帮助/设置 四项看不见）**。主理人 play 实测确认。
+            // （工具行四项看不见）**。主理人 play 实测确认。
+            // ↑ 当时是四项；2026-11-04 P12 已减为两项，这段记录的是那次的实测现象，
+            //   保留原文不改（改了就变成"没发生过"）。现在的项是 数据源 / 帮助。
             //
             // 结论：抽屉高度必须跟随画布。画布高 < 720 时内容区会不足 544，
             // 那是 CanvasScaler（match=0 只按宽度缩放）带来的 R7 问题，
@@ -648,9 +703,13 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// 工具行：高 80（640→720），四项 x=34/130/226/322、文字 y=672、字号 11。
+        /// 工具行：高 80（640→720，C-2 裁决值，**不改**），两项 x=34/130、文字 y=672、字号 11。
         /// L1 与 L2 用同一个函数、同一组绝对 x —— 抽屉变宽时工具行不动，这是"逐像素一致"的前提。
-        /// 「旧面板」不再占位，收进「设置」（迁移期点设置直接开旧面板，P6 换成正式设置页）。
+        ///
+        /// 【2026-11-04 P12】四项减两项，见 _toolNames 的说明。
+        /// 行高 80 一个字都没动：那是靠"文字 y=672、命中区 y=16 高 40"这套绝对坐标撑起来的，
+        /// 改行高就得连文字和命中区一起重排，而统计页/详情页的视觉已经验收过（P5）。
+        /// 减项只是循环少跑两轮，坐标体系完全不动，所以这轮不存在"减法把视觉搞坏"的风险。
         /// </summary>
         private void BuildToolRow()
         {
@@ -711,16 +770,223 @@ namespace SchoolTwin.UI
             SelectTool(0);
         }
 
+        /// <summary>
+        /// 工具行点击分发。
+        ///
+        /// 【2026-11-04 P12 重写】原来是「index==3 → ToggleLegacyPanel，其余 → Toast 'XX：P2 接入'」，
+        /// 四项无一有真功能。现在两项**都有真实现**，不再有任何占位 Toast。
+        ///
+        /// 为什么不再用 index 魔法数字：改成两项后 index 只剩 0/1，而
+        /// "0=数据源、1=帮助"这种约定只存在于本方法和 _toolNames 的相对顺序里。
+        /// 一旦有人调了 _toolNames 的顺序，index 判断会静默错位 ——
+        /// 所以按**名字**分派，顺序怎么调都不会错。这是刻意多写的两行。
+        /// </summary>
         private void OnToolClicked(int index)
         {
+            if (index < 0 || index >= _toolNames.Length) return;
             SelectTool(index);
-            if (index == 3)
+
+            string name = _toolNames[index];
+            if (name == "数据源") { CycleDataSource(); return; }
+            if (name == "帮助") { ShowHelpOverlay(); return; }
+
+            // 走到这里说明 _toolNames 加了新项但没接实现。
+            // 不弹"XX：待接入"那种假 Toast —— 那正是本轮要清掉的东西。
+            // 改成一条明确指向开发者的警告，答辩现场看不见（Console 里），
+            // 但开发时会立刻发现"我加了一项却没接功能"。
+            Debug.LogWarning("[P12] 工具行「" + name + "」没有绑定任何行为，请在 OnToolClicked 里接上。");
+        }
+
+        // ================================================================ 工具行 · 数据源
+
+        /// <summary>
+        /// 「数据源」：点一次在 Mock → MQTT → 回放 之间轮换，走的是窄态浮卡底部那条
+        /// **同一个** TwinSourceSwitcher（不是另建一套）。
+        ///
+        /// 【为什么要复用浮卡那套】同一件事只能有一个出口（本项目反复踩过的教训）：
+        /// 数据源状态是全局唯一的一份，若工具行自己维护一个"当前选的是谁"，
+        /// 就会出现"抽屉说 Mock、浮卡说 MQTT、实际数据来自回放"的三方不一致。
+        /// 这里只是换个入口去调同一个 SwitchTo()。
+        ///
+        /// 【为什么用轮换而不是弹三选一】抽屉工具行只有 80 高、命中区 96×40，
+        /// 塞三个按钮会小到点不中；而且这里不是"设置数据源"的主入口（浮卡那条才是），
+        /// 它是答辩演示时的快捷动作 —— "切一下给大家看"。
+        /// 轮换还有一个好处：不需要额外的浮层控件，零新增 UI 元素。
+        ///
+        /// 【切不过去要说原因】MQTT 未配置服务器、回放没有录像文件时 SwitchTo 会返回 false。
+        /// 这时只弹"失败"是没用的，得说清是缺录像还是没接 MQTT —— 同浮卡的处理口径一致。
+        /// </summary>
+        private void CycleDataSource()
+        {
+            // 【必须是同一个实例，不能再 AddComponent 第二个】
+            //
+            // TwinSourceSwitcher 的 `_current` 是**实例字段**，而 MockDataSource /
+            // MqttDataSource 的启停是**场景级**的。挂两份的话：
+            //   · A 实例 SwitchTo(Mock) → 真把 Mock 开起来、A._current = Mock
+            //   · B 实例的 _current 还是旧值 → 浮卡底部那条横条的高亮不变
+            // 结果就是"点了切换、数据真的变了、但界面显示没变"。这正是本项目
+            // 反复踩的同一种病（同一件事有两个状态源）。见 §1.6 F16「'当前显示什么'要有唯一权威」。
+            //
+            // 所以这里**只 Find、不建**。找不到就直接说清楚，不要偷偷挂一份新的
+            // —— 那份新的会让上面的症状以"更难查"的形式复现。
+            if (_switcher == null) _switcher = FindObjectOfType<TwinSourceSwitcher>(true);
+            if (_switcher == null)
             {
-                // 迁移期：「设置」暂时映射到旧总控面板（原「旧面板」按钮的位置让出来了）
-                ToggleLegacyPanel();
+                // 正常情况下不会走到这里：只要窄态浮卡被构建过一次，
+                // TwinDetailPanel.EnsureSwitcher() 就已经挂上了。走到的唯一可能是
+                // 抽屉先于浮卡打开 —— 那是可以接受的（用户还没点过任何设备）。
+                TwinToast.Show("数据源切换器未就绪 · 先点一台设备");
                 return;
             }
-            TwinToast.Show(_toolNames[index] + "：P2 接入");
+
+            // 【轮换基准不能直接读 _current，否则会卡死】
+            //
+            // 实算发现的死锁：SwitchTo 失败时 `_switcher._current` **不变**。
+            // 若每次都从 _current 推 next，那么"当前=MQTT、回放无录像"时：
+            //   点一次 → next=回放 → 失败 → _current 仍是 MQTT
+            //   再点   → next 还是回放 → 再失败 …
+            // 用户被永久困在 MQTT，**再也回不到 Mock**。
+            //
+            // 修法：抽屉自己记一个 `_srcCursor`（上次尝试到哪），用它推下一个，
+            // 而不是读"当前真实生效的源"。两者在成功时相同，失败时才分道 ——
+            // 而失败恰恰是最需要继续能往下点的时候。
+            //
+            // 为什么不干脆"失败就重置成 Mock"：那会让"连点两下"的语义变成
+            // "第二下必然跳回 Mock"，用户以为按钮坏了。用游标是唯一能表达
+            // "我想切到第三个，它现在不可用，我再点一下去下一个" 的做法。
+            TwinSourceSwitcher.SourceKind from = _srcCursor >= 0
+                ? (TwinSourceSwitcher.SourceKind)_srcCursor
+                : _switcher.CurrentKind;
+
+            TwinSourceSwitcher.SourceKind next = NextSource(from);
+            _srcCursor = (int)next;
+
+            bool ok = _switcher.SwitchTo(next);
+            if (ok)
+            {
+                TwinToast.Show("数据源 → " + TwinSourceSwitcher.ShortName(next));
+            }
+            else if (next == TwinSourceSwitcher.SourceKind.Playback)
+            {
+                TwinToast.Show("无录像 · 先在浮卡底部点「录制」");
+            }
+            else
+            {
+                TwinToast.Show(TwinSourceSwitcher.ShortName(next) + " 未接入");
+            }
+        }
+
+        /// <summary>
+        /// 按 枚举顺序回绕 取下一个数据源。
+        ///
+        /// 用枚举的 min/max 而不是写死 (cur+1)%3：以后加第四个来源（比如 WebSocket）
+        /// 时这里自动跟上，不用回来改。SourceKind 的定义见 TwinSourceSwitcher.
+        /// </summary>
+        private static TwinSourceSwitcher.SourceKind NextSource(TwinSourceSwitcher.SourceKind cur)
+        {
+            int n = System.Enum.GetValues(typeof(TwinSourceSwitcher.SourceKind)).Length;
+            if (n <= 0) return cur;
+            int i = (int)cur;
+            return (TwinSourceSwitcher.SourceKind)((i + 1) % n);
+        }
+
+        // ================================================================ 工具行 · 帮助
+
+        /// <summary>
+        /// 「帮助」：在抽屉内弹一层半透明浮层，列出操作说明。
+        ///
+        /// 【为什么不用 TwinToast】Toast 是单行、2 秒自动消失，讲不完一套操作。
+        /// 而这个浮层要回答的是"这东西怎么用"—— 答辩时评委第一次上手，
+        /// 或者换个人来点，都需要能自己看到"滚轮做什么、Esc 做什么"。
+        ///
+        /// 【为什么不引新控件】全部用 TwinUIFactory 现成的 Rounded + Label + Block 拼，
+        /// 零新增资产。本项目是"零图片资源"路线（所有圆角代码生成），引一张帮助图
+        /// 就破坏了这个约定。
+        ///
+        /// 【它挂在 _root 下、不在 _content 下】_content 上有 RectMask2D（裁剪），
+        /// 挂进去会被裁；而且它要盖住工具行与头部，属于"抽屉级"而非"页面级"。
+        /// 每次打开重建、关闭即销毁 —— 不留常驻节点，也不进对象池：
+        /// 一年点不了几次，池化反而是负担。
+        /// </summary>
+        private void ShowHelpOverlay()
+        {
+            if (_root == null) return;
+
+            // 已经开着就关掉（再点一次「帮助」= 关闭），避免叠出第二层
+            if (_helpOverlay != null)
+            {
+                Destroy(_helpOverlay.gameObject);
+                _helpOverlay = null;
+                return;
+            }
+
+            const float w = 420f;
+            const float h = 300f;
+
+            Image dim = TwinUIFactory.Block(_root, "HelpOverlay", new Color(0f, 0f, 0f, 0.55f), true);
+            _helpOverlay = dim.rectTransform;
+            TwinUIFactory.Stretch(_helpOverlay);
+
+            // 【必须显式置顶】新节点是 _root 的最后一个孩子，但工具行 / 头部是在 Build()
+            // 里先建的兄弟节点 —— 若哪天 Build 顺序变了（比如把工具行挪到后面建），
+            // 本浮层就会被压在工具行下面，表现为"点了帮助，只有半边变暗"。
+            // 用 SetAsLastSibling 把"我在最上面"这件事写成显式声明，不靠建顺序侥幸。
+            _helpOverlay.SetAsLastSibling();
+
+            // 点浮层任意处关闭。用整块 dim 当按钮 —— 比只点 × 更好按，
+            // 也避免"点到字上没反应"（文字 raycastTarget 已关）。
+            Button close = dim.gameObject.AddComponent<Button>();
+            close.targetGraphic = dim;
+            close.transition = Selectable.Transition.None;
+            close.onClick.AddListener(ShowHelpOverlay);   // 复用自己的"再点即关"
+
+            TwinRoundedRect panel = TwinUIFactory.Rounded(_helpOverlay, "Panel", 10f,
+                TwinTheme.PanelTop, TwinTheme.PanelBottom, TwinTheme.AccentLine, 1f, true);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = new Vector2(0.5f, 0.5f);
+            pr.anchorMax = new Vector2(0.5f, 0.5f);
+            pr.pivot = new Vector2(0.5f, 0.5f);
+            pr.sizeDelta = new Vector2(w, h);
+            pr.anchoredPosition = Vector2.zero;
+
+            Text title = TwinUIFactory.Label(pr, "Title", TwinTheme.FsSubtitle, TextAnchor.UpperLeft,
+                TwinTheme.Accent, FontStyle.Bold);
+            // ⚠️ Place 的 y 是「从父节点顶边往下量」的**正数**（内部写成 anchoredPosition.y = -y），
+            // 所以这里必须传 16 而不是 -16 —— 传 -16 会把标题推到框外上方 16px，看不见。
+            TwinUIFactory.Place(title.rectTransform, 20f, 16f, w - 40f, 24f);
+            title.text = "操作说明";
+
+            // 逐行写清"按什么 / 做什么"。不用富文本对齐 —— legacy Text 不支持，
+            // 靠固定宽度 + 两段拼接已经够读。
+            string[] lines =
+            {
+                "滚轮 / ↑↓     切换选中项",
+                "E / 回车       确认（打开那台设备）",
+                "Esc            返回上一页，首页再按即收起抽屉",
+                "H              打开／关闭本帮助",
+                "",
+                "左侧五项：数据监测 · 设备管理 · 电力 · 告警 · 统计",
+                "底部「数据源」：Mock → MQTT → 回放 轮换",
+                "",
+                "窄态浮卡底部另有一条数据源横条，与本处联动",
+            };
+
+            Text body = TwinUIFactory.Label(pr, "Body", TwinTheme.FsBody, TextAnchor.UpperLeft,
+                TwinTheme.TextSecondary);
+            TwinUIFactory.Place(body.rectTransform, 20f, 48f, w - 40f, h - 76f);
+            body.text = string.Join("\n", lines);
+            body.lineSpacing = 1.45f;
+
+            // 底部提示贴在框内右下：pivot 用 (1,0) 直接从右下角量 20/14，
+            // 不去算 w-160-20 这种"用减法凑右对齐"的坐标（改宽度就会算错）。
+            Text hint = TwinUIFactory.Label(pr, "Hint", TwinTheme.FsMicro, TextAnchor.LowerRight,
+                TwinTheme.TextMuted);
+            hint.rectTransform.anchorMin = new Vector2(1f, 0f);
+            hint.rectTransform.anchorMax = new Vector2(1f, 0f);
+            hint.rectTransform.pivot = new Vector2(1f, 0f);
+            hint.rectTransform.sizeDelta = new Vector2(160f, 16f);
+            hint.rectTransform.anchoredPosition = new Vector2(-16f, 12f);
+            hint.text = "点任意处或按 H 关闭";
         }
 
         private void SelectTool(int index)
@@ -733,19 +999,6 @@ namespace SchoolTwin.UI
                 if (_toolLabels[i] != null) _toolLabels[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
                 if (_toolUnderlineObjects[i] != null) _toolUnderlineObjects[i].SetActive(on);
             }
-        }
-
-        /// <summary>迁移期临时入口：直接开旧的总控面板（不经过它自己的快捷键）。</summary>
-        private void ToggleLegacyPanel()
-        {
-            TwinControlPanel legacy = FindObjectOfType<TwinControlPanel>(true);
-            if (legacy == null)
-            {
-                TwinToast.Show("旧总控面板未创建（TwinDetailPanel 未初始化）");
-                return;
-            }
-            legacy.Toggle();
-            TwinToast.Show("旧面板是迁移期临时入口，P6 移除");
         }
 
         // ================================================================ 页面
@@ -1119,6 +1372,16 @@ namespace SchoolTwin.UI
         {
             if (!_open) return false;
 
+            // 【2026-11-04 P12】帮助浮层是最上层，Esc 必须先关它。
+            // 放在最前面：它盖住了整个抽屉，此时按 Esc 若去退页面栈，
+            // 用户会看到"浮层还在、下面的页面变了"—— 视觉上像卡死。
+            if (_helpOverlay != null)
+            {
+                Destroy(_helpOverlay.gameObject);
+                _helpOverlay = null;
+                return true;
+            }
+
             // 【P10 → P11 改】全屏 L2 里先退「设备详情」这一层，再退页 / 收抽屉。
             //
             // ── 为什么这一句现在几乎不会命中 ────────────────────────────
@@ -1156,6 +1419,23 @@ namespace SchoolTwin.UI
 
         private void Update()
         {
+            // 【2026-11-04 P12】H 开关帮助浮层。
+            //
+            // 为什么放在抽屉自己的 Update 里，而不去 TwinPicker 的快捷键分支：
+            // TwinPicker 那边是"点场景 + Esc"，它属于三维交互侧；H 是纯 UI 动作，
+            // 且要求"抽屉没开时不响应"—— 把判据放在这里最自然，也不用再往
+            // TwinUIState 加一个 HotkeyRouter（那条路由是为模态 UI 准备的）。
+            //
+            // 留了 _open 判据：抽屉收起时按 H 不应该凭空弹出一层黑罩，
+            // 那会挡住三维画面而用户根本没有打开任何面板。
+            //
+            // 【没有做"正在输入框里打字就不响应"】本项目零 InputField（已 grep 确认，
+            // Assets 下一个都没有；所有输入都是按钮/滚轮）。写一个 IsTypingInInput()
+            // 会是纯想象出来的防御 —— 那种代码比没有更坏，它暗示"这里有输入框"。
+            // 将来真加了输入框，记得回来补这一句。
+            if (_open && Input.GetKeyDown(KeyCode.H))
+                ShowHelpOverlay();
+
             // 滑动
             if (Mathf.Abs(_slide - _slideTarget) > 0.001f)
             {
@@ -1488,12 +1768,18 @@ namespace SchoolTwin.UI
         private float _lastFootH = -1f;
         private float _lastHeadPad = -1f;
 
-        /// <summary>工具行四项的命中区。移动位置要动它，**不是动 label** ——
-        /// label 在命中区内部（相对 8,-8），改它只会让文字在格子内偏移，看起来像"均分"。</summary>
-        private readonly RectTransform[] _toolHits = new RectTransform[4];
+        /// <summary>工具行的命中区。移动位置要动它，**不是动 label** ——
+        /// label 在命中区内部（相对 8,-8），改它只会让文字在格子内偏移，看起来像"均分"。
+        ///
+        /// 【长度跟随 _toolNames，不要再写死 4】原来是 new RectTransform[4]，
+        /// 与本轮"四项减两项"直接冲突：多出来的两格会是 null，
+        /// ApplyToolXs 里虽然有空判断不会崩，但 SelectTool 会去碰它 ——
+        /// 这类"数组长度和配置表长度各写一份"的坑本项目踩过（G1：分支存在但没人调用）。
+        /// 静态字段初始化顺序：本字段在 _toolNames 之后声明，可以安全取它的长度。</summary>
+        private readonly RectTransform[] _toolHits = new RectTransform[_toolNames.Length];
 
         /// <summary>
-        /// 工具行四项的起点 x。窄态 34 / 全屏 20（P29-6 §3.1 底带），间距恒 96。
+        /// 工具行的起点 x。窄态 34 / 全屏 20（P29-6 §3.1 底带），间距恒 96。
         /// **改的是命中区 hr 的 anchoredPosition**，label 在 hr 内部不动。
         /// 第一版改错成 label，结果四项变成"格子内右移"，肉眼读作间距 250/210/180。
         /// </summary>
@@ -1535,12 +1821,22 @@ namespace SchoolTwin.UI
                 if ((_toolDiagMask & bit) == 0)
                 {
                     _toolDiagMask |= bit;
+
+                    // 【2026-11-04 P12】诊断串按实际项数拼，不再写死 "/"+HitX(2)+"/"+HitX(3)。
+                    // 四项减两项后那两个索引恒为 "-"，留着会让人以为"少了两项 = 位置错了"。
+                    System.Text.StringBuilder hx = new System.Text.StringBuilder();
+                    for (int i = 0; i < _toolHits.Length; i++)
+                    {
+                        if (i > 0) hx.Append("/");
+                        hx.Append(HitX(i));
+                    }
+
                     Debug.Log("[P29-6] 工具行诊断(" + (_fullIsHome ? "L1" : "L2") + ")："
                         + "rowW=" + _toolRow.rect.width.ToString("0.0")
                         + " rowH=" + _toolRow.rect.height.ToString("0.0")
                         + " rowScale=" + _toolRow.localScale.x.ToString("0.000")
                         + " baseX=" + baseX.ToString("0.0")
-                        + " hits=" + HitX(0) + "/" + HitX(1) + "/" + HitX(2) + "/" + HitX(3));
+                        + " hits=" + hx);
                 }
             }
         }

@@ -74,6 +74,39 @@ namespace SchoolTwin.Data
         private string _resolvedPath;
         private string _loadError;
 
+        // ---------------------------------------------------------------- 暂停 / 跳转（2026-11-04 P12 补齐）
+
+        // 【为什么暂停要用「时钟偏移」而不是「卡住线程」】
+        // 回放跑在后台线程，最直觉的做法是暂停时让线程 WaitOne 挂着。但那样有两个坏处：
+        //   ① 恢复时要把「暂停了多久」补回来，否则一恢复就狂吐积压的样本（雪崩）；
+        //   ② 线程挂着时 SetState 之类的状态变化没法及时反映，UI 看着像卡死。
+        //
+        // 改用「暂停时一直把 _playbackStartWallTs 往前推」：等待循环里的目标时刻
+        // 永远算成"还没到"，线程空转但**不吐数据**，恢复时只要停止推这个偏移，
+        // 时间轴就从当前样本继续走。不需要额外补时间，也不会雪崩。
+        private volatile bool _paused;
+
+        // 跳转请求：由主线程写一个目标**样本时间戳**，后台线程看到后搬到对应游标。
+        //
+        // 【为什么传时间戳而不是传下标】UI 侧只有「进度条百分比」，它能对应到的
+        // 语义是时间轴（第 30% 的时间点），不是第 30% 的样本条数 ——
+        // 样本在时间上不是均匀分布的（有的指标 10Hz，有的 2Hz）。
+        // 传时间戳，两边对同一件事只有一个定义。
+        private double _seekTargetTs = double.NaN;
+        private volatile bool _seekPending;
+
+        private volatile float _progress;   // 0~1，给进度条读
+
+        // 整段录像时长。只在 `LoadFile()` 里写一次（后台线程启动时），
+        // 之后全程只读 —— 没有并发写，所以不需要 volatile；
+        // 为它加 volatile 反而会让 C# 拒绝（volatile 不支持 double）。
+        //
+        // 【顺序保证】后台线程先写 `_durationSeconds`，再 `SetState(Running)`；
+        // UI 侧先看 `SampleCount > 0` 才读它。`SampleCount` 读的是 `_samples.Count`，
+        // 而 `_samples` 的写入发生在写 `_durationSeconds` 之前 ——
+        // 靠 `volatile _loaded` 的写屏障把顺序固定住（见 LoadFile 尾部）。
+        private double _durationSeconds;
+
         public override string SourceName { get { return "Playback"; } }
 
         public override string StatusText
@@ -92,6 +125,80 @@ namespace SchoolTwin.Data
         public long EmittedTotal { get { return Interlocked.Read(ref _emitted); } }
         public string ResolvedPath { get { return _resolvedPath; } }
         public string LoadError { get { return _loadError; } }
+
+        // ---------------------------------------------------------------- 播放控制（对外接口）
+
+        /// <summary>是否处于暂停。暂停时数据源仍是 Running，只是不再吐样本。</summary>
+        public bool IsPaused { get { return _paused; } }
+
+        /// <summary>回放进度 0~1。未加载时返回 0。</summary>
+        public float Progress { get { return _loaded ? Mathf.Clamp01(_progress) : 0f; } }
+
+        /// <summary>整段录像时长（秒）。未加载时返回 0。</summary>
+        public float DurationSeconds { get { return (float)Math.Max(0.0, _durationSeconds); } }
+
+        /// <summary>当前播放到第几秒（相对录像开头）。</summary>
+        public float PositionSeconds
+        {
+            get
+            {
+                if (!_loaded || _samples.Count == 0) return 0f;
+                int i = Mathf.Clamp(_cursor, 0, _samples.Count - 1);
+                return (float)Math.Max(0.0, _samples[i].Ts - _samples[0].Ts);
+            }
+        }
+
+        /// <summary>暂停 / 继续。返回切换后是否处于暂停状态。</summary>
+        public bool TogglePause()
+        {
+            _paused = !_paused;
+            return _paused;
+        }
+
+        public void Pause() { _paused = true; }
+        public void Resume() { _paused = false; }
+
+        /// <summary>
+        /// 跳到指定秒（相对录像开头）。下一轮后台循环会搬到对应样本。
+        ///
+        /// 【为什么只写请求、不当场改 _cursor】`_cursor` 由后台线程推进，
+        /// 主线程直接写会和它的 `_cursor++` 打架 —— 表现是"跳过去又被改回来"。
+        /// 让后台线程在自己的节奏里执行跳转，只有一个写入者。
+        /// </summary>
+        public void SeekToSeconds(float seconds)
+        {
+            if (!_loaded || _samples.Count == 0) return;
+            double baseTs = _samples[0].Ts;
+            double target = baseTs + Math.Max(0.0, seconds);
+            _seekTargetTs = target;
+            _seekPending = true;
+        }
+
+        /// <summary>跳到进度 0~1。</summary>
+        public void SeekToProgress(float p)
+        {
+            SeekToSeconds(Mathf.Clamp01(p) * DurationSeconds);
+        }
+
+        /// <summary>倍速（运行期可改，下一轮等待立即生效）。</summary>
+        public float Speed
+        {
+            get { return _speed; }
+            set { _speed = Mathf.Clamp(value, 0.1f, 16f); }
+        }
+
+        /// <summary>是否循环。</summary>
+        public bool Loop
+        {
+            get { return _loop; }
+            set { _loop = value; }
+        }
+
+        /// <summary>重新加载（可换文件后重来）。返回样本数，失败 -1。</summary>
+        public int Reload()
+        {
+            return LoadFile();
+        }
 
         public string RecordingPath
         {
@@ -135,7 +242,27 @@ namespace SchoolTwin.Data
             }
 
             _samples.AddRange(loaded);
+
+            // 时长与初始进度：一次算好，UI 每帧只读，不重复遍历
+            _durationSeconds = _samples.Count > 1
+                ? _samples[_samples.Count - 1].Ts - _samples[0].Ts
+                : 0.0;
+            _progress = 0f;
+            _paused = false;
+            _seekPending = false;
+            _seekTargetTs = double.NaN;
+
+            // ⚠️ `_loaded` 必须**最后**置 true。
+            //
+            // 它是 volatile，写入带释放屏障 —— 放在这里，能保证上面 `_samples`
+            // 与 `_durationSeconds` 的写入对读线程可见。UI 侧 `Progress` 的实现是
+            // `_loaded ? clamp(_progress) : 0`，一旦看到 `_loaded == true`，
+            // `_progress` 和 `_durationSeconds` 必然已经是算好的值。
+            //
+            // 反过来的写法（先 _loaded = true 再算时长）会让 UI 在最开始那几帧
+            // 读到 duration = 0，进度条算成 0%，时间显示 00:00 / 00:00。
             _loaded = true;
+
             return _samples.Count;
         }
 
@@ -154,28 +281,16 @@ namespace SchoolTwin.Data
 
         private string FindLatestRecording()
         {
-            string dir = RecordingReader.RecordingsDirectory();
-            if (!Directory.Exists(dir)) return null;
-
-            string best = null;
-            DateTime bestTime = DateTime.MinValue;
-
-            try
-            {
-                string[] files = Directory.GetFiles(dir, "*.jsonl");
-                for (int i = 0; i < files.Length; i++)
-                {
-                    DateTime t = File.GetLastWriteTime(files[i]);
-                    if (t > bestTime)
-                    {
-                        bestTime = t;
-                        best = files[i];
-                    }
-                }
-            }
-            catch (Exception) { }
-
-            return best;
+            // 【为什么改成走 RecordingReader.ListRecordings】原来这里自己 GetFiles +
+            // 比 LastWriteTime，而 UI 侧（数据源页的录像清单）用的是 ListRecordings。
+            // 两套排序规则只要有一处不同（这里是本地时间、那边是 UTC），
+            // 就会出现「列表里第一个」和「实际回放的那个」不是同一个文件 ——
+            // 而且两边看起来都很正常，极难发现。
+            //
+            // ListRecordings 已按 ModifiedUtc 新的在前排好，取第一个即可。
+            List<RecordingReader.RecordingEntry> list = RecordingReader.ListRecordings();
+            if (list == null || list.Count == 0) return null;
+            return list[0].Path;
         }
 
         // ---------------------------------------------------------------- 回放主循环（后台线程）
@@ -229,6 +344,40 @@ namespace SchoolTwin.Data
                 {
                     if (token.IsCancellationRequested) return;
 
+                    // ---- 暂停（2026-11-04 P12 补齐）----
+                    // 不挂住线程，而是把"时间基准"一直往前推，让下面的等待永远等不到目标时刻。
+                    // 恢复时不用补时间，时间轴自然从当前样本继续 —— 不会一恢复就雪崩。
+                    if (_paused)
+                    {
+                        _playbackStartWallTs = NowUtcSeconds()
+                                               - (_samples[_cursor].Ts - _playbackStartSampleTs)
+                                                 / Math.Max(0.01f, _speed);
+                        if (token.WaitHandle.WaitOne(30)) return;
+                        continue;
+                    }
+
+                    // ---- 跳转（2026-11-04 P12 补齐）----
+                    // 由主线程写请求，这里执行 —— `_cursor` 只允许后台线程一个写入者。
+                    if (_seekPending)
+                    {
+                        _seekPending = false;
+                        double target = _seekTargetTs;
+                        _seekTargetTs = double.NaN;
+
+                        int idx = FindIndexAtOrAfter(target);
+                        if (idx >= 0 && idx < _samples.Count)
+                        {
+                            _cursor = idx;
+
+                            // 时间基准要一起搬，否则跳转后第一帧会按"原始时间 - 现在"算出
+                            // 一个巨大的负偏移，瞬间吐出剩余全部样本（等于跳转失效）。
+                            _playbackStartWallTs = NowUtcSeconds()
+                                                   - (_samples[_cursor].Ts - _playbackStartSampleTs)
+                                                     / Math.Max(0.01f, _speed);
+                            continue;
+                        }
+                    }
+
                     RecordingReader.Sample s = _samples[_cursor];
 
                     // 起点之前的样本（被压缩掉的那段静默）：直接发，不等待
@@ -241,18 +390,30 @@ namespace SchoolTwin.Data
                         while (true)
                         {
                             if (token.IsCancellationRequested) return;
+                            if (_paused || _seekPending) break;   // 让上层循环优先处理暂停/跳转
                             double remainMs = (targetWall - NowUtcSeconds()) * 1000.0;
                             if (remainMs <= 0.5) break;
                             int slice = (int)Math.Min(100.0, remainMs);
                             if (slice < 1) slice = 1;
                             if (token.WaitHandle.WaitOne(slice)) return;
                         }
+
+                        // 被打断（暂停/跳转）时不要发这一条，回到循环顶部重新判断
+                        if (_paused || _seekPending) continue;
                     }
 
                     TwinSample outSample = new TwinSample(s.TwinId, s.Metric, s.Value, s.Ts, s.Quality);
                     Sink.Emit(in outSample);
                     Interlocked.Increment(ref _emitted);
                     _cursor++;
+
+                    // 进度：只在后台线程写，UI 只读（volatile float 读写是原子的）
+                    if (_durationSeconds > 0.0)
+                    {
+                        int probe = _cursor < _samples.Count ? _cursor : _samples.Count - 1;
+                        _progress = (float)Math.Min(1.0,
+                            (_samples[probe].Ts - _samples[0].Ts) / _durationSeconds);
+                    }
 
                     // 每补发一批就让出一次 CPU。
                     // 注意先判 _maxSamplesPerFrame > 0 —— 它是 Inspector 字段，
@@ -272,6 +433,25 @@ namespace SchoolTwin.Data
                 Debug.Log("[Twin] 回放完一轮（累计 " + _emitted + " 条），从头再来");
                 if (token.WaitHandle.WaitOne(500)) return;
             }
+        }
+
+        /// <summary>
+        /// 二分查找「第一个时间戳 &gt;= target」的样本下标。
+        ///
+        /// 【为什么要二分】两万条样本线性扫一遍在主线程会卡一帧；
+        /// 而样本按时间戳写入（录制器顺序追加），天然有序，二分是 O(log n)。
+        /// 越界时返回最后一个下标，这样"拖到最右"不会跳失败。
+        /// </summary>
+        private int FindIndexAtOrAfter(double target)
+        {
+            int lo = 0, hi = _samples.Count - 1, ans = _samples.Count - 1;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (_samples[mid].Ts >= target) { ans = mid; hi = mid - 1; }
+                else lo = mid + 1;
+            }
+            return ans;
         }
     }
 }

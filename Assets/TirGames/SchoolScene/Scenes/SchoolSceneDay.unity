@@ -119425,7 +119425,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2126855770}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 44187269f6fe94c458c94dcbee16621d, type: 3}
   m_Name: 
@@ -119476,12 +119476,12 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2126855770}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2f933a698a6d90b692ca6daade3bba13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _autoStart: 1
+  _autoStart: 0
   _host: 127.0.0.1
   _port: 1883
   _clientId: 

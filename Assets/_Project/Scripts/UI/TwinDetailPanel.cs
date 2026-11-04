@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using SchoolTwin.Core;
+using SchoolTwin.Data;
 using SchoolTwin.Interaction;
 using SchoolTwin.Twin;
 
@@ -145,7 +146,7 @@ namespace SchoolTwin.UI
         private const float BaseAlarmRowsTop = 48f;
         private const float BaseAlarmRowHeight = 30f;
         private const float BaseAlarmRowGap = 4f;
-        private const float BasePanelGap = 12f;
+        // BasePanelGap（12f）P12 删除 —— 只服务于已删的 EnsureHistoryPanel，无其它读取者。
         private const float BaseChipWidth = 86f;
         private const float BaseChipHeight = 28f;
 
@@ -227,7 +228,11 @@ namespace SchoolTwin.UI
         private float _scaledBarHeight;
         private float _scaledSparkY;
         private float _scaledSparkHeight;
-        private float _scaledPanelGap;
+        // 【2026-11-04 P12 已删】_scaledPanelGap —— 原本只被 EnsureHistoryPanel 用来
+        // 给告警历史浮层算右让位（`_scaledCardWidth + _scaledPanelGap`）。
+        // 那个方法删掉后，本字段只剩第 500 行一处赋值、没有任何读取，
+        // 属于"写了没人用"的死字段。连同它依赖的 BasePanelGap 一起删掉，
+        // 不留一个"看起来还在用"的字段（G1：存在 ≠ 生效）。
         private float _scaledChipWidth;
         private float _scaledChipHeight;
         private float _scaledCardCloseSize;
@@ -359,48 +364,6 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// Canvas 的「参考宽度」——UI 坐标系里水平方向有多少可用空间。
-        /// 和 <see cref="ViewportHeight"/> 同一个来源（问画布的 scaleFactor），不手算。
-        /// </summary>
-        private float ViewportWidth()
-        {
-            if (Screen.width <= 0) return 1920f;
-
-            Canvas canvas = _uiRoot != null ? _uiRoot.GetComponentInParent<Canvas>() : null;
-            if (canvas != null && canvas.scaleFactor > 0.0001f)
-                return Screen.width / canvas.scaleFactor;
-
-            CanvasScaler scaler = _uiRoot != null
-                ? _uiRoot.GetComponentInParent<CanvasScaler>()
-                : null;
-            if (scaler == null || scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
-                return Screen.width;
-
-            Vector2 refRes = scaler.referenceResolution;
-            float sx = Screen.width / Mathf.Max(1f, refRes.x);
-            float sy = Screen.height / Mathf.Max(1f, refRes.y);
-
-            // 【P29-3.6】同 ViewportHeight：Expand / Shrink 下 matchWidthOrHeight 不参与计算，
-            // 必须按模式分派，否则兜底路径算出的宽度与 Unity 实际值不符。
-            float factor;
-            switch (scaler.screenMatchMode)
-            {
-                case CanvasScaler.ScreenMatchMode.Expand:
-                    factor = Mathf.Min(sx, sy);
-                    break;
-                case CanvasScaler.ScreenMatchMode.Shrink:
-                    factor = Mathf.Max(sx, sy);
-                    break;
-                default:
-                    factor = Mathf.Lerp(sx, sy, Mathf.Clamp01(scaler.matchWidthOrHeight));
-                    break;
-            }
-
-            if (factor <= 0.0001f) return 1920f;
-            return Screen.width / factor;
-        }
-
-        /// <summary>
         /// 在「最坏情况内容」下，缩放最大能到多少才不把面板顶出屏幕。
         ///
         /// 最坏情况 = 指标行占满 MaxMetricRows（6 行）+ 告警面板占满 _maxAlarmRows。
@@ -497,7 +460,7 @@ namespace SchoolTwin.UI
             _scaledBarHeight = BaseBarHeight * s;
             _scaledSparkY = BaseSparkY * s;
             _scaledSparkHeight = BaseSparkHeight * s;
-            _scaledPanelGap = BasePanelGap * s;
+            // _scaledPanelGap = BasePanelGap * s;   ← P12 删除（字段已无读取者）
             _scaledChipWidth = BaseChipWidth * s;
             _scaledChipHeight = BaseChipHeight * s;
             _scaledCardCloseSize = BaseCardCloseSize * s;
@@ -590,6 +553,16 @@ namespace SchoolTwin.UI
         /// <summary>开关 / 温度按钮 + 命令状态。只有「可命令且已开放控制」的点位才显示。</summary>
         private TwinControlRow _ctlRow;
 
+        // ---- 底部回放控制条（P12 补齐短板）----
+        //
+        // 【为什么和数据源条分两条】数据源条排满了（540 宽里 3 个按钮 + 录制 + 状态
+        // 只剩 118px 给状态文字），塞不下「暂停 24 + 轨道 + 时长 + 倍速」。
+        // 而且这条**只在回放时出现**，数据源条是常驻的 —— 语义不同，别硬合。
+        private TwinPlaybackBar _playbackBar;
+
+        /// <summary>录像选择浮层的根节点（点「回放」且有多份录像时出现）。</summary>
+        private RectTransform _pickerRoot;
+
         // ---- 底部数据源切换条 ----
         private RectTransform _sourceBar;
         private TwinSourceSwitcher _switcher;
@@ -606,15 +579,22 @@ namespace SchoolTwin.UI
         private string _cachedSourceState;
         private string _cachedPlaybackText;
 
-        // ---- 告警历史浮层（按 H 开关）----
-        private TwinAlarmHistoryPanel _historyPanel;
+        // ---- 告警历史数据组件（提供「持续时长」与「累计次数」）----
+        //
+        // 【2026-11-04 P12 变更】原来这里还有三个字段：
+        //     _historyPanel / _pointListPanel / _controlPanel
+        // 分别指向 TwinAlarmHistoryPanel / TwinPointListPanel / TwinControlPanel 三个
+        // 迁移期遗留的旧面板，由 BuildUI 末尾的 Ensure*Panel() 通过 AddComponent 挂在
+        // 本面板同一个 GameObject 上，按 H / T / G 打开。
+        //
+        // 它们已被 P12 整体删除：五个功能模块（数据监测/设备管理/电力/告警/统计）
+        // 在 P2~P5 全部迁进 TwinDrawer 的收纳式面板，旧面板再留着就是**第二套入口**，
+        // 且是假入口（按 H/T/G 的快捷键从没接到任何按键处理上，见 P12 回执）。
+        //
+        // 注意区分：下面的 _history 是 **TwinAlarmHistory（数据组件）**，不是面板。
+        // 它给浮卡算「持续 12s」「累计 12 次」用，**必须保留**，
+        // 删了浮卡的告警区就只剩一行标题。名字太像，摘依赖时最容易一并删错。
         private TwinAlarmHistory _history;
-
-        // ---- 点位清单浮窗（按 T 开关）----
-        private TwinPointListPanel _pointListPanel;
-
-        // ---- 校园总控面板（按 G 开关，P14）----
-        private TwinControlPanel _controlPanel;
 
         private readonly List<MetricRow> _metricRows = new List<MetricRow>(4);
         private readonly List<TwinClickRow> _alarmRows = new List<TwinClickRow>(8);
@@ -858,18 +838,26 @@ namespace SchoolTwin.UI
             _recordText = null;
             _sourceDot = null;
             _sourceState = null;
+            // 回放控制条：它的节点挂在 _uiRoot 下，随重建一起销毁，引用必须显式清。
+            // 不清的话下次 Update 会拿旧引用去 Tick，对着一堆被销毁的 Text 改 text
+            // —— 表现为一堆 MissingReferenceException 刷屏。
+            _playbackBar = null;
+            // 录像选择浮层挂在 _uiRoot 下，随重建一起销毁；引用也要清，
+            // 否则下次点「回放」会以为浮层还在，只做 Hide 而不弹新的。
+            _pickerRoot = null;
             _cachedRecordText = null;
             _cachedSourceState = null;
             _cachedPlaybackText = null;
             _sourceHint = null;
             _sourceHintUntil = 0f;
 
-            // 告警历史浮层：它的节点挂在 _uiRoot 下，会跟着一起被销毁，
-            // 但 Destroy 是延迟到帧末的 —— 必须在这里立刻让它「忘掉」旧节点，
-            // 否则同一帧内的 Build() 会以为节点还在、直接返回，重建后浮层永远不再出现。
-            if (_historyPanel != null) _historyPanel.Detach();
-            if (_pointListPanel != null) _pointListPanel.Detach();
-            if (_controlPanel != null) _controlPanel.Detach();
+            // 【2026-11-04 P12】原来这里还有三行 Detach()：
+            //     _historyPanel / _pointListPanel / _controlPanel
+            // 上面那段"Destroy 延迟到帧末，必须先 Detach 让组件忘掉旧节点"的理由，
+            // 说的是**旧面板把节点挂在自己的 _uiRoot 下**这件事。
+            // 三个旧面板已删，这段理由随之失效 —— 不是"忘了写"，是不再需要。
+            // 如果将来又有组件在 _uiRoot 下自建节点并缓存的，请把同样的 Detach
+            // 补回到它自己身上，别指望本方法统一兜。
 
             // 文本缓存也要清：重建后是全新的 Text 组件，旧缓存内容相同就不会再写入，
             // 结果是新 Text 一片空白。
@@ -956,6 +944,16 @@ namespace SchoolTwin.UI
             // 数据源状态自己带 0.25s 节流，放这里最省事：
             // 面板隐藏时 Update 早就 return 了，不需要额外判断可见性。
             RefreshSourceBar(false);
+
+            // 回放控制条：内部每帧跟进度（游标要跟着播放走）、0.2s 刷文字。
+            // 显隐由数据源实时决定 —— 用户点了「回放」按钮那一刻就要冒出来，
+            // 不能等下次重建。
+            if (_playbackBar != null)
+            {
+                SyncPlaybackBarVisibility(false);
+                if (_playbackBar.Root != null && _playbackBar.Root.gameObject.activeSelf)
+                    _playbackBar.Tick();
+            }
 
             // 卡片轻微淡入：选中时更实，未选中时压暗一点，避免静止时太抢眼。
             // 【告警区合并进来之后要加一个例外】有告警时不许压暗 ——
@@ -1427,16 +1425,61 @@ namespace SchoolTwin.UI
             _alarmMore.gameObject.SetActive(false);
 
             // ---------------- 底部数据源切换条 ----------------
+            //
+            // 【2026-11-04 P12】这一条是**真功能**，不是遗留：
+            // Mock / MQTT / 回放三选一 + 录制开关，接 TwinSourceSwitcher / TwinRecorder。
+            // 主理人截图里的那条横条就是它。删旧面板时**不要连它一起删**——
+            // 它和抽屉工具行里那个假「录制」只是名字撞了，能力完全不同。
             BuildSourceBar();
 
-            // ---------------- 告警历史浮层（默认隐藏，按 H 打开）----------------
-            EnsureHistoryPanel();
+            // ---------------- 回放控制条（浮在数据源条上方）----------------
+            //
+            // 【为什么建在这里而不是 BuildSourceBar 内部】两者尺寸基准相同
+            // （margin / scale 都取自同一组字段），但生命周期不同：数据源条常驻，
+            // 控制条只在回放时可见。分两个方法建，清理时也各清各的引用。
+            BuildPlaybackBar();
 
-            // ---------------- 点位清单浮窗（默认隐藏，按 T 打开）----------------
-            EnsurePointListPanel();
+            // ---------------- 告警历史数据组件：必须显式建，不能依赖场景 ----------------
+            //
+            // 【2026-11-04 P12 修 bug —— 摘依赖摘过头了】
+            //
+            // 上一版我把 EnsureHistoryPanel() 整块删掉，连带把**它内部那一句
+            // EnsureHistory() 调用**也删了。结果是：场景里没有 TwinAlarmHistory 组件
+            // （已 grep 确认 0 处），`TwinAlarmHistory.Instance` 恒为 null，
+            // 于是 TwinSystemPage.RefreshAlarm() 里 `if (history != null)` 永远跳过，
+            // **告警中心一条都不显示**（主理人 Play 实测："5 分钟没一条告警"）。
+            //
+            // 我的判断错在把两件事当成一件：
+            //   · EnsureHistoryPanel()  → 建**面板**（UI 层），该删 ✔
+            //   · EnsureHistory()       → 建**数据组件**（数据层），不能删 ✘
+            // 面板是消费方，数据组件是生产方。删消费方时把生产方一起带走，
+            // 表现为"界面还在、里面全空"—— 这种 bug 编译器不报，判据也测不出来
+            // （判据只查源码里有没有那句 AddComponent，查不到"运行时到底有没有实例"）。
+            //
+            // 所以这一句必须留在 BuildUI 里，且**与任何面板无关**：
+            // 浮卡的"持续 12s / 累计 12 次"、全屏告警页、窄态告警页、
+            // 首页告警卡全部读同一个 Instance，少一个入口就整条链路空。
+            EnsureHistory();
 
-            // ---------------- 校园总控面板（默认隐藏，按 G 打开，P14）----------------
-            EnsureControlPanel();
+            // ---------------- 旧面板三个入口已删（2026-11-04 P12）----------------
+            //
+            // 这里原有三行：
+            //     EnsureHistoryPanel();     → TwinAlarmHistoryPanel（按 H）
+            //     EnsurePointListPanel();   → TwinPointListPanel  （按 T）
+            //     EnsureControlPanel();     → TwinControlPanel    （按 G）
+            //
+            // 删掉的理由不止"迁移期结束"，更硬的一条：**这三个快捷键从头就没接上**。
+            // 我自己 grep 过 KeyCode.H / T / G，TwinDetailPanel 里一处都没有 ——
+            // 也就是说这三块面板建出来了，但**没有任何按键能打开它们**，
+            // 而抽屉工具行「设置」→ ToggleLegacyPanel 是唯一能碰到 TwinControlPanel 的路。
+            // 一个建了却打不开的面板，比没有更坏：它占着内存、占着图层，
+            // 还让后来人以为"这功能是有的"。
+            //
+            // 现在三个入口全部删除，功能收口到 TwinDrawer 的五个模块。若将来要恢复
+            // "详情页里看房间点位清单"，正确做法是在 TwinDrawer 侧新增页面，
+            // 不要再往浮卡身上挂第二套面板。
+            //
+            // ⚠️ 但**数据组件**（TwinAlarmHistory）不在此列，见上面那句 EnsureHistory()。
 
             // 缩放手柄压到最上层：它现在在告警区下面，被行背景盖住的话就抓不到了。
             // 位置上两者不重叠（手柄在整窗最底部那条留白里），但层级别赌。
@@ -1478,76 +1521,19 @@ namespace SchoolTwin.UI
             }
         }
 
-        /// <summary>
-        /// 告警历史浮层挂在面板自己身上（和切换条同一个思路：不依赖 Inspector 配置）。
-        ///
-        /// 【它为什么要知道自己「右边界在哪」】浮层如果按画布居中放，
-        /// 宽度一旦超过「画布中线到卡片左边缘」的距离，右半边就会压到详情卡片上
-        /// —— 2026-10-21 实测就压了约 184 单位，时长列直接画在卡片上面。
-        /// 所以改成**锚在卡片左侧**：右上角对齐卡片的右上角，再往左让开卡片宽度 + 间隙。
-        /// 这个量和画布多宽无关，纯锚点语义。
-        /// </summary>
-        private void EnsureHistoryPanel()
-        {
-            EnsureHistory();
-
-            if (_historyPanel == null) _historyPanel = GetComponent<TwinAlarmHistoryPanel>();
-            if (_historyPanel == null) _historyPanel = gameObject.AddComponent<TwinAlarmHistoryPanel>();
-
-            // 让开：屏幕右缘边距 + 微调量 + 卡片宽 + 面板间隙
-            float rightInset = _scaledScreenMargin + _scaledExtraRight + _scaledCardWidth + _scaledPanelGap;
-            float topInset = _scaledScreenMargin + _scaledExtraTop;
-
-            // 卡片左侧还剩多少横向空间。窄窗口下浮层要跟着收窄，否则会顶出画布左缘。
-            float maxWidth = Mathf.Max(300f, ViewportWidth() - rightInset - _scaledScreenMargin);
-
-            _historyPanel.Build(_uiRoot, _activeScale, rightInset, topInset, maxWidth);
-        }
-
-        /// <summary>
-        /// 点位清单浮窗挂在面板自己身上（和告警历史、切换条同一个思路：不依赖 Inspector 配置）。
-        ///
-        /// 【为什么放左侧】右侧已经被详情卡片占了，卡片左边一点是告警历史浮层，
-        /// 屏幕左侧除了底部的数据源切换条之外是空的 —— 而且列表本来就不该压在
-        /// 三维画面上最该看的那块（画面中央）。
-        /// </summary>
-        private void EnsurePointListPanel()
-        {
-            if (_pointListPanel == null) _pointListPanel = GetComponent<TwinPointListPanel>();
-            if (_pointListPanel == null) _pointListPanel = gameObject.AddComponent<TwinPointListPanel>();
-
-            float s = _activeScale;
-            float margin = _scaledScreenMargin;
-
-            // 横向：最多占画布一半，右半边留给详情卡片
-            float maxWidth = Mathf.Max(300f, ViewportWidth() * 0.5f);
-
-            // 纵向：让开屏幕上下边距 + 底部的数据源切换条（它也在左下角）
-            float maxHeight = Mathf.Max(200f,
-                ViewportHeight() - margin * 2f - (BaseSourceBarHeight + 12f) * s);
-
-            _pointListPanel.Build(_uiRoot, s, margin, maxWidth, maxHeight, this);
-        }
-
-        /// <summary>
-        /// 校园总控面板（P14）挂在面板自己身上 —— 和告警历史、点位清单、数据源切换条
-        /// 同一个思路：不依赖 Inspector 配置，漏配也不会静默少一块功能。
-        ///
-        /// 【为什么居中、且这么大】它管的是「面」：一个房间 5 台设备、一层楼 5 个房间，
-        /// 缩在角落里看不过来。居中压住三维画面是刻意的 —— 看总控的时候本来就不该
-        /// 同时看场景；按 G 或点 × 立刻回到卡片视图。
-        /// </summary>
-        private void EnsureControlPanel()
-        {
-            if (_controlPanel == null) _controlPanel = GetComponent<TwinControlPanel>();
-            if (_controlPanel == null) _controlPanel = gameObject.AddComponent<TwinControlPanel>();
-
-            // 面板自己会居中，这里只给「最多能用多大」
-            float maxWidth = Mathf.Max(560f, ViewportWidth() - _scaledScreenMargin * 2f);
-            float maxHeight = Mathf.Max(260f, ViewportHeight() - _scaledScreenMargin * 2f);
-
-            _controlPanel.Build(_uiRoot, _activeScale, _scaledScreenMargin, maxWidth, maxHeight);
-        }
+        // 【2026-11-04 P12 删除】EnsureHistoryPanel() / EnsurePointListPanel() / EnsureControlPanel()
+        //
+        // 三个方法各约 20 行，做同一件事：GetComponent 找不到就 AddComponent 把旧面板
+        // 挂到本面板的 GameObject 上，再调它的 Build()。
+        //
+        // 删除后**本类不再直接引用任何旧面板类型**。想确认这一点，不要去 grep 本文件里的
+        // "Ensure"（现在还有 EnsureHistory / EnsureSwitcher / EnsureControlRow，都是活的），
+        // 要 grep 三个类名本身：
+        //     grep -rn "TwinAlarmHistoryPanel\|TwinPointListPanel\|TwinControlPanel" Assets/
+        // 期望结果：除了 .meta 与历史文档，代码里 0 处。
+        //
+        // TwinDetailPanel 自身保留（场景引用 1，窄态 470 浮卡的宿主），
+        // 它的 BaseCardWidth=470 / SyncCardVisibility / TwinControlRow 全部原样保留。
 
         /// <summary>
         /// 取（必要时创建）告警历史组件。
@@ -1661,6 +1647,49 @@ namespace SchoolTwin.UI
             RefreshSourceBar(true);
         }
 
+        // ================================================================ 回放控制条（P12 补齐）
+
+        /// <summary>
+        /// 建回放控制条，浮在数据源条**上方**。
+        ///
+        /// 尺寸基准与数据源条完全共用（`_scaledScreenMargin` / `_activeScale` /
+        /// `_scaledFsSourceBtn`），所以拉窗口时两条会一起缩放、一起保持左对齐 ——
+        /// 不会出现"上面那条宽、下面那条窄"的错位。
+        /// </summary>
+        private void BuildPlaybackBar()
+        {
+            if (_uiRoot == null) return;
+
+            float s = _activeScale;
+
+            _playbackBar = new TwinPlaybackBar();
+            _playbackBar.Build(_uiRoot, _scaledScreenMargin, s,
+                _scaledScreenMargin, _scaledFsSourceBtn);
+
+            // 建完先按当前数据源决定显不显示 —— 否则进场景就闪一下控制条，
+            // 明明没在回放。
+            SyncPlaybackBarVisibility(true);
+        }
+
+        /// <summary>
+        /// 控制条只在「当前数据源是回放」且「播放器已建出来」时显示。
+        ///
+        /// 【为什么要主动 SetActive 而不是靠内部什么都不画】控制条是一整块带底色的
+        /// 圆角条，空着也占 34px 高、也是个色块；非回放状态挂着它，
+        /// 观众会以为"这里有个坏掉的控件"。
+        /// </summary>
+        private void SyncPlaybackBarVisibility(bool force)
+        {
+            if (_playbackBar == null || _playbackBar.Root == null) return;
+
+            bool show = _switcher != null &&
+                        _switcher.CurrentKind == TwinSourceSwitcher.SourceKind.Playback;
+
+            if (!force && _playbackBar.Root.gameObject.activeSelf == show) return;
+            if (_playbackBar.Root.gameObject.activeSelf != show)
+                _playbackBar.Root.gameObject.SetActive(show);
+        }
+
         private void EnsureSwitcher()
         {
             if (_switcher != null) return;
@@ -1673,28 +1702,132 @@ namespace SchoolTwin.UI
         {
             if (_switcher == null) return;
             TwinSourceSwitcher.SourceKind kind = (TwinSourceSwitcher.SourceKind)index;
+
+            // 【回放要分两种情况】只有一份录像时直接播（最常见，少一次点击）；
+            // 有多份时必须先让用户挑 —— 否则永远只能放"最新那个"，
+            // 想回看上周录的那段就没辙了（P12 补齐的短板）。
+            if (kind == TwinSourceSwitcher.SourceKind.Playback)
+            {
+                _switcher.RefreshRecordingFlag(true);
+                if (!_switcher.HasRecording) { ShowSourceHint("无录像 · 先录制"); RefreshSourceBar(true); return; }
+
+                List<RecordingReader.RecordingEntry> list = _switcher.ListRecordings();
+                if (list.Count > 1) { ToggleRecordingPicker(list); RefreshSourceBar(true); return; }
+                if (list.Count == 1) _switcher.PlayRecording(list[0].Path);
+                RefreshSourceBar(true);
+                return;
+            }
+
             bool ok = _switcher.SwitchTo(kind);
 
-            if (!ok)
-            {
-                // 切不过去要说清原因，否则用户只会觉得按钮坏了。
-                // 这条提示要「压住」状态文本几秒，否则紧接着的刷新会立刻把它覆盖掉
-                // （RefreshSourceBar 每 0.25s 会把 _sourceState 重写成当前状态）。
-                if (kind == TwinSourceSwitcher.SourceKind.Playback)
-                {
-                    ShowSourceHint("无录像 · 先录制");
-                }
-                else
-                {
-                    ShowSourceHint("未接入该数据源");
-                }
-            }
-            else
-            {
-                ShowSourceHint("切到 " + TwinSourceSwitcher.ShortName(kind));
-            }
+            if (!ok) ShowSourceHint("未接入该数据源");
+            else ShowSourceHint("切到 " + TwinSourceSwitcher.ShortName(kind));
 
+            // 切离回放时把选片层收掉 —— 否则它会留在屏幕上，
+            // 而下面的数据源已经不是回放了，点哪一条都很奇怪。
+            HideRecordingPicker();
             RefreshSourceBar(true);
+        }
+
+        // ================================================================ 录像选择层（P12 补齐）
+
+        /// <summary>
+        /// 在数据源条上方弹一列录像清单，点一条就播那一条。
+        ///
+        /// 【为什么用「弹层」而不是常驻一个下拉】这块 UI 平时完全用不上
+        /// （多数时候只有一份录像），常驻会白占半屏。做成点「回放」才出现的浮层，
+        /// 用完点一下就收 —— 与浮卡本身"按需出现"的风格一致。
+        /// </summary>
+        private void ToggleRecordingPicker(List<RecordingReader.RecordingEntry> list)
+        {
+            if (_pickerRoot != null) { HideRecordingPicker(); return; }
+            if (_uiRoot == null) return;
+
+            float s = _activeScale;
+            const int maxRows = 6;   // 再多就滚动，这里先只列最近 6 个
+            int rows = Mathf.Min(list.Count, maxRows);
+
+            float rowH = 30f;
+            // 浮层比数据源条宽一点：要放下「名字 + 大小 + 时间」三段，
+            // 540 里名字只够 220px，`twin-20261103-182901` 会被截成一半。
+            float w = BaseSourceBarWidth * s + 120f * s;
+            float h = 26f * s + rows * rowH * s + 6f * s;
+
+            _pickerRoot = (RectTransform)TwinUIFactory.Node("RecordingPicker", _uiRoot).transform;
+
+            TwinRoundedRect bg = TwinUIFactory.Rounded(_pickerRoot, "Bg", 10f * s,
+                TwinStatusPalette.PanelTop, TwinStatusPalette.PanelBottom,
+                TwinStatusPalette.PanelBorder, 1f, false);
+            TwinUIFactory.Stretch(bg.rectTransform);
+
+            // 叠在「数据源条」之上。回放控制条此时可能已在它上面显示，
+            // 但两者不会同时需要操作 —— 选择浮层一出，就盖住控制条，点完就收。
+            //
+            // 高度累加：数据源条 bottom = margin，高 38 → 加 6 间隙 →
+            // 浮层 bottom = margin + (38 + 6)。
+            float bottom = _scaledScreenMargin + (BaseSourceBarHeight + 6f) * s;
+            TwinUIFactory.AnchorBottomLeft(_pickerRoot, _scaledScreenMargin, bottom, w, h);
+
+            Text title = TwinUIFactory.Label(_pickerRoot, "Title", _scaledFsSourceState,
+                TextAnchor.MiddleLeft, TwinStatusPalette.TextSecondary);
+            TwinUIFactory.Place(title.rectTransform, 12f * s, 6f * s, w - 24f * s, 20f * s);
+            title.text = "选择录像（共 " + list.Count + " 份，显示最近 " + rows + " 份）";
+
+            for (int i = 0; i < rows; i++)
+            {
+                RecordingReader.RecordingEntry e = list[i];
+                string path = e.Path;
+                float ry = (26f + i * rowH) * s;
+
+                Image rowBg = TwinUIFactory.Block(_pickerRoot, "Row_" + i,
+                    new Color(1f, 1f, 1f, i == 0 ? 0.10f : 0.05f), true);
+                TwinUIFactory.Place(rowBg.rectTransform, 8f * s, ry, w - 16f * s, (rowH - 4f) * s);
+
+                Button btn = rowBg.gameObject.AddComponent<Button>();
+                btn.targetGraphic = rowBg;
+                btn.transition = Selectable.Transition.None;
+                btn.onClick.AddListener(delegate { OnPickRecording(path); });
+
+                // 名字（左）+ 大小 / 时间（右）。时间用本地时间显示 ——
+                // 给用户看的东西不用 UTC，那是排序用的内部口径。
+                Text nm = TwinUIFactory.Label(rowBg.transform, "N", _scaledFsSourceState,
+                    TextAnchor.MiddleLeft, TwinStatusPalette.TextPrimary);
+                TwinUIFactory.Place(nm.rectTransform, 10f * s, 0f, 250f * s, (rowH - 4f) * s);
+                nm.text = e.DisplayName;
+                nm.horizontalOverflow = HorizontalWrapMode.Overflow;   // 宁可出去也不截断
+                nm.raycastTarget = false;
+
+                Text meta = TwinUIFactory.Label(rowBg.transform, "M", _scaledFsSourceState,
+                    TextAnchor.MiddleRight, TwinStatusPalette.TextMuted);
+                TwinUIFactory.Place(meta.rectTransform, 260f * s, 0f,
+                    w - 16f * s - 270f * s, (rowH - 4f) * s);
+                meta.text = e.SizeText + "  " + e.ModifiedUtc.ToLocalTime().ToString("MM-dd HH:mm");
+                meta.raycastTarget = false;
+            }
+        }
+
+        private void OnPickRecording(string path)
+        {
+            if (_switcher == null) return;
+            bool ok = _switcher.PlayRecording(path);
+            ShowSourceHint(ok
+                ? "回放 " + System.IO.Path.GetFileNameWithoutExtension(path)
+                : "该录像打不开");
+            HideRecordingPicker();
+            RefreshSourceBar(true);
+        }
+
+        private void HideRecordingPicker()
+        {
+            if (_pickerRoot != null)
+            {
+                // 用工厂里那个（它会按播放/编辑态选 Destroy 或 DestroyImmediate）。
+                // 【不要自己写 Object.Destroy】本文件同时 `using System` 和
+                // `using UnityEngine`，`Object` 在这两个命名空间都有 → CS0104 二义性。
+                // 这也是"项目里已有工具函数就别另写一个"的典型情况。
+                TwinUIFactory.DestroySafe(_pickerRoot.gameObject);
+                _pickerRoot = null;
+            }
         }
 
         private void ShowSourceHint(string text)

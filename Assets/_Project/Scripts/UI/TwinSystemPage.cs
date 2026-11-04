@@ -327,6 +327,16 @@ namespace SchoolTwin.UI
         /// 与全屏 `RefreshStatsPage` 同一个缺陷、同一个修法，两态必须同步。
         /// </summary>
         private Text _nTopEmpty;
+        /// <summary>
+        /// 窄态统计页底部的「数据源健康度」卡片（P12 补齐）。
+        ///
+        /// 【2026-11-04 为什么独立成类】它要查 5 个数据源组件（Mock / MQTT /
+        /// Player / Recorder / Switcher），逻辑比一个 Text 复杂得多；塞进本文件
+        /// （已 2700 行）会让"统计页"和"数据源自检"两件事缠在一起。
+        /// 【全屏为什么不放】L2 大屏四宫格已经排满（KPI/类型/曲线/楼层/排名），
+        /// 健康度属于运维视角，窄态右栏才是运维面板。
+        /// </summary>
+        private TwinSourceHealthCard _nSourceHealth;
         private float _nSparkNextAt;
         private float _nSparkLo = -1f;
         private float _nSparkHi = -1f;
@@ -348,7 +358,22 @@ namespace SchoolTwin.UI
         // 所以下面所有子元素的 y 都从 0 起算（不再从 60 起）。
         private const float NStatsViewY = 60f;
         private const float NStatsViewH = 484f;
-        private const float NStatsContentH = 672f;
+
+        // 【2026-11-04 P12 改动】672 → 802 → 推导式
+        //
+        // 底部有「数据源健康度」卡片，从 NStatsHealthY 起。
+        //
+        // 【上一版为什么显示不全——必须记下来】上一版把这里硬写成 802，
+        // 而卡片实际占 860（690 + 170 高）。结果是第 4 行「录制」正好压在 802 上，
+        // 整行被 RectMask2D 裁掉、脚注也没了 —— 主理人 play 截图里只看到 3 行。
+        // 硬抄的数字抄错**不报错、不警告**，只表现为"少了一行"，极难发现。
+        //
+        // 现在改成从卡片自己的常量推导，只有一个来源：
+        //   内容高 = 卡片起点 + 卡片高 + 底部留白
+        // 以后改卡片行数，只要动 `TwinSourceHealthCard.Rows`，这里自动跟上。
+        private const float NStatsHealthY = 690f;
+        private const float NStatsContentH =
+            NStatsHealthY + TwinSourceHealthCard.TotalHeight + 24f;   // 底部留白 24
         /// <summary>滚动条宽。</summary>
         private const float NStatsBarW = 4f;
         /// <summary>窄态 KPI 卡宽：2×210 + 14 间隙 = 434，正好塞满视口宽（440-6 滚动条）。</summary>
@@ -909,6 +934,17 @@ namespace SchoolTwin.UI
             _nTopEmpty.text = "当前无耗电设备";
             _nTopEmpty.gameObject.SetActive(false);
 
+            // ================================================================ 数据源健康度（P12 补齐）
+            //
+            // 【为什么放在统计页最底下】它是"解释数据从哪来"的一块，不是主 KPI。
+            // 放顶部会把四个主 KPI 挤下去，而主理人验收时第一眼看的是那几个数。
+            // 放最底下、滚动才看见，符合它的定位：**有人问"这数据真的假的"时才需要看**。
+            //
+            // 【为什么不新开第六页】五个模块 Tab 是既定结构（规格 §2），
+            // 加第六页要重排 Tab 栏 + 改一堆判据。而这块内容 4 行就够，不值得占一页。
+            _nSourceHealth = new TwinSourceHealthCard(RightW - 6f);
+            _nSourceHealth.Build(body, 0f, NStatsHealthY);
+
             RefreshStats();
         }
 
@@ -1168,6 +1204,14 @@ namespace SchoolTwin.UI
                 float pct = _nPowerSum > 0.01f ? kv.Value / _nPowerSum * 100f : 0f;
                 SetText(_nTopPct[i], pct.ToString("0") + "%");
             }
+
+            // ================================================================ 数据源健康度（P12 补齐）
+            //
+            // 【为什么放在这里、不放 `UpdateNarrowStats`】后者是 5Hz（0.2s），
+            // 而这张卡片每次 Tick 要 `FindObjectOfType` 两趟 + 遍历 Sources。
+            // 一行"发了几条 / 丢了几条"的数字，0.5s 刷新完全够，
+            // 5Hz 刷是纯浪费 —— 而且 FindObjectOfType 是场景全遍历，不便宜。
+            if (_nSourceHealth != null) _nSourceHealth.Tick();
         }
 
         /// <summary>

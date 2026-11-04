@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using SchoolTwin.Core;
@@ -97,6 +98,65 @@ namespace SchoolTwin.Twin
             if (kind == SourceKind.Mock) return "Mock";
             if (kind == SourceKind.Mqtt) return "MQTT";
             return "回放";
+        }
+
+        // ---------------------------------------------------------------- 录像清单 / 选片（P12 补齐）
+
+        /// <summary>
+        /// 当前可回放的录像清单，新的在前。每次调用都摸一次磁盘（UI 侧自己节流）。
+        /// </summary>
+        public List<RecordingReader.RecordingEntry> ListRecordings()
+        {
+            return RecordingReader.ListRecordings();
+        }
+
+        /// <summary>当前正在回放的文件名（无则空串）。给 UI 显示「正在放哪一个」。</summary>
+        public string CurrentRecordingName
+        {
+            get
+            {
+                EnsureReady();
+                if (_player == null) return "";
+                string p = _player.ResolvedPath;
+                return string.IsNullOrEmpty(p) ? "" : Path.GetFileNameWithoutExtension(p);
+            }
+        }
+
+        /// <summary>
+        /// 指定一个录像文件并开始回放。返回 false 表示失败（文件不存在 / 播放器起不来）。
+        ///
+        /// 【为什么换成「先停、换文件、再起」而不是「热切换」】
+        /// `TwinPlayer` 的样本列表在 `RunWorker` 开头一次性 `LoadFile` 载入，
+        /// 播放中途换文件没有安全的切入点 —— 后台线程正在遍历 `_samples`。
+        /// 停掉（`StopSource` 会 join 线程）再换，是唯一不会有竞态的顺序。
+        ///
+        /// 代价是切换会有一个极短的停顿（几毫秒，join 而已），
+        /// 但换录像本来就是"重新开始看"，这个停顿是合理的。
+        /// </summary>
+        public bool PlayRecording(string path)
+        {
+            EnsureReady();
+
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return false;
+
+            EnsurePlayer();
+
+            // 切到回放模式（若已经在回放，这里会先把源停掉）
+            if (_current != SourceKind.Playback)
+            {
+                if (!SwitchTo(SourceKind.Playback)) return false;
+            }
+
+            // 停 → 换文件 → 再起。顺序不能动：`_recordingPath` 必须在
+            // `StartSource` 之前设置好，因为 `RunWorker` 第一件事就是 LoadFile。
+            _player.StopSource();
+            _player.RecordingPath = path;
+            _player.gameObject.SetActive(true);
+            _player.enabled = true;
+            _player.StartSource(TwinRuntime.Ensure().Sink);
+
+            _current = SourceKind.Playback;
+            return true;
         }
 
         private static string StateLabel(DataSourceState state)

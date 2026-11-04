@@ -312,5 +312,83 @@ namespace SchoolTwin.Data
         {
             return Path.Combine(ProjectRoot(), "Recordings");
         }
+
+        /// <summary>一条录像文件的清单项（只读文件名/大小/时间，不解析内容）。</summary>
+        public struct RecordingEntry
+        {
+            public string Path;
+            public string FileName;
+            public long Bytes;
+            public DateTime ModifiedUtc;
+
+            /// <summary>给人看的名字：`twin-20261104-091500` 这种，去掉扩展名。</summary>
+            public string DisplayName
+            {
+                get
+                {
+                    if (string.IsNullOrEmpty(FileName)) return "(空)";
+                    int dot = FileName.LastIndexOf('.');
+                    return dot > 0 ? FileName.Substring(0, dot) : FileName;
+                }
+            }
+
+            public string SizeText
+            {
+                get
+                {
+                    if (Bytes < 1024) return Bytes + " B";
+                    if (Bytes < 1024 * 1024) return (Bytes / 1024f).ToString("0.#") + " KB";
+                    return (Bytes / (1024f * 1024f)).ToString("0.#") + " MB";
+                }
+            }
+        }
+
+        /// <summary>
+        /// 列出录像目录下所有 .jsonl，按修改时间**新的在前**。
+        ///
+        /// 【为什么不在 UI 里直接 GetFiles】三处（回放器的"用最新一个"、
+        /// 数据源页的录像列表、编辑器菜单）都要这份清单，
+        /// 各写一份必然漂移 —— 比如一处按名字排序、一处按时间排序，
+        /// 用户看到的"第一个"和实际回放的不是同一个文件。
+        ///
+        /// 任何 IO 异常都返回空列表，不抛 —— 调用方是 UI，不能因为目录不可读就崩。
+        /// </summary>
+        public static List<RecordingEntry> ListRecordings()
+        {
+            List<RecordingEntry> list = new List<RecordingEntry>(8);
+            try
+            {
+                string dir = RecordingsDirectory();
+                if (!Directory.Exists(dir)) return list;
+
+                string[] files = Directory.GetFiles(dir, "*.jsonl");
+                for (int i = 0; i < files.Length; i++)
+                {
+                    RecordingEntry e = new RecordingEntry();
+                    e.Path = files[i];
+                    e.FileName = Path.GetFileName(files[i]);
+                    try
+                    {
+                        FileInfo fi = new FileInfo(files[i]);
+                        e.Bytes = fi.Length;
+                        e.ModifiedUtc = fi.LastWriteTimeUtc;
+                    }
+                    catch (Exception) { }
+                    list.Add(e);
+                }
+            }
+            catch (Exception)
+            {
+                return list;
+            }
+
+            // 新的在前。用 LastWriteTimeUtc 而不是 LastWriteTime —— 后者是本地时间，
+            // 跨时区/夏令时的机器上排序会错位。
+            list.Sort(delegate (RecordingEntry a, RecordingEntry b)
+            {
+                return b.ModifiedUtc.CompareTo(a.ModifiedUtc);
+            });
+            return list;
+        }
     }
 }

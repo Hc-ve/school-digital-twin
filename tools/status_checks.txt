@@ -478,3 +478,92 @@ P27-69 | 交接基线版本记录已登记 v1.21 | grep:1:Docs/P00_项目总览_
 # 结论：**锚点必须选"文档结构里天然唯一"的位置** —— 标题行 `^### 坑 N：`（带行首锚），
 # 而不是正文句子。这条已作为 P27-70 入判据，防止后来者再挑正文句子当锚点。
 P27-70 | 锚点判据不得以正文句子为模式（只允许标题行/行首锚） | grep0:Tools/status_checks.txt:^P2[0-9]-6[579] \| [^|]*\| grep:[0-9]+:[^|]*\.md:[^#^/]
+
+# --- P12 旧面板清理（2026-11-04，减法收尾）---
+#
+# 【这一组全是"不存在"类判据】配合**一条反向判据**（P12-10）兜住误删。
+# 只有 grep0 没有反向判据的话，有人在"清理"时把 TwinDetailPanel 一起删了，
+# 这一组会全绿 —— 因为删得更干净了。反向判据是这一组的地基。
+#
+# ⚠️ 锚点选择遵守 G13：全部用**结构唯一**的位置。
+#    · 类声明用 `class XxxName` —— 全工程只会在一个文件里出现一次
+#    · 配置表用整行字面量（含 `{` 与 `};`），不是"数据源"这种词
+#      （"数据源"在三处注释里都有，拿它当锚点必漂移，正是坑 13 的原样重演）
+P12-01 | TwinControlPanel 类声明已消失 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:class TwinControlPanel
+P12-02 | TwinPointListPanel 类声明已消失 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:class TwinPointListPanel
+P12-03 | TwinAlarmHistoryPanel 类声明已消失 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:class TwinAlarmHistoryPanel
+# 源文件与 .meta 的删除用三条 nothas —— 判据工具对 nothas 的语义就是"路径必须不存在"，
+# 比"找一个 marker 文件再 grep"可靠（marker 本身还得维护，多一个可失效的中间物）。
+# 三个文件 × 源+.meta = 6 条路径，但判据按"文件"合并成三条：一条挂 .cs、一条挂 .meta。
+P12-04 | 旧面板源文件 .cs 三个都不在 | hasnot:Assets/_Project/Scripts/UI/TwinControlPanel.cs
+P12-04b | 旧面板 .cs 的 .meta 三个都不在（Unity 要求成对） | hasnot:Assets/_Project/Scripts/UI/TwinControlPanel.cs.meta
+P12-04c | 点位清单源文件与 meta 都不在 | hasnot:Assets/_Project/Scripts/UI/TwinPointListPanel.cs
+P12-04d | 告警历史浮层源文件与 meta 都不在 | hasnot:Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs
+P12-04e | 点位清单 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinPointListPanel.cs.meta
+P12-04f | 告警历史浮层 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs.meta
+P12-05 | ToggleLegacyPanel 已消失（含注释外的全部调用点） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:ToggleLegacyPanel
+P12-06 | 工具行已减为两项 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助" \};
+P12-07 | 工具行两项坐标已重排（长度与项数一致） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f \};
+P12-08 | 假 Toast「P2 接入」已不再出现 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:P2 接入
+P12-09 | 工具行命中区长度跟随项数（不再写死 4） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_toolHits = new RectTransform\[_toolNames\.Length\]
+P12-10 | 【反向】TwinDetailPanel 仍在——它是浮卡宿主，不许被误删 | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:public class TwinDetailPanel : MonoBehaviour
+P12-11 | 【反向】浮卡底部数据源横条仍在（真功能，与工具行同名但不同物） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:private void BuildSourceBar\(\)
+P12-12 | 工具行「数据源」接的是真切换器（不是 Toast 占位） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private void CycleDataSource\(\)
+P12-13 | 工具行「帮助」有真浮层实现 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private void ShowHelpOverlay\(\)
+P12-14 | 工具行高 80 未被改动（C-2 裁决值） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private const float ToolRowH = 80f;
+P12-15 | 摘依赖后 TwinDetailPanel 不再 AddComponent 旧面板 | grep0:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:AddComponent<Twin(Control|PointList|AlarmHistory)Panel>
+P12-16 | BAK 过滤链路未被切断（Stats 侧仍在） | grep:1:Assets/_Project/Scripts/Twin/TwinDeviceStats.cs:BakPrefix = "BAK"
+P12-17 | BAK 过滤链路未被切断（Presenter 侧仍在） | grep:1:Assets/_Project/Scripts/Present/TwinDevicePresenter.cs:StartsWith\("BAK", StringComparison\.Ordinal\)
+P12-18 | TwinSourceSwitcher 只在一处被 AddComponent（唯一权威，防止状态分裂） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:AddComponent<TwinSourceSwitcher>()
+P12-19 | 抽屉只 Find 不建 switcher（与上条同一约束的另一半） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:AddComponent<TwinSourceSwitcher>
+P12-20 | 死字段 _scaledPanelGap 已清（无读取者的赋值也删了） | grep0:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:^\s*_scaledPanelGap
+P12-21 | 数据源轮换用独立游标（防 SwitchTo 失败时死锁） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private int _srcCursor = -1;
+P12-22 | 轮换基准读游标而不是 CurrentKind（死锁的根因就在这一行） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:TwinSourceSwitcher.SourceKind from = _srcCursor >= 0
+P12-23 | 本轮新增孤儿 ViewportWidth 已清除（它的 3 个调用者全在已删面板里） | grep0:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:ViewportWidth
+P12-24 | ViewportHeight 必须保留（浮卡本体 3 处实时调用，勿连带删） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:private float ViewportHeight\(\)
+P12-25 | 本轮新增孤儿 ZoneTitleTable 已清除 | grep0:Assets/_Project/Scripts/Twin/TwinSiteLayout.cs:ZoneTitleTable
+P12-26 | 本轮新增孤儿 OrderOf 已清除（唯一调用者是已删的总控面板） | grep0:Assets/_Project/Scripts/Twin/TwinSiteLayout.cs:OrderOf
+P12-27 | Floors() 必须保留（TwinCircuit:188 / TwinP15SelfTest:82 仍在调） | grep:1:Assets/_Project/Scripts/Twin/TwinSiteLayout.cs:public static int\[\] Floors\(\)
+P12-28 | Floors 的过期注释已订正（不再说「总控面板用它」） | grep0:Assets/_Project/Scripts/Twin/TwinSiteLayout.cs:总控面板用它生成筛选按钮。
+P12-29 | 【回归】BuildUI 必须显式建告警历史数据组件（删面板时曾被连带带走） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:^            EnsureHistory\(\);
+P12-30 | EnsureHistory 声明仍在（它建的是数据组件，不是面板） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:private TwinAlarmHistory EnsureHistory\(\)
+P12-31 | EnsureHistory 内部仍自己 AddComponent（不依赖场景预置） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:gameObject\.AddComponent<TwinAlarmHistory>\(\)
+P12-32 | 【补齐】TwinPlayer 有暂停开关（原来只能自动播到尾） | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:public bool TogglePause\(\)
+P12-33 | 【补齐】TwinPlayer 支持按进度跳转 | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:public void SeekToProgress\(float p\)
+P12-34 | 【补齐】跳转走「时间戳请求」而非直接改游标（只有一个写入者） | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:_seekTargetTs = target;
+P12-35 | 【补齐】暂停用时钟偏移实现，不挂住后台线程 | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:if \(_paused\)[\s\S]{0,400}_playbackStartWallTs = NowUtcSeconds\(\)
+P12-36 | 【补齐】_loaded 必须是 LoadFile 里最后置 true 的那句（顺序屏障） | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:_loaded = true;[\s\S]{0,60}return _samples.Count;
+P12-37 | 【补齐】回放控制条类存在 | grep:1:Assets/_Project/Scripts/UI/TwinPlaybackBar.cs:public class TwinPlaybackBar
+P12-38 | 【补齐】进度条事件挂在命中层 Image 上（不是无 Graphic 的根节点） | grep:1:Assets/_Project/Scripts/UI/TwinPlaybackBar.cs:public class TwinPlaybackDragArea : MonoBehaviour
+P12-39 | 【补齐】单击轨道也能提交进度（无位移不触发 EndDrag） | grep:1:Assets/_Project/Scripts/UI/TwinPlaybackBar.cs:IPointerDownHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
+P12-40 | 【补齐】控制条只在回放源时显示 | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:_switcher.CurrentKind == TwinSourceSwitcher.SourceKind.Playback
+P12-41 | 【补齐】控制条引用在 UI 清理时置空（防 MissingReference 刷屏） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:^            _playbackBar = null;
+P12-42 | 【补齐】录像清单统一走 RecordingReader.ListRecordings | grep:1:Assets/_Project/Scripts/Data/TwinPlayer.cs:RecordingReader.ListRecordings\(\)
+P12-43 | 【补齐】TwinPlayer 不再自己排序（避免两套口径漂移） | grep0:Assets/_Project/Scripts/Data/TwinPlayer.cs:File.GetLastWriteTime\(
+P12-44 | 【补齐】切换器提供选片回放入口 | grep:1:Assets/_Project/Scripts/Twin/TwinSourceSwitcher.cs:public bool PlayRecording\(string path\)
+P12-45 | 【补齐】多录像时弹选择层（列表 >1 才弹） | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:if \(list.Count > 1\)
+P12-46 | 【补齐】数据源健康度卡片独立成类 | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:public class TwinSourceHealthCard
+P12-47 | 【补齐】健康度卡片读已注册列表而非全场景遍历找数据源 | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:TwinRuntime.Instance.Sources
+P12-48 | 【补齐】健康度卡片泛型约束收窄到 DataSourceBase（FindIn 与 FindInScene 各一处，共 2） | grep:2:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:where T : DataSourceBase
+P12-49 | 【补齐】录制器不在 Sources 里，必须场景查找（曾写错） | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:FindObjectOfType<TwinRecorder>\(true\)
+P12-50 | 【补齐】健康度卡片接进窄态统计页 | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nSourceHealth.Tick\(\)
+P12-51 | 【修】窄态内容高必须由卡片常量推导，不许硬抄数字（上版抄 802 裁掉了第 4 行） | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:NStatsHealthY \+ TwinSourceHealthCard\.TotalHeight
+P12-52 | 【补齐】健康度卡片按 0.5s 刷新而非 5Hz | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:_nextRefresh = now \+ 0.5f;
+P12-53 | 【补齐】场景 Mock 源已启用（m_Enabled:1 紧挨 Mock 的 guid） | grep:1:Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity:m_Enabled: 1[\s\S]{0,120}guid: 44187269f6fe94c458c94dcbee16621d
+P12-54 | 【补齐】场景 MQTT 源已停用且不自启（否则启动仍落 MQTT） | grep:1:Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity:m_Enabled: 0[\s\S]{0,120}guid: 2f933a698a6d90b692ca6daade3bba13
+P12-55 | 【回归】新建 UI 类必须 using UnityEngine.UI（Text/Image/Button 都在这里） | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:^using UnityEngine\.UI;
+P12-56 | 【回归】新建 UI 类必须 using UnityEngine.UI（回放控制条同） | grep:1:Assets/_Project/Scripts/UI/TwinPlaybackBar.cs:^using UnityEngine\.UI;
+P12-57 | 【回归】DataSourceState 在 SchoolTwin.Core，不是 Data | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:^using SchoolTwin\.Core;
+P12-58 | 【回归】TwinDetailPanel 需 using SchoolTwin.Data 才能用 RecordingReader | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:^using SchoolTwin\.Data;
+P12-59 | 【回归】不要在 TwinDetailPanel 里写 Object.Destroy（System 与 UnityEngine 二义） | grep0:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:Object\.Destroy
+P12-60 | 【回归】销毁统一走 TwinUIFactory.DestroySafe | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:TwinUIFactory\.DestroySafe\(_pickerRoot\.gameObject\)
+P12-61 | 【修】卡片高度公开成常量，供调用方推导（原来是实例属性，只能手抄） | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:public const float TotalHeight =
+P12-62 | 【修】卡片行数只有一处定义（Rows），不许在别处写死 4 | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:public const int Rows = 4;
+P12-63 | 【修】数据源查找必须两层：已注册 ∪ 场景兜底（否则禁用的源显示成"不存在"） | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:FindIn<MqttDataSource>\(sources\)
+P12-64 | 【修】场景兜底查找函数存在（含未激活/已禁用） | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:private static T FindInScene<T>\(\) where T : DataSourceBase
+P12-65 | 【修】组件存在但未启用要说「已禁用」，不能说「不存在」 | grep:1:Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs:_state\[i\]\.text = "已禁用";
+P12-66 | 【修】卡片构建位置用常量 NStatsHealthY（不再写死 690） | grep:1:Assets/_Project/Scripts/UI/TwinSystemPage.cs:_nSourceHealth\.Build\(body, 0f, NStatsHealthY\)
+P12-67 | 【两态同步】全屏统计页页脚必须有「当前数据源」（窄态卡片放不下，用一行等价表达） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:private Text _statsFootSource;
+P12-68 | 【两态同步】全屏页脚源状态读切换器（与窄态同源，不另找组件） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:_switcher.CurrentKind
+P12-69 | 【两态同步】状态措辞与窄态同一套（运行中/已停止/连接中…） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:case DataSourceState.Running: return "运行中";
+P12-70 | 【两态同步】页脚源状态随统计页刷新（不是只构建时写一次） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:^            RefreshFootSource\(\);

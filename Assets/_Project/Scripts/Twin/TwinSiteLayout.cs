@@ -145,12 +145,10 @@ namespace SchoolTwin.Twin
             return Find(zone).Floor;
         }
 
-        public static int OrderOf(string zone)
-        {
-            return Find(zone).Order;
-        }
-
-        /// <summary>表里出现过的楼层，升序。总控面板用它生成筛选按钮。</summary>
+        /// <summary>
+        /// 表里出现过的楼层，升序。调用方：`TwinCircuit:188`、`TwinP15SelfTest:82`。
+        /// 原注释写"总控面板用它生成筛选按钮"已过期（那面板 P12 删了），但**不是死代码**。
+        /// </summary>
         public static int[] Floors()
         {
             List<int> list = new List<int>(4);
@@ -160,23 +158,6 @@ namespace SchoolTwin.Twin
             }
             list.Sort();
             return list.ToArray();
-        }
-
-        /// <summary>
-        /// 给 TwinPointListPanel 用的 {zone, 中文名} 表。
-        ///
-        /// 【为什么要有这个】点位清单原本自己写了一份 10 行的分区表，和这里完全重复。
-        /// 两份表一定会漂移（改了一处忘了另一处），所以让它从这里取。
-        /// 返回 string[][] 是为了不动它既有的遍历代码。
-        /// </summary>
-        public static string[][] ZoneTitleTable()
-        {
-            string[][] table = new string[Table.Length][];
-            for (int i = 0; i < Table.Length; i++)
-            {
-                table[i] = new string[] { Table[i].Zone, Table[i].RoomName };
-            }
-            return table;
         }
     }
 }

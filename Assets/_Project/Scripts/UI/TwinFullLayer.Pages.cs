@@ -883,6 +883,15 @@ namespace SchoolTwin.UI
         private Text _donutCenter;
         /// <summary>页脚右段：更新时间（每 0.5s 刷新）。</summary>
         private Text _statsFootRight;
+
+        /// <summary>
+        /// 统计页页脚「当前数据源」那一段（P12 两态同步，2026-11-04）。
+        ///
+        /// 窄态在统计页底部有完整健康度卡片，全屏放不下（四宫格 + 页脚已占满），
+        /// 所以这里用一句话给等价信息：当前源是什么、在不在跑。
+        /// **口径必须和窄态卡片一致** —— 都读 `TwinSourceSwitcher`。
+        /// </summary>
+        private Text _statsFootSource;
         /// <summary>页脚左段：口径说明（含「总功率含 M 台估算」）。</summary>
         private Text _statsFootLeft;
 
@@ -1295,6 +1304,28 @@ namespace SchoolTwin.UI
             //     被问「那部分怎么算的」能当场答上。
             footL.text = "实时读数 · 无读数设备按额定×0.15估算  ·  刷新 0.5s · 采样 5Hz";
 
+            // ================================================================ 当前数据源（P12 两态同步）
+            //
+            // 【为什么在这里加一行字，而不是也做一张「健康度卡片」】
+            // 窄态统计页底部有完整的 4 行健康度卡片（Mock / MQTT / 回放 / 录制）。
+            // 按项目约定「两态必须同步」，全屏这边也应有等价信息。
+            //
+            // 但全屏是四宫格布局：第二行卡片 y=424 高 196，到 620 结束；
+            // 页脚在 630，到 720 只剩 100px —— **物理放不下**高 166 的卡片。
+            // 硬塞只能压扁四宫格或盖住页脚，那是拿已经验收过的大屏视觉去换一行辅助信息，
+            // 得不偿失。
+            //
+            // 所以取等价表达：**同口径、不同形式**。
+            // 全屏只要回答"现在数据从哪来"这一件事，一句话足够；
+            // 「发了几条 / 丢了几条」那种运维细节留给窄态右栏（那才是运维视角）。
+            //
+            // 位置：左段文案只占约 274px（600px 里），后面还有 325px 余量，
+            // 所以接在 x+286 处，不挤右段的"更新 HH:mm:ss"。
+            _statsFootSource = TwinUIFactory.Label(_statsGroup, "FFootSrc", TwinTheme.FsMicro,
+                TextAnchor.UpperLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(_statsFootSource.rectTransform, PageX + 286f, 630f, 340f, 12f);
+            _statsFootSource.text = "";
+
             _statsFootRight = TwinUIFactory.Label(_statsGroup, "FFootR", TwinTheme.FsMicro,
                 TextAnchor.UpperRight, TwinTheme.TextMuted);
             TwinUIFactory.Place(_statsFootRight.rectTransform, PageX + 690f, 630f, 78f, 12f);
@@ -1694,6 +1725,65 @@ namespace SchoolTwin.UI
             // 0.5s 刷一次，和整页同频 —— 不会出现"数据变了但时间没变"。
             if (_statsFootRight != null)
                 _statsFootRight.text = "更新 " + System.DateTime.Now.ToString("HH:mm:ss");
+
+            RefreshFootSource();
+        }
+
+        /// <summary>
+        /// 页脚「当前数据源」那一段。
+        ///
+        /// 【口径必须与窄态健康度卡片一致】两边都读 `TwinSourceSwitcher`：
+        /// `CurrentKind` 说"哪一个"，`CurrentState` 说"在不在跑"。
+        /// 自己另找 `MockDataSource` / `MqttDataSource` 会得到第二个答案 ——
+        /// 而同型病（同一件事两个出口）在这个项目已经踩过四次。
+        ///
+        /// 【为什么切换器找不到时写"未接入"而不是留空】留空会让人以为这功能坏了；
+        /// 写出来至少说明"系统知道该显示什么，只是还没就绪"。
+        /// </summary>
+        private void RefreshFootSource()
+        {
+            if (_statsFootSource == null) return;
+
+            if (_switcher == null) _switcher = FindObjectOfType<TwinSourceSwitcher>();
+            if (_switcher == null) { _statsFootSource.text = "· 数据源未就绪"; return; }
+
+            TwinSourceSwitcher.SourceKind kind = _switcher.CurrentKind;
+            DataSourceState st = _switcher.CurrentState;
+
+            _sbFoot.Length = 0;
+            _sbFoot.Append("· 当前源 ").Append(TwinSourceSwitcher.ShortName(kind))
+                     .Append(" · ").Append(StateWord(st));
+            _statsFootSource.text = _sbFoot.ToString();
+
+            _statsFootSource.color = StateTint(st);
+        }
+
+        private readonly StringBuilder _sbFoot = new StringBuilder(48);
+
+        private TwinSourceSwitcher _switcher;
+
+        /// <summary>状态词。与窄态卡片 `StateLabel` 同一套措辞，不另造一套。</summary>
+        private static string StateWord(DataSourceState st)
+        {
+            switch (st)
+            {
+                case DataSourceState.Idle: return "空闲";
+                case DataSourceState.Connecting: return "连接中";
+                case DataSourceState.Running: return "运行中";
+                case DataSourceState.Degraded: return "降级";
+                case DataSourceState.Stopped: return "已停止";
+                case DataSourceState.Faulted: return "故障";
+                default: return st.ToString();
+            }
+        }
+
+        /// <summary>状态色。运行中才亮，其余一律 muted —— 页脚不该抢主视觉。</summary>
+        private static Color StateTint(DataSourceState st)
+        {
+            if (st == DataSourceState.Running) return TwinTheme.StatusNormal;
+            if (st == DataSourceState.Degraded) return TwinTheme.StatusWarning;
+            if (st == DataSourceState.Faulted) return TwinTheme.StatusAlarm;
+            return TwinTheme.TextMuted;
         }
 
         /// <summary>取功率曲线窗口内的极值（用于"近 60s 区间"标注）。</summary>

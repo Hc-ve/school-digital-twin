@@ -1,0 +1,512 @@
+using System.Collections;
+using UnityEngine;
+using CampusUI.Environment;
+
+namespace CampusUI.Core
+{
+    /// <summary>
+    /// 全局环境状态机：一级「白天 / 夜晚」，二级「晴 / 多云 / 阴 / 雨 / 雷雨 / 雾 / 雪」。
+    ///
+    /// 一次切换会同时驱动：天空盒、平行光、环境光、内置雾、雨雪粒子、云穹顶、环境音。
+    /// 所有参数在 transitionDuration 内**平滑插值**，不会"啪"地跳变。
+    ///
+    /// 三个关键实现决定（都是踩过的坑）：
+    ///  1) **天空盒必须实例化一份**。场景自带的天空盒是磁盘上的资产，
+    ///     直接改 `RenderSettings.skybox` 的 `_SkyTint` 会把 .mat 改脏、甚至写回磁盘。
+    ///     这里 `new Material(原材质)` 得到运行期副本，只在内存里变。
+    ///     （旧版代码因为"场景已有天空盒就直接 return"，导致昼夜切换时天空**从来没变过**。）
+    ///  2) **雾用 RenderSettings.fog**。URP 14 没有内置体积雾，但支持线性/指数内置雾，
+    ///     URP/Lit 与 Terrain 着色器都会采样它，代价几乎为零。
+    ///  3) **DynamicGI.UpdateEnvironment() 要节流**。它会重算天空盒到 cubemap 的卷积，
+    ///     每帧调会明显掉帧，这里 0.2 秒一次，过渡结束时再补一次。
+    /// </summary>
+    public class EnvironmentState : MonoBehaviour
+    {
+        public static EnvironmentState Instance;
+
+        public TimeOfDay timeOfDay = TimeOfDay.Day;
+        public Weather weather = Weather.Clear;
+
+        [Tooltip("一次天气切换的过渡时长（秒）")]
+        [SerializeField] private float transitionDuration = 2.4f;
+
+        [Tooltip("是否显示云穹顶（关掉可以省一次大球的透明绘制）")]
+        [SerializeField] private bool showClouds = true;
+
+        [Tooltip("环境音总音量系数")]
+        [SerializeField, Range(0f, 1f)] private float sfxScale = 0.55f;
+
+        public event System.Action<TimeOfDay, Weather> OnChanged;
+
+        // ---- 运行期引用 ----
+        private Light sun;
+        private Material skyMat;
+        private Camera cam;
+        private WeatherVisuals visuals;
+        private AudioSource rainSrc, windSrc, thunderSrc;
+        private bool audioReady;
+
+        // ---- 过渡状态 ----
+        private EnvSample cur, from, to;
+        private float tt = 1f;
+
+        // ---- 闪电 ----
+        private float nextBolt = 6f;
+        private float flash;
+        private Coroutine boltCo;
+
+        // ---- GI 节流 ----
+        private float giTimer;
+        private bool giDirty;
+        private float sunSearchTimer;
+
+        public bool IsTransitioning { get { return tt < 1f; } }
+
+        /// <summary>
+        /// 当前天气对**行走手感**的影响系数（1 = 正常，越小越滑）。
+        ///
+        /// 参考《异环》：雨天轮胎打滑、雪天速度下降且转向迟钝。
+        /// 本工程没有载具，改成第一人称的移速与脚步节奏 ——
+        /// 这是最便宜也最有效的"天气影响玩法"：玩家不需要看到数值，
+        /// 只要走起来感觉"地面有点滑"就够了。
+        /// </summary>
+        public float MoveFactor { get; private set; } = 1f;
+
+        // =====================================================================
+        // 生命周期
+        // =====================================================================
+
+        void Awake()
+        {
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            EnsureSky();
+            FindSun();
+            EnsureVisuals();
+            EnsureAudio();
+
+            cur = Build(timeOfDay, weather);
+            from = cur;
+            to = cur;
+            tt = 1f;
+            giDirty = true;
+            ApplyAll(cur, 0f, true);
+        }
+
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
+        // =====================================================================
+        // 对外 API（保持与旧版一致，调用点不用改）
+        // =====================================================================
+
+        public void Set(TimeOfDay t, Weather w)
+        {
+            bool same = (timeOfDay == t && weather == w);
+            timeOfDay = t;
+            weather = w;
+
+            from = cur;
+            to = Build(t, w);
+            tt = same ? 1f : 0f;
+
+            if (transitionDuration <= 0.02f)
+            {
+                cur = to;
+                tt = 1f;
+                giDirty = true;
+                ApplyAll(cur, 0f, true);
+            }
+
+            if (OnChanged != null) OnChanged(t, w);
+        }
+
+        public void SetTime(TimeOfDay t) { Set(t, weather); }
+        public void SetWeather(Weather w) { Set(timeOfDay, w); }
+
+        /// <summary>当前这一档天气的中文名，UI 直接用。</summary>
+        public static string WeatherLabel(Weather w)
+        {
+            switch (w)
+            {
+                case Weather.Cloudy: return "多云";
+                case Weather.Overcast: return "阴";
+                case Weather.Rain: return "雨";
+                case Weather.Storm: return "雷雨";
+                case Weather.Fog: return "雾";
+                case Weather.Snow: return "雪";
+                default: return "晴";
+            }
+        }
+
+        public static string TimeLabel(TimeOfDay t)
+        {
+            switch (t)
+            {
+                case TimeOfDay.Night: return "夜晚";
+                case TimeOfDay.Dusk: return "黄昏";
+                default: return "白天";
+            }
+        }
+
+        // =====================================================================
+        // 每帧
+        // =====================================================================
+
+        void Update()
+        {
+            if (tt < 1f)
+            {
+                tt += Time.deltaTime / Mathf.Max(0.05f, transitionDuration);
+                float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(tt));
+                cur = EnvSample.Lerp(from, to, e);
+                giDirty = true;                       // 过渡期间才需要重算天空环境光
+                if (tt >= 1f) cur = to;
+            }
+
+            TickLightning(Time.deltaTime);
+            ApplyAll(cur, Time.deltaTime, false);
+        }
+
+        // =====================================================================
+        // 参数合成：天气预设 × 昼夜修正
+        // =====================================================================
+
+        private static EnvSample Build(TimeOfDay t, Weather w)
+        {
+            EnvSample s = EnvSample.Get(w);
+
+            float sunMul = 1f;      // 太阳强度倍率
+            float expMul = 1f;      // 天空盒曝光倍率
+            float ambMul = 1f;      // 环境光倍率
+            float skyMul = 1f;      // 天空 tint 倍率
+            float blueBias = 1f;    // 夜间让蓝通道多留一点
+            float fogMul = 1f;
+            Color sunTint = Color.white;
+
+            switch (t)
+            {
+                case TimeOfDay.Dusk:
+                    sunMul = 0.50f; expMul = 0.78f; ambMul = 0.80f;
+                    skyMul = 0.92f; blueBias = 0.90f; fogMul = 0.80f;
+                    sunTint = new Color(1f, 0.66f, 0.42f);
+                    break;
+                case TimeOfDay.Night:
+                    sunMul = 0.10f; expMul = 0.34f; ambMul = 0.30f;
+                    skyMul = 0.20f; blueBias = 1.70f; fogMul = 0.42f;
+                    sunTint = new Color(0.58f, 0.68f, 1f);
+                    break;
+            }
+
+            s.sunIntensity *= sunMul;
+            s.sunColor = new Color(s.sunColor.r * sunTint.r,
+                                   s.sunColor.g * sunTint.g,
+                                   s.sunColor.b * sunTint.b);
+            s.exposure *= expMul;
+            s.ambientIntensity *= ambMul;
+            s.skyTint = new Color(s.skyTint.r * skyMul,
+                                  s.skyTint.g * skyMul,
+                                  Mathf.Min(1f, s.skyTint.b * skyMul * blueBias));
+            s.fogColor = new Color(s.fogColor.r * fogMul,
+                                   s.fogColor.g * fogMul,
+                                   s.fogColor.b * fogMul);
+
+            // 夜里天空不该挂着一个大太阳圆盘
+            if (t == TimeOfDay.Night) s.sunDisk *= 0.12f;
+            else if (t == TimeOfDay.Dusk) s.sunDisk *= 0.7f;
+
+            // 夜里云也要暗下去，否则会浮在夜空上像块白布
+            if (t == TimeOfDay.Night)
+                s.cloudColor = new Color(s.cloudColor.r * 0.22f, s.cloudColor.g * 0.24f, s.cloudColor.b * 0.34f);
+            else if (t == TimeOfDay.Dusk)
+                s.cloudColor = new Color(s.cloudColor.r * 0.85f, s.cloudColor.g * 0.72f, s.cloudColor.b * 0.66f);
+
+            // 星空只在夜里出现；云厚的时候由 WeatherVisuals 再按 cloud 压下去
+            if (t == TimeOfDay.Night) s.star = 1f;
+            else if (t == TimeOfDay.Dusk) s.star = 0.25f;
+            else s.star = 0f;
+
+            return s;
+        }
+
+        // =====================================================================
+        // 应用
+        // =====================================================================
+
+        private void ApplyAll(EnvSample s, float dt, bool force)
+        {
+            EnsureSky();
+
+            // 天气对行走手感的影响：雨天略滑、雪天明显更滑。
+            // 放在最前面算，下游（第一人称控制器）随时读到都是本帧的值。
+            float mf = 1f;
+            if (s.rain > 0.05f) mf -= 0.10f * Mathf.Clamp01(s.rain);
+            if (s.snow > 0.05f) mf -= 0.20f * Mathf.Clamp01(s.snow);
+            MoveFactor = Mathf.Clamp(mf, 0.65f, 1f);
+
+            if (sun == null)
+            {
+                // 场景有 69 盏灯，FindObjectsOfType 不便宜 —— 没找到平行光时也别每帧找
+                sunSearchTimer -= dt;
+                if (sunSearchTimer <= 0f) { sunSearchTimer = 1f; FindSun(); }
+            }
+
+            // ---- 天空盒 ----
+            if (skyMat != null)
+            {
+                if (skyMat.HasProperty("_SkyTint")) skyMat.SetColor("_SkyTint", s.skyTint);
+                if (skyMat.HasProperty("_Exposure")) skyMat.SetFloat("_Exposure", s.exposure + flash * 0.9f);
+                if (skyMat.HasProperty("_AtmosphereThickness")) skyMat.SetFloat("_AtmosphereThickness", s.atmosphere);
+                if (skyMat.HasProperty("_SunSize")) skyMat.SetFloat("_SunSize", s.sunDisk);
+                if (skyMat.HasProperty("_SunSizeConvergence")) skyMat.SetFloat("_SunSizeConvergence", 8f);
+                if (skyMat.HasProperty("_GroundColor"))
+                    skyMat.SetColor("_GroundColor", Color.Lerp(s.fogColor, s.skyTint, 0.5f) * 0.8f);
+                // 兜底分支用的 6 Sided / Cubemap 天空盒：它们的调色参数叫 _Tint，
+                // 默认值 0.5（shader 里乘 2），所以这里再乘 0.55 才是"接近原色"。
+                if (skyMat.HasProperty("_Tint")) skyMat.SetColor("_Tint", s.skyTint * 0.55f);
+            }
+
+            // ---- 主光 ----
+            if (sun != null)
+            {
+                sun.color = s.sunColor;
+                sun.intensity = s.sunIntensity * (1f + flash * 5f);
+                sun.enabled = true;
+            }
+
+            // ---- 环境光 ----
+            RenderSettings.ambientIntensity = Mathf.Clamp(s.ambientIntensity * (1f + flash * 1.8f), 0f, 8f);
+
+            // ---- 雾 ----
+            bool wantFog = s.fogDensity > 0.0005f;
+            RenderSettings.fog = wantFog;
+            if (wantFog)
+            {
+                RenderSettings.fogMode = FogMode.ExponentialSquared;
+
+                // 雾密度按相机高度衰减。
+                // 数字孪生是 200m 左右的高空俯视，同一套密度会把整个校园糊成一片白；
+                // 第一人称在地面 2m，才是雾该有的浓淡。这里从 5m 开始线性衰减到 185m 的 30%。
+                float h = 2f;
+                var c = Cam;
+                if (c != null) h = c.transform.position.y;
+                float hk = Mathf.Lerp(1f, 0.30f, Mathf.Clamp01((h - 5f) / 180f));
+
+                RenderSettings.fogDensity = s.fogDensity * hk;
+                RenderSettings.fogColor = s.fogColor;
+            }
+
+            // ---- 粒子 / 云 / 星空 ----
+            if (visuals != null)
+            {
+                float cloud = showClouds ? s.cloud : 0f;
+                // 天空色要下发给积水层：没有反射探针时，积水"看到"的就是这个解析天空，
+                // 天气一变地面反光的颜色也得跟着变，否则会出现"灰雨天里地面反射蓝天"。
+                Color zenith = s.skyTint;
+                Color horizon = Color.Lerp(s.fogColor, s.skyTint, 0.35f);
+                visuals.Apply(s.rain, s.snow, s.wind, cloud, s.cloudColor, s.star, zenith, horizon, dt);
+            }
+
+            // ---- 音频 ----
+            if (audioReady)
+            {
+                if (rainSrc != null) rainSrc.volume = Mathf.Clamp01(s.rain / 1.2f) * sfxScale;
+                if (windSrc != null) windSrc.volume = Mathf.Clamp01(s.wind) * sfxScale * 0.7f;
+            }
+
+            // ---- 天空环境光重算（节流） ----
+            // 只在真正有变化时才算：DynamicGI.UpdateEnvironment 会把天空盒重新渲染进 cubemap，
+            // 每帧调会明显掉帧，所以过渡期间 0.2 秒一次，过渡结束后自然停下来。
+            giTimer += dt;
+            if (force || giTimer >= 0.2f)
+            {
+                giTimer = 0f;
+                if (giDirty)
+                {
+                    giDirty = false;
+                    DynamicGI.UpdateEnvironment();
+                }
+            }
+        }
+
+        // =====================================================================
+        // 闪电
+        // =====================================================================
+
+        private void TickLightning(float dt)
+        {
+            if (cur.lightning < 0.05f)
+            {
+                nextBolt = Random.Range(4f, 9f);
+                return;
+            }
+
+            nextBolt -= dt;
+            if (nextBolt <= 0f && boltCo == null)
+            {
+                nextBolt = Random.Range(5f, 12f) / Mathf.Max(0.35f, cur.lightning);
+                boltCo = StartCoroutine(BoltRoutine());
+            }
+        }
+
+        // 真实闪电是"两下"：先一记强闪，短暂变暗，再补一记弱的
+        private IEnumerator BoltRoutine()
+        {
+            flash = 1f;
+            if (thunderSrc != null) thunderSrc.PlayDelayed(Random.Range(0.3f, 1.2f));
+
+            yield return new WaitForSeconds(0.07f);
+            flash = 0.16f;
+            yield return new WaitForSeconds(0.09f);
+            flash = 0.72f;
+            yield return new WaitForSeconds(0.13f);
+            flash = 0f;
+
+            boltCo = null;
+        }
+
+        // =====================================================================
+        // 运行时兜底
+        // =====================================================================
+
+        /// <summary>
+        /// 保证有一个**运行期私有**的天空盒材质，且它必须能表达 7 档天气。
+        ///
+        /// 这里刻意**不复制场景自带的天空盒**。实测场景用的是 Skybox/6 Sided
+        /// （属性只有 _RightTex / _UpTex / _Exposure / _Rotation / _Tint），
+        /// 根本没有 _SkyTint / _AtmosphereThickness / _SunSize / _GroundColor ——
+        /// 也就是说旧版代码里那一串 HasProperty 判断全部为 false，天气切换时天空**几乎不变**。
+        ///
+        /// 换成运行期的 Skybox/Procedural 之后，EnvSample 的每个字段都能对上一个真实参数，
+        /// 而且天空色能和雾色、云色保持一致（否则会出现"天是蓝的、雾是灰的"这种割裂）。
+        /// 云层由 WeatherVisuals 的云穹顶负责，所以不依赖天空盒贴图里的云。
+        /// </summary>
+        private void EnsureSky()
+        {
+            if (skyMat != null && RenderSettings.skybox == skyMat) return;
+
+            var sh = Shader.Find("Skybox/Procedural");
+            if (sh != null)
+            {
+                skyMat = new Material(sh);
+                skyMat.name = "RuntimeSkyboxProcedural";
+                skyMat.SetFloat("_SunDisk", 2f);              // 2 = 高质量太阳圆盘
+                skyMat.SetFloat("_SunSizeConvergence", 8f);
+                RenderSettings.skybox = skyMat;
+                return;
+            }
+
+            // 兜底：找不到程序化天空盒就复制场景的，至少 _Exposure 还能变
+            var src = RenderSettings.skybox;
+            if (src != null)
+            {
+                skyMat = new Material(src);
+                skyMat.name = "RuntimeSkybox";
+                RenderSettings.skybox = skyMat;
+                Debug.LogWarning("[EnvironmentState] 找不到 Skybox/Procedural，退回场景天空盒，只有曝光可调。");
+                return;
+            }
+
+            Debug.LogWarning("[EnvironmentState] 没有任何可用的天空盒，天空相关效果将被跳过。");
+        }
+
+        private Camera Cam
+        {
+            get
+            {
+                if (cam == null || !cam.isActiveAndEnabled) cam = FindActiveCamera();
+                return cam;
+            }
+        }
+
+        /// <summary>
+        /// 找当前真正在用的相机。
+        ///
+        /// **不能用 `Camera.main`** —— 它只按 "MainCamera" tag 查找，**不检查 enabled**。
+        /// 本工程第一人称模式下孪生相机是 `enabled = false` 但 tag 还在，而
+        /// FirstPersonController 建的 FPCam 没设 tag，所以 `Camera.main` 会返回那台
+        /// 被禁用的孪生相机（200m 高空）。雾密度按 200m 算就会淡掉三倍，
+        /// 雨雪也会被跟到高空 —— 两处都靠这个方法取值。
+        ///
+        /// `Camera.allCameras` 只包含真正启用的相机，是唯一可靠的数据源；
+        /// 再排除 `targetTexture != null` 的小地图相机。
+        /// </summary>
+        public static Camera FindActiveCamera()
+        {
+            var all = Camera.allCameras;
+            if (all == null) return null;
+
+            Camera best = null;
+            for (int i = 0; i < all.Length; i++)
+            {
+                var c = all[i];
+                if (c == null) continue;
+                if (c.targetTexture != null) continue;
+                if (best == null || c.depth > best.depth) best = c;
+            }
+            return best;
+        }
+
+        private void FindSun()
+        {
+            var lights = FindObjectsOfType<Light>();
+            for (int i = 0; i < lights.Length; i++)
+            {
+                if (lights[i] != null && lights[i].type == LightType.Directional)
+                {
+                    sun = lights[i];
+                    return;
+                }
+            }
+        }
+
+        private void EnsureVisuals()
+        {
+            if (visuals != null) return;
+            var go = new GameObject("WeatherVisuals");
+            go.transform.SetParent(transform, false);
+            visuals = go.AddComponent<WeatherVisuals>();
+            visuals.EnsureBuilt();
+        }
+
+        /// <summary>相机换了（数字孪生 ↔ 第一人称）后调用，让雨雪重新跟随新相机。</summary>
+        public void RebindCamera()
+        {
+            if (visuals != null) visuals.RebindCamera();
+        }
+
+        private void EnsureAudio()
+        {
+            if (audioReady) return;
+            audioReady = true;
+
+            rainSrc = MakeLoopSource("RainSfx", ProceduralAssets.RainSfx);
+            windSrc = MakeLoopSource("WindSfx", ProceduralAssets.WindSfx);
+
+            thunderSrc = gameObject.AddComponent<AudioSource>();
+            thunderSrc.name = "ThunderSfx";
+            thunderSrc.clip = ProceduralAssets.ThunderSfx;
+            thunderSrc.loop = false;
+            thunderSrc.playOnAwake = false;
+            thunderSrc.spatialBlend = 0f;
+            thunderSrc.volume = 0.9f;
+        }
+
+        private AudioSource MakeLoopSource(string name, AudioClip clip)
+        {
+            var src = gameObject.AddComponent<AudioSource>();
+            src.name = name;
+            src.clip = clip;
+            src.loop = true;
+            src.playOnAwake = false;
+            src.spatialBlend = 0f;
+            src.volume = 0f;
+            src.Play();
+            return src;
+        }
+    }
+}
