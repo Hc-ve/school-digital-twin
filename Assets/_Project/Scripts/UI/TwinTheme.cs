@@ -261,6 +261,18 @@ namespace SchoolTwin.UI
         /// </summary>
         public static readonly Color TimelineSpine = WithAlpha(Color.white, 0.006f);
 
+        /// <summary>
+        /// 模态遮罩（P13 新增，图纸 §6 指定的**唯一**新 token）：纯黑 @0.45。
+        ///
+        /// 【为什么不复用 ScrimBase】ScrimBase 是 0.98 近乎不透明的抽屉底，
+        /// 拿它当模态遮罩等于把后面的场景全盖死 —— 用户会失去"这是浮层"的空间感。
+        /// 模态遮罩的职责是"压暗但看得见"，必须是黑且半透。
+        ///
+        /// 【为什么是 0.45 而不是更暗】图纸 §6 裁决值，答辩投影仪偏亮，
+        /// 再暗会把背后的校园一起糊掉，观众看不出"时间天气改的是场景"。
+        /// </summary>
+        public static readonly Color ModalScrim = new Color(0f, 0f, 0f, 0.45f);
+
         // ================================================================ 描边 / 色条（§3.3）
 
         /// <summary>

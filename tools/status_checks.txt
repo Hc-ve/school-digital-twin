@@ -567,3 +567,39 @@ P12-67 | 【两态同步】全屏统计页页脚必须有「当前数据源」�
 P12-68 | 【两态同步】全屏页脚源状态读切换器（与窄态同源，不另找组件） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:_switcher.CurrentKind
 P12-69 | 【两态同步】状态措辞与窄态同一套（运行中/已停止/连接中…） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:case DataSourceState.Running: return "运行中";
 P12-70 | 【两态同步】页脚源状态随统计页刷新（不是只构建时写一次） | grep:1:Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs:^            RefreshFootSource\(\);
+P13-01 | 【移植】天气包落在 Weather 目录，命名空间统一为 SchoolTwin.Weather | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:^namespace SchoolTwin\.Weather$
+P13-02 | 【移植】两个枚举自带定义（队员包的 Models.cs 不在 12 文件清单里） | grep:1:Assets/_Project/Scripts/Weather/EnvModels.cs:^    public enum TimeOfDay$
+P13-03 | 【移植】七档天气枚举自带定义（7 档视觉 ≠ 4 档数据） | grep:1:Assets/_Project/Scripts/Weather/EnvModels.cs:^    public enum Weather$
+P13-04 | 【Shader】SnowGround 已改内置管线 ForwardBase（URP 的 UniversalForward 在本工程不可用） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:"LightMode" = "ForwardBase"
+P13-05 | 【Shader】WetGround 已改内置管线 ForwardBase | grep:1:Assets/_Project/Scripts/Weather/Resources/WetGround.shader:"LightMode" = "ForwardBase"
+P13-06 | 【禁止项】不许引入队员包的 UIStyle（会与 TwinTheme 两套主色并存） | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:UIStyle\.
+P13-07 | 【禁止项】不许引入队员包的 UITheme | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:UITheme\.
+P13-08 | 【禁止项】视觉必须走项目 TwinTheme（WeatherPanel 已换成 TwinButton） | grep:1:Assets/_Project/Scripts/Weather/WeatherPanel.cs:using SchoolTwin\.UI;
+P13-09 | 【数据层】7 档视觉到 4 档数据的映射入口唯一 | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:public static void ApplyWeather\(Weather v\)
+P13-10 | 【数据层】改天气必须同帧调 TwinClimate.SetWeather（不能只改视觉侧） | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:TwinClimate\.SetWeather\(ToData\(v\)\);
+P13-11 | 【同型病】自动轮换也必须走桥，不许直调 env.SetWeather | grep:1:Assets/_Project/Scripts/Weather/WeatherDirector.cs:TwinWeatherBridge\.ApplyWeather\(PickNext
+P13-12 | 【同型病】队员面板的选天气也必须走桥 | grep:1:Assets/_Project/Scripts/Weather/WeatherPanel.cs:TwinWeatherBridge\.ApplyWeather\(All\[i\]\)
+P13-13 | 【时间】改时刻入口唯一，且同步昼夜档 | grep:1:Assets/_Project/Scripts/Twin/TwinWeatherBridge.cs:public static void ApplyHour\(double hour, bool enable\)
+P13-14 | 【时间】表盘拖动走桥（不是直接 SetTime） | grep:1:Assets/_Project/Scripts/Weather/WeatherPanel.cs:TwinWeatherBridge\.ApplyHour\(hour, true\);
+P13-15 | 【面板】卡片宽按图纸裁决 480（任务包 420 装不下，见回执订正） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:private const float CardW = 480f;
+P13-16 | 【面板】卡片高按图纸裁决 360 | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:private const float CardH = 360f;
+P13-17 | 【面板】数字标半径 65（图纸 §3 写 58 是笔误，§2.2 绝对坐标反算为 65） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:const float R = 65f;
+P13-18 | 【面板】遮罩用 ModalScrim 黑@0.45（图纸 §6 新增的唯一 token） | grep:1:Assets/_Project/Scripts/UI/TwinTheme.cs:public static readonly Color ModalScrim = new Color\(0f, 0f, 0f, 0\.45f\);
+P13-19 | 【面板】卡片居中用中心锚点，不用绝对 260/180（画布高度随窗口变） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:_card\.anchorMin = new Vector2\(0\.5f, 0\.5f\);
+P13-20 | 【面板】四档天气按钮顺序与数量（随机/晴天/雨天/雪天） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:private static readonly string\[\] WeatherNames = \{ "随机", "晴天", "雨天", "雪天" \};
+P13-21 | 【B11】拖动命中区必须最后建（图纸 §3 #15），单独成方法便于核对顺序 | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:private void BuildHitArea\(\)
+P13-22 | 【B11】命中区挂拖动代理（独立文件，文件名=类名） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:TwinDialDragArea drag = hit\.gameObject\.AddComponent<TwinDialDragArea>\(\);
+P13-23 | 【交互】单击也要提交（只有 OnDrag 会导致点一下没反应） | grep:1:Assets/_Project/Scripts/UI/TwinDialDragArea.cs:public void OnPointerClick\(PointerEventData e\) \{ Feed\(e, true\); \}
+P13-24 | 【交互】拖动中不从时钟反向同步（否则自我拉扯） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:if \(_dragging\) return;
+P13-25 | 【工具行】三项：数据源/帮助/时间天气 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气" \};
+P13-26 | 【工具行】x 顺延 226，与 ApplyToolXs 的 baseX+i*96 一致 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f \};
+P13-27 | 【工具行】第三项按名字分派（不靠 index 魔法数字） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:if \(name == "时间天气"\) \{ ShowTimeWeatherCard\(\); return; \}
+P13-28 | 【Esc】模态卡参与 Esc 路由，且返回 true 表示已消费 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_timeCard\.Close\(\);\s*\n\s*return true;
+P13-29 | 【P30】后处理卷必须写 sharedProfile（写 profile 不序列化，静默失效） | grep:1:Assets/_Project/Editor/TwinP13PostProcess.cs:volume\.sharedProfile = profile;
+P13-30 | 【P30】只开 ColorGrading（时间天气需要的是亮度偏移） | grep:1:Assets/_Project/Editor/TwinP13PostProcess.cs:cg\.enabled\.Override\(true\);
+P13-31 | 【P30】Bloom 必须关（雪天地面 albedo≈1，会糊成白雾） | grep:1:Assets/_Project/Editor/TwinP13PostProcess.cs:bloom\.enabled\.Override\(false\);
+P13-32 | 【P30】Vignette 必须关（夜间把四角压到全黑） | grep:1:Assets/_Project/Editor/TwinP13PostProcess.cs:vg\.enabled\.Override\(false\);
+P13-33 | 【曝光】postExposure 由昼夜档驱动，不是每帧无脑写 | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:private void ApplyPostExposure\(EnvSample s, float dt\)
+P13-34 | 【曝光】后处理走反射软依赖（删包只掉功能，不瘫痪编译） | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:private void BindPostProcess\(\)
+P13-35 | 【曝光】反射写值必须同时置 overrideState（只写 value 不生效） | grep:1:Assets/_Project/Scripts/Weather/EnvironmentState.cs:SetMember\(param, "overrideState", true\);
+P13-36 | 【回归】不许裸写 Object[]（System 与 UnityEngine 二义，CS0104） | grep:0:Assets/_Project/Scripts/Weather/EnvironmentState.cs:(?<!UnityEngine\.)\bObject\[\]

@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using SchoolTwin.Core;      // TwinStatus 在 Core，不在 Twin（踩过：CS0246/CS0103）
 using SchoolTwin.Twin;
+using SchoolTwin.Weather;   // P13：EnvironmentState
 
 namespace SchoolTwin.UI
 {
@@ -167,7 +168,7 @@ namespace SchoolTwin.UI
         /// 保留两项的顺序不能换：「数据源」在左，是四项时期就在的位置（x=34），
         /// 观众的记忆和截图对照都靠这个锚。换序会让"工具行变短了"看起来像"整行挪位了"。
         /// </summary>
-        private static readonly string[] _toolNames = { "数据源", "帮助" };
+        private static readonly string[] _toolNames = { "数据源", "帮助", "时间天气" };
 
         /// <summary>
         /// 各项的绝对 x（§4.1）。间距 96，从左边距 34 起排。
@@ -181,11 +182,19 @@ namespace SchoolTwin.UI
         ///      留给以后真正需要的功能（比如"演示模式"开关），不预占。
         /// 所以：仍从 34 起排，间距仍 96（**沿用原值，不为了显得紧凑去改**）。
         /// 长度必须与 _toolNames 一致，否则 ApplyToolXs 里按 i 取值会越界。
+        ///
+        /// 【2026-11-04 P13】两项 → 三项，新增「时间天气」x=226（= 130 + 96）。
+        /// 这里 `ApplyToolXs` 其实是**按 `baseX + i*96` 重算的**，`ToolXs` 只在
+        /// `BuildToolRow` 建节点时用一次；两处必须同时加，否则建时按旧值摆、
+        /// 每帧又被 ApplyToolXs 挪到新位置，第一帧会闪一下。
         /// </summary>
-        private static readonly float[] ToolXs = { 34f, 130f };
+        private static readonly float[] ToolXs = { 34f, 130f, 226f };
 
         /// <summary>「帮助」浮层。null = 没开。每次打开重建、点任意处或 Esc 即销毁。</summary>
         private RectTransform _helpOverlay;
+
+        /// <summary>「时间天气」居中模态卡。null = 没开。同一时刻最多一张（图纸 §4）。</summary>
+        private TwinTimeWeatherCard _timeCard;
 
         /// <summary>
         /// 工具行「数据源」的轮换游标：上次**尝试**切到哪个源（不是"当前生效的源"）。
@@ -789,12 +798,54 @@ namespace SchoolTwin.UI
             string name = _toolNames[index];
             if (name == "数据源") { CycleDataSource(); return; }
             if (name == "帮助") { ShowHelpOverlay(); return; }
+            if (name == "时间天气") { ShowTimeWeatherCard(); return; }
 
             // 走到这里说明 _toolNames 加了新项但没接实现。
             // 不弹"XX：待接入"那种假 Toast —— 那正是本轮要清掉的东西。
             // 改成一条明确指向开发者的警告，答辩现场看不见（Console 里），
             // 但开发时会立刻发现"我加了一项却没接功能"。
             Debug.LogWarning("[P12] 工具行「" + name + "」没有绑定任何行为，请在 OnToolClicked 里接上。");
+        }
+
+        // ================================================================ 工具行 · 时间天气
+
+        /// <summary>
+        /// 「时间天气」：弹出居中模态卡（图纸 `Docs/P13-1_时间天气面板设计图纸_见微.md`）。
+        ///
+        /// 【为什么挂在画布根、不挂在抽屉里】
+        /// 图纸 §1 要求遮罩盖住整个 1000×720。抽屉只有 440 宽，挂在抽屉里遮罩盖不满 ——
+        /// 右上角会露出一块没变暗的场景，看起来像"遮罩画错了"。
+        /// 所以父节点取 `_root.parent`（画布根），和帮助浮层同一个做法。
+        ///
+        /// 【为什么再点一次就关】与「帮助」一致：工具行是动作项不是开关面板，
+        /// 连点两次的预期是"关掉"，而不是叠出第二张卡。
+        /// </summary>
+        private void ShowTimeWeatherCard()
+        {
+            if (_root == null) return;
+
+            if (_timeCard != null)
+            {
+                _timeCard.Close();     // Close 内部会回调清引用，不能在这里直接置 null 了事
+                return;
+            }
+
+            // 打开前先保证环境系统存在：没挂 EnvironmentState 时天气切换不会有任何视觉反应，
+            // 用户会以为按钮坏了。Ensure 一下比"什么都不发生"诚实。
+            if (EnvironmentState.Instance == null &&
+                FindObjectOfType<EnvironmentState>(true) == null)
+            {
+                GameObject envGo = new GameObject("Environment");
+                envGo.AddComponent<EnvironmentState>();
+            }
+
+            _timeCard = TwinTimeWeatherCard.Open(_root.parent, OnTimeCardClosed);
+        }
+
+        /// <summary>卡片关闭回调（Esc / 点遮罩 / 点 × 三处都会走到）。只清引用，不销毁 —— 销毁由卡片自己负责。</summary>
+        private void OnTimeCardClosed()
+        {
+            _timeCard = null;
         }
 
         // ================================================================ 工具行 · 数据源
@@ -1379,6 +1430,17 @@ namespace SchoolTwin.UI
             {
                 Destroy(_helpOverlay.gameObject);
                 _helpOverlay = null;
+                return true;
+            }
+
+            // 【2026-11-04 P13】时间天气卡也是"最上层"，同样必须先吃 Esc。
+            // 顺序放在帮助之后：帮助浮层是抽屉内的，卡片挂在画布根上、层级更高，
+            // 但两者不会同时打开（都是工具行动作，点另一个时抽屉不会自动关前一个）。
+            // 若将来真的同时开着，先关层高的那张才对，所以这里把卡片放在帮手之后判断
+            // 仍然正确 —— 帮助只有在卡片已关时才可能被看到。
+            if (_timeCard != null)
+            {
+                _timeCard.Close();
                 return true;
             }
 
