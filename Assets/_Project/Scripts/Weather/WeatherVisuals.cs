@@ -80,6 +80,14 @@ namespace SchoolTwin.Weather
         private Vector3[] snowWorkVerts;   // 工作副本，逐帧改写 y 做地形位移
         private Vector3 lastDrapeCam = new Vector3(float.MaxValue, 0f, 0f);
         private bool snowDrapeDirty = true;
+        // 【P13】雪面几何自检的缓存：只在第一次重铺、以及自检窗口内打印，
+        // 避免每帧重铺时刷爆 Console。
+        private int lastSteepCount;
+        private float lastSteepMaxDy;
+        private float lastSteepStepM;
+        private int drapeCount;
+        private bool snowGeomLogged;
+        private int geomLogCount;      // 几何日志总条数上限（见 DrapeSnow 里的节流说明）
         /// 地面积雪量（0~1）= snowAccum × altFade。
         /// **不含 indoorFade** —— 地上的雪是世界的，不随相机进楼而消失。
         /// 见 Update 里那段长注释（"室内外切换时雪地整片消失 / 闪烁"）。
@@ -1122,9 +1130,34 @@ namespace SchoolTwin.Weather
             }
             else sb.AppendLine("    snowGround = null");
 
+            // ── 雪盘网格的真实纵向跨度 ────────────────────────────────────
+            // 这是判断"那条横线还在不在"的直接指标，比看 worldPos.y 有用得多。
+            //
+            // 横线的成因是网格里出现了**大跨度竖直三角形**：某个顶点被拉到很低的
+            // 位置（旧版 -10m），与相邻顶点连成的四边形被斜劈 → 半边成了竖直的墙。
+            // 这些墙沿建筑轮廓围成一圈，低角度看就收束成一条横贯画面、能穿墙的细线。
+            //
+            // 所以：
+            //   局部 y 跨度 ≤ 约 2.5m  → 正常（雪面就是在室外地平面上下小幅起伏）
+            //   局部 y 跨度 ≥ 8m       → 说明仍有顶点被甩到远处，横线必然还在
+            if (snowMesh != null)
+            {
+                Bounds bb = snowMesh.bounds;
+                sb.AppendLine("    mesh.bounds Y   c=" + bb.center.y.ToString("F2")
+                              + "  size=" + bb.size.y.ToString("F2")
+                              + "   局部 y∈[" + (bb.center.y - bb.extents.y).ToString("F2")
+                              + ", " + (bb.center.y + bb.extents.y).ToString("F2") + "]"
+                              + (bb.size.y >= 8f ? "   ** 跨度异常大 → 仍有顶点被甩远，横线会在 **" : "   正常"));
+                sb.AppendLine("    竖直面计数   = " + lastSteepCount + " 处"
+                              + (lastSteepCount > 0
+                                  ? "   **就是横线**，最大高差 " + lastSteepMaxDy.ToString("F2")
+                                    + "m（间距 " + lastSteepStepM.ToString("F2") + "m）"
+                                  : "   （应为 0；非 0 即横线来源）"));
+            }
+
             sb.AppendLine("  用户报过的问题对照：");
-            sb.AppendLine("    · 室内有横线 → 看上面 worldPos.y 是否贴近 currentGroundY+1.0"
-                          + "（那是被 clamp 压上来的楼板采样，现已改为沉到 -10m）");
+            sb.AppendLine("    · 室内外白色横线 → 看【雪面几何】那行的'竖直面'计数"
+                          + "（>0 就是横线来源；正常应为 0）");
             sb.AppendLine("    · 室内有粒子 → 看头顶射线是否 '什么都没打到'"
                           + "（已开启 queriesHitBackfaces 以命中单层天花板）");
             return sb.ToString();
@@ -2020,31 +2053,53 @@ namespace SchoolTwin.Weather
                 float wz = pz + b.z * sx;
                 float th = SampleGroundHeight(wx, wz, probeEyeY);
 
-                // ══════════════════════════════════════════════════════
-                // 【P13】淘汰"非地面"采样：楼板 / 屋顶 / 树冠
+                // ══════════════════════════════════════════════════════════
+                // 【P13】以地形为锚做**双侧**限幅 —— 这一条才是横线的正解
                 //
-                // 只靠下面的 clamp(+1.0) 挡不住楼板 —— 二楼楼板比室外地平面高 3.6m，
-                // 采样到它之后会被 clamp 硬压到 baseY+1.0，于是在**室内**形成一片
-                // 浮在二楼地板以上 1 米的水平雪面，从走廊侧面看就是一条横线
-                // （用户报的"室内看有一点条线"）。
+                // ── 先说横线是怎么来的（两版错误都试过，留此备查）────────────
                 //
-                // 判据：拿该点的**地形基底**做参照。花坛/台阶最多高出 1.0m，
-                // 一旦采样高度超出地形 1.5m 以上，那一定是楼板或屋顶，不是地面。
-                // 这类顶点直接压到地下 10m（而不是 clamp 到 +1.0），让它在室内彻底不可见。
+                // 第一版：`if (高差 > 1.5m) { y = -10f; continue; }`
+                //   想把楼板/树冠那一列"沉到看不见的地方"。后果是雪面上出现一圈
+                //   高 9.8m 的竖直三角形：被淘汰的顶点沉到 -10m，相邻顶点还在地面，
+                //   两者连成的四边形被斜着劈成两半 —— 半边水平、半边是竖直的"悬崖墙"。
+                //   这些墙沿**建筑轮廓**围成一圈，从人眼高度平视时，整圈墙在屏幕上
+                //   正好收束成一条横贯画面的细线；它属于雪盘自身几何、深度正常，
+                //   所以**能穿进建筑内部**。像素级证据：横线不笔直、截面中间厚两端
+                //   尖灭、能盖住树干与墙体。这条路彻底走不通。
                 //
-                // Terrain.SampleHeight 是查表，3249 个顶点调用一次总共几十微秒，
-                // 且只在锚点移动 4m 或雪量变化 0.04 时才重铺，开销可忽略。
-                // ══════════════════════════════════════════════════════
+                // 第二版：只在**上侧**判据 `if (th - terrainY > 1.5f) th = terrainY;`
+                //   修正了竖直悬崖，但它是**死代码**：th 来自 SampleGroundHeight，
+                //   内部已把值限制在 [refY - MaxDrop, refY + MaxRise] = [refY - 8, refY + 1.5]，
+                //   而 terrainY 与 refY 同源，于是恒有 th - terrainY ≤ 1.5，
+                //   严格大于 1.5 永不成立 → 一行都没执行过。
+                //
+                // ── 真正的成因：**下侧**没限住 ──────────────────────────────
+                // SampleGroundHeight 往下放到 MaxDrop = 8m（为了兜住下沉广场），
+                // 再被下面 clamp 收成 -6m。旁边那一列却是 0 —— 1.6m 的网格间距上
+                // 出现 6m 的落差，坡度 75°，**肉眼就是一面竖墙**。
+                // 这面墙和第一版是同一类几何，只是矮一些，所以表现为"室内外都有一条
+                // 淡淡的线"。横跨整个雪盘、沿建筑与地形台阶的边界绕圈，深度正常，
+                // 于是能穿进建筑。
+                //
+                // ── 为什么用 |th - terrainY| 双侧 ───────────────────────────
+                // terrainY 是**地形基底**（Terrain.SampleHeight），与建筑楼板、
+                // 树冠、下沉结构全都无关，是这个点"应该在的高度"的稳定参照。
+                // 校园实际地面起伏在 ±1.5m 内，超出这个范围的一律不是地面：
+                //   · th - terrainY > +1.5 → 采到树冠/雨棚/屋顶
+                //   · th - terrainY < -1.5 → 采到楼板下方/结构内部/误命中的深处
+                // 两种情况都退回 terrainY，顶点就永远贴着地形，不会长出竖墙。
+                // 代价：真的下沉超过 1.5m 的广场，雪面会平铺在广场口而不是沉下去。
+                // 本项目没有这种广场（所有雪景截图里地面都是平的），可接受。
+                // ══════════════════════════════════════════════════════════
+
+                // 每顶点一次地形采样。Terrain.SampleHeight 是一次双线性插值，
+                // 3249 个顶点也远低于一次物理查询的开销；且本函数本身被
+                // "移动超过 0.25m 或雪量变化超过 0.04"节流，静止时完全不跑。
                 float terrainY = ProbeOutdoorGround(new Vector3(wx, 0f, wz));
-                if (th - terrainY > 1.5f)
+                if (Mathf.Abs(th - terrainY) > 1.5f)
                 {
-                    // 楼板 / 屋顶 / 树冠 —— 不是地面，沉到地下看不见
-                    if (Mathf.Abs(snowWorkVerts[i].y - (-10f)) > 0.01f)
-                    {
-                        snowWorkVerts[i].y = -10f;
-                        changed = true;
-                    }
-                    continue;
+                    // 不是地面 —— 拉回地形基底，杜绝竖直楔形面
+                    th = terrainY;
                 }
 
                 // 严格按地形平铺：顶点抬到"射线地面 + 抬升量"上方。
@@ -2070,6 +2125,68 @@ namespace SchoolTwin.Weather
                 snowMesh.vertices = snowWorkVerts;
                 snowMesh.RecalculateNormals();   // 斜坡上的雪才有正确的受光法线
                 snowMesh.RecalculateBounds();
+
+                // 【P13】统计"竖直面"—— 横线的直接证据
+                //
+                // 横线不是贴图问题、不是深度问题，是**网格里有陡峭三角形**。
+                // 判据：相邻顶点（同一行/同一列，间距 SnowGroundSize/56 ≈ 1.6m）
+                // 的高差一旦超过 1.6m，三角形与水平面的夹角就 > 45°，
+                // 从人眼高度平视时这一片会投影成一枚极扁的亮条。
+                //
+                // 修好后这里应该全是 0。若还有非零，括号里会带出最大高差，
+                // 一眼就能看出是哪个方向的地形没被限住。
+                int segV = 57;                       // BuildSnowPlaneMesh(56) → 57×57
+                float stepM = SnowGroundSize / 56f;  // 相邻顶点水平间距（米）
+                const float SteepDy = 1.6f;          // 超过它就算陡
+                int steepX = 0, steepZ = 0;
+                float maxDy = 0f;
+                for (int iz = 0; iz < segV; iz++)
+                {
+                    for (int ix = 0; ix < segV; ix++)
+                    {
+                        int idx = iz * segV + ix;
+                        if (ix + 1 < segV)
+                        {
+                            float dy = Mathf.Abs(snowWorkVerts[idx + 1].y - snowWorkVerts[idx].y);
+                            if (dy > SteepDy) { steepX++; if (dy > maxDy) maxDy = dy; }
+                        }
+                        if (iz + 1 < segV)
+                        {
+                            float dy = Mathf.Abs(snowWorkVerts[idx + segV].y - snowWorkVerts[idx].y);
+                            if (dy > SteepDy) { steepZ++; if (dy > maxDy) maxDy = dy; }
+                        }
+                    }
+                }
+                lastSteepCount = steepX + steepZ;
+                lastSteepMaxDy = maxDy;
+                lastSteepStepM = stepM;
+
+                Bounds nb = snowMesh.bounds;
+                // 打印节流：整体最多打 5 次。
+                // 第一次重铺必打（那时雪刚起来，几何是最"冷"的状态）；
+                // 之后只在自检窗口（snowAuditStage==1 / 室内快照刚打完）补打，
+                // 且总量封顶 —— 用户一走动就会重铺，不封顶 Console 会被刷满。
+                // 诊断用途只需要"几个不同时刻的横截面"，不需要每一帧。
+                bool wantLog = geomLogCount < 5
+                               && (!snowGeomLogged || snowAuditStage == 1 || indoorAuditDone);
+                if (wantLog)
+                {
+                    snowGeomLogged = true;
+                    geomLogCount++;
+                    Debug.Log("[P13][雪面几何] 重铺完成 #" + (++drapeCount)
+                          + "   顶点=" + snowWorkVerts.Length
+                          + "   相邻间距=" + stepM.ToString("F2") + "m\n"
+                          + "    竖直面（高差>" + SteepDy.ToString("F1") + "m）= "
+                          + lastSteepCount + " 处"
+                          + (steepX + steepZ > 0
+                              ? "   **这就是横线**：X向 " + steepX + " / Z向 " + steepZ
+                                + "，最大高差 " + maxDy.ToString("F2") + "m"
+                              : "   横向无陡面，横线应已消失")
+                          + "\n    局部 y∈[" + (nb.center.y - nb.extents.y).ToString("F2")
+                          + ", " + (nb.center.y + nb.extents.y).ToString("F2")
+                          + "]  跨度=" + nb.size.y.ToString("F2") + "m"
+                          + (nb.size.y >= 8f ? "   **跨度异常**" : "   正常"));
+                }
             }
             lastDrapeAmount = groundSnowAmount;
         }
@@ -2101,6 +2218,18 @@ namespace SchoolTwin.Weather
                 float wx = px + b.x * sx;
                 float wz = pz + b.z * sx;
                 float th = SampleGroundHeight(wx, wz, probeEyeY);
+
+                // 【P13】与近场同一条限幅：以地形基底为锚做**双侧**限幅。
+                // 远场更必须做 —— 它每格 6.5m，同样的落差会在更长的跨度上
+                // 形成一个坡度更缓、但**面积大几十倍**的斜面，从地平线方向看
+                // 就是横贯画面的大块白带，比近场那条细线更显眼。
+                // 详见 DrapeSnow 里对两种错误写法和真实成因的说明。
+                float terrainY = ProbeOutdoorGround(new Vector3(wx, 0f, wz));
+                if (Mathf.Abs(th - terrainY) > 1.5f)
+                {
+                    th = terrainY;
+                }
+
                 // 远场格更大（每格 6.5m），抬升量(SnowGroundLiftFar)略高，进一步减少雪面与地形穿插造成的块面。
                 // 【P13】clamp 同样非对称（+1.0 / -6.0），理由见 DrapeSnow。
                 float d = Mathf.Clamp((th + SnowGroundLiftFar) - baseY, -6.0f, 1.0f);
