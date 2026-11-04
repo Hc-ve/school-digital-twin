@@ -344,11 +344,13 @@ namespace SchoolTwin.Weather
             if (visuals != null)
             {
                 float cloud = showClouds ? s.cloud : 0f;
+                // 阴天帷幔：showClouds 关掉时也一起关，否则会剩下一层没有云的"雾墙"
+                float veil = showClouds ? s.overcast : 0f;
                 // 天空色要下发给积水层：没有反射探针时，积水"看到"的就是这个解析天空，
                 // 天气一变地面反光的颜色也得跟着变，否则会出现"灰雨天里地面反射蓝天"。
                 Color zenith = s.skyTint;
                 Color horizon = Color.Lerp(s.fogColor, s.skyTint, 0.35f);
-                visuals.Apply(s.rain, s.snow, s.wind, cloud, s.cloudColor, s.star, zenith, horizon, dt);
+                visuals.Apply(s.rain, s.snow, s.wind, cloud, veil, s.cloudColor, s.star, zenith, horizon, dt);
             }
 
             // ---- 音频 ----

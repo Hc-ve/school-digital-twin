@@ -32,6 +32,7 @@ namespace SchoolTwin.Weather
         private bool built;
 
         private static readonly int IdSnowTex = Shader.PropertyToID("_SnowTex");
+        private static readonly int IdSnowDetail = Shader.PropertyToID("_DetailTex");
         private static readonly int IdSnowColor = Shader.PropertyToID("_SnowColor");
         private static readonly int IdSkyColor = Shader.PropertyToID("_SkyColor");
         private static readonly int IdSnowAmount = Shader.PropertyToID("_SnowAmount");
@@ -128,6 +129,8 @@ namespace SchoolTwin.Weather
             pileMat.name = "TreeSnowPile";
             // 复用天气系统程序化生成的雪斑纹理(覆盖率遮罩)
             pileMat.SetTexture(IdSnowTex, ProceduralAssets.SnowPatch);
+            // 【P13】脏污细节图，与雪盘保持同一套观感（否则树根雪堆会显得比地面干净）
+            pileMat.SetTexture(IdSnowDetail, ProceduralAssets.SnowDetail);
             pileMat.SetColor(IdSnowColor, new Color(0.92f, 0.95f, 1.0f, 1f));
             pileMat.SetColor(IdSkyColor, new Color(0.74f, 0.82f, 0.96f, 1f));
             pileMat.SetFloat(IdSnowAmount, 0f);

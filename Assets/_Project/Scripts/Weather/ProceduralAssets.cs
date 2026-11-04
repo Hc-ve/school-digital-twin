@@ -16,7 +16,7 @@ namespace SchoolTwin.Weather
     {
         private const int SR = 44100;      // 采样率
 
-        private static Texture2D _rain, _snow, _cloud, _star, _snowPatch, _wetMask;
+        private static Texture2D _rain, _snow, _cloud, _star, _snowPatch, _wetMask, _snowDetail;
         private static Texture3D _cloud3d;
         private static AudioClip _rainSfx, _windSfx, _thunderSfx;
 
@@ -246,8 +246,28 @@ namespace SchoolTwin.Weather
                     {
                         float dx = (x - c) / c, dy = (y - c) / c;
                         float r = Mathf.Sqrt(dx * dx + dy * dy);
-                        // 边缘淡出收到最外 7%（r 0.93→1.0）：雪盘内部完全实白，只有最外圈柔和收边。
-                        float edge = 1f - Mathf.SmoothStep(0.93f, 1f, r);
+
+                        // ══════════════════════════════════════════════════════
+                        // 【P13 真正的根因：Mathf.SmoothStep 被当成 GLSL 的 smoothstep 用了】
+                        //
+                        // 原代码： float edge = 1f - Mathf.SmoothStep(0.93f, 1f, r);
+                        // 意图是"r 在 0.93~1.0 之间淡出，圆内恒为 1"。
+                        //
+                        // 但 Unity 的签名是 **Mathf.SmoothStep(float from, float to, float t)**，
+                        // 其中 t 是 **0~1 的插值因子**，返回 from 到 to 之间的平滑插值。
+                        // 它和 GLSL/HLSL 的 smoothstep(edge0, edge1, x)（x 是坐标）语义完全不同。
+                        //
+                        // 于是 r=0（圆心）时算出 1 - 0.93 = **0.07** ——
+                        // 整片雪盘一直以 6.7% 的不透明度在画，砖面纹理自然一点不受影响。
+                        // 实测印证：自检读出 "alpha 中心 = 0.067"。
+                        // 这就是"地上完全没有积雪"的真凶，跟地形采样、包围盒都没关系。
+                        //
+                        // 正确写法：先把 r 从 [0.93, 1] 归一化到 [0, 1]，再交给 SmoothStep。
+                        //   r <= 0.93 → InverseLerp 被 Clamp01 到 0 → SmoothStep(0,1,0)=0 → edge=1
+                        //   r >= 1.0  → 1 → edge=0
+                        // ══════════════════════════════════════════════════════
+                        float edge = 1f - Mathf.SmoothStep(0f, 1f,
+                                                            Mathf.InverseLerp(0.93f, 1f, r));
 
                         // 噪声不再参与 alpha。
                         // 之前是 alpha = edge * (0.70 + 0.30 * n)：覆盖率在 0.7~1.0 之间波动，
@@ -278,6 +298,72 @@ namespace SchoolTwin.Weather
         }
 
         /// <summary>
+        /// 【P13】可平铺的雪面细节噪声，给 SnowGround.shader 做"脏污"用（_DetailTex）。
+        ///
+        /// 为什么要单独一张，不能复用 <see cref="SnowPatch"/>：
+        ///   SnowPatch 的 alpha 是"这块雪盘有多实"（径向淡出 + Clamp），
+        ///   它是**遮罩**不是材质贴图。拿它按世界坐标平铺采样，UV 一超出 [0,1]
+        ///   就会被 Clamp 拉伸成色带，边缘那圈 alpha 渐变还会被采进颜色里，出一环环暗圈。
+        ///   一张图担两个语义不同的职责，必然有一边不合适 —— 所以拆开。
+        ///
+        /// 与 SnowPatch 的差异：
+        ///   · wrapMode = Repeat（SnowPatch 是 Clamp）
+        ///   · 无径向淡出（要平铺，不能有边）
+        ///   · 4 个八度（SnowPatch 是 3 个）—— 脏斑需要更细的尺度才有"被踩脏"的碎感
+        ///   · 用噪声原始值直接写 RGB，不做阈值拉伸（拉伸交给 shader 里的 (n-0.55)*2.2，
+        ///     这样调脏污浓度只改 shader 一个数，不用重生成贴图）
+        /// </summary>
+        public static Texture2D SnowDetail
+        {
+            get
+            {
+                if (_snowDetail != null) return _snowDetail;
+
+                const int S = 256;
+                var t = new Texture2D(S, S, TextureFormat.RGBA32, false);
+                t.name = "ProcSnowDetail";
+                t.wrapMode = TextureWrapMode.Repeat;
+                t.filterMode = FilterMode.Bilinear;
+
+                var px = new Color32[S * S];
+                for (int y = 0; y < S; y++)
+                {
+                    for (int x = 0; x < S; x++)
+                    {
+                        float u = x / (float)S, v = y / (float)S;
+
+                        // 四层八度柏林。
+                        //
+                        // ⚠️【P13 修正：基准频率必须按"世界尺度"反推，不能拍一个 100 上去】
+                        // shader 里采样是 tex2D(_DetailTex, worldPos.xz * 0.06)，
+                        // 即一张图铺满 1/0.06 = 16.7m。
+                        // 于是第 1 层的细胞尺寸 = 16.7 / freq：
+                        //     freq=100 → 0.17m，第 4 层到 0.02m  ← 这是砂纸，不是脏斑
+                        //     freq= 11 → 1.52m，末层 0.16m        ← 正是"一块被踩脏的地方"
+                        // 原来写 100，画面会变成均匀的高频噪点，脏污完全出不来，
+                        // 还会与雪面的微法线颗粒（ddx/ddy）打架产生闪烁。
+                        float n = 0f, amp = 0.5f, freq = 11f;
+                        for (int o = 0; o < 4; o++)
+                        {
+                            n += Mathf.PerlinNoise(u * freq + o * 31.7f, v * freq + o * 17.3f) * amp;
+                            amp *= 0.5f;
+                            freq *= 2.1f;
+                        }
+                        n = Mathf.Clamp01(n);
+
+                        byte b = (byte)(n * 255f);
+                        px[y * S + x] = new Color32(b, b, b, 255);
+                    }
+                }
+
+                t.SetPixels32(px);
+                t.Apply();
+                _snowDetail = t;
+                return _snowDetail;
+            }
+        }
+
+        /// <summary>
         /// 雨天积水遮罩：R 通道 = 「这里有多像一个水洼」。
         ///
         /// 这张图不直接当颜色用，是给 WetGround.shader 当遮罩的：
@@ -298,7 +384,17 @@ namespace SchoolTwin.Weather
                 const int S = 512;
                 var t = new Texture2D(S, S, TextureFormat.RGBA32, false);
                 t.name = "ProcWetMask";
-                t.wrapMode = TextureWrapMode.Clamp;
+                // 【P13】从 Clamp 改成 Mirror。
+                //
+                // 原因：WetGround.shader 的 UV 现在由**世界坐标**算（worldPos.xz / tileSize），
+                // 校园走两圈 UV 就会到 [3, 7] 这种范围。Clamp 会让整片地面采到边缘那一列像素，
+                // 退化成"一条条拉伸的色带"。
+                //
+                // 为什么用 Mirror 而不是 Repeat：这张图是非周期的柏林噪声，
+                // Repeat 会在接缝处出现明显的网格线（左边缘和右边缘的噪声值不相等）。
+                // Mirror 在接缝处是镜像对称的，一阶导数连续，肉眼看不出接缝；
+                // 只有"局部图案左右对称"这一条副作用，而水洼本来就不该有人眼可辨的方向性。
+                t.wrapMode = TextureWrapMode.Mirror;
                 t.filterMode = FilterMode.Bilinear;
 
                 // 这张图最终拉伸铺在 40m 见方的地面上，基础频率 6 → 每周期约 6.7m；
@@ -434,6 +530,8 @@ namespace SchoolTwin.Weather
             m.SetTexture("_Noise3D", CloudVolume);
             m.SetColor("_Color", tint);
             m.SetFloat("_Opacity", tint.a);
+            // 阴天帷幔初值 0：多云档不会凭空多出一层灰纱，由 SetDome 按天气逐帧写入
+            if (m.HasProperty("_Overcast")) m.SetFloat("_Overcast", 0f);
             m.SetFloat("_Radius", 0.34f);
             m.SetFloat("_Speed", 0.02f);
             m.SetFloat("_HorizonFade", 0.30f);

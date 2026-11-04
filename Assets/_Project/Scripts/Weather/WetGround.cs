@@ -38,6 +38,8 @@ namespace SchoolTwin.Weather
         private static readonly int IdHorizon = Shader.PropertyToID("_HorizonColor");
         private static readonly int IdRipple = Shader.PropertyToID("_RippleStrength");
         private static readonly int IdMask = Shader.PropertyToID("_MaskTex");
+        private static readonly int IdMaskOrigin = Shader.PropertyToID("_MaskOrigin");
+        private static readonly int IdMaskTileSize = Shader.PropertyToID("_MaskTileSize");
 
         public void Build()
         {
@@ -65,6 +67,14 @@ namespace SchoolTwin.Weather
             // 注意：不能用 mat.mainTexture —— 它只认 _MainTex，本着色器的贴图叫 _MaskTex。
             mat.SetTexture(IdMask, ProceduralAssets.WetMask);
             mat.SetColor("_WaterColor", new Color(0.045f, 0.060f, 0.075f, 1f));
+            // 【P13】把"一次平铺覆盖多大世界范围"告诉 shader。
+            // 取 40m：与平面尺寸一致，正好一个平面里铺一整张图，
+            // 水洼的疏密程度与队友原版的观感接近，不用重新调噪声频率。
+            mat.SetFloat(IdMaskTileSize, Size);
+            // 世界原点，**只在这里设一次，之后再也不改**。
+            // 这是"水坑在世界空间静止"的前提：原点一旦跟着平面/相机动，
+            // UV 就又变回相对平面的了（详见 Follow 的注释 ②）。
+            mat.SetVector(IdMaskOrigin, Vector4.zero);
             mat.renderQueue = 2992;              // 必须在积雪层 2996 之前，积雪才能盖住积水
 
             var mr = go.GetComponent<MeshRenderer>();
@@ -84,11 +94,53 @@ namespace SchoolTwin.Weather
             on = false;
         }
 
-        /// <summary>贴地跟随。groundY 由调用方的向下射线给出。</summary>
+        /// <summary>
+        /// 贴地跟随。groundY 由调用方的向下射线给出。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// 【P13 关键：水坑为什么曾经会"跟着角色跑"，以及正确的解法】
+        ///
+        /// 原实现直接把平面挪到相机脚下：
+        ///     plane.position = new Vector3(camPos.x, groundY + GroundOffset, camPos.z);
+        /// 而遮罩用的是物体空间 UV → 图案与平面刚性绑定 → 平面动，图案动。
+        /// 玩家看到的就是「水坑粘在脚边、走到哪跟到哪」。
+        ///
+        /// 【解法分两半，缺一不可】
+        ///
+        /// ① shader 侧：UV 由世界坐标算（见 WetGround.shader 顶部注释）。
+        ///    这让图案的锚点从"平面"换成了"世界原点"。
+        ///
+        /// ② 这里：`_MaskOrigin` 必须是**固定的世界常量**（就用世界原点 0,0,0），
+        ///    **绝对不能**跟着平面或相机走。这是最容易写错的一点 ——
+        ///    如果 origin 取"平面当前位置"，那么
+        ///        uv = (worldPos - planePos) / Size
+        ///    平面一动 origin 跟着动，UV 又变成相对平面的了，等于绕一圈回到原 bug。
+        ///    换句话说：世界锁定的前提是**原点不动**。
+        ///
+        /// 那平面还要不要吸附到整格？—— **不要**，这是我在本修复里推翻过的一个错误设计。
+        ///
+        /// 起初我以为"必须吸附，否则边缘水洼会忽隐忽现"。推演后不成立：
+        ///   · 平面边长 40m，边缘淡出从 r=0.55（半径 11m）就开始，到 r=1.0（半径 20m）归零；
+        ///   · 吸附到整格后，平面中心相对相机最多偏 20m —— 正好把相机顶到淡出圈最外沿，
+        ///     `edge` 在玩家脚下算出来 ≈ 0 → **脚边一滴水都没有**，比忽隐忽现更糟；
+        ///   · 而连续跟随不会让图案移动（UV 由世界坐标决定，平面怎样平移都不影响），
+        ///     只是让"被覆盖的窗口"始终对准相机 —— 这正是我们想要的：水膜永远在脚边，
+        ///     水洼永远钉在原地。两个目标同时满足。
+        ///
+        /// 结论：跟随就精确跟，什么都不吸附。
+        /// ══════════════════════════════════════════════════════════════════
+        /// </summary>
         public void Follow(Vector3 camPos, float groundY)
         {
             if (plane == null) return;
+
+            // 精确跟随：边缘淡出圈始终在相机 11~20m 外，看不出来，也不会盖住脚下。
             plane.position = new Vector3(camPos.x, groundY + GroundOffset, camPos.z);
+
+            // `_MaskOrigin` 保持世界原点不动（在 Build 里设一次零向量即可）。
+            // 这里不写它 —— 写了就把世界锁定又破坏掉了，见上面 ② 的解释。
+            // 一句话记法：**平面可以动，原点不能动。平面动只改变"哪里被覆盖"，
+            // 原点是 UV 的锚，它一动，图案就跟着平面滑走了。**
         }
 
         /// <summary>每帧由 WeatherVisuals 调用。</summary>

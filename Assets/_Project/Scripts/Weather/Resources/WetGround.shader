@@ -1,5 +1,22 @@
 // 雨天积水层（**内置管线 Built-in RP 版**，由 URP 版按队员文档 §2.2 对照表改写）。
 //
+// ══════════════════════════════════════════════════════════════════════
+// 【P13 核心修法：水坑必须在世界空间静止，不能跟着角色跑】
+//
+// 队友原版的做法是：铺一块 40m 见方的平面，每帧把平面挪到相机脚下（WetGround.Follow），
+// 再用**物体 UV** 采样水洼遮罩：
+//     o.uv = TRANSFORM_TEX(v.uv, _MaskTex);
+// 平面一移动，物体 UV 跟着移动 → 遮罩图案在世界空间里同步平移。
+// 玩家看到的就是「水坑粘在脚边、角色走到哪水坑跟到哪」，这是最刺眼的一个穿帮。
+//
+// 修正：UV 直接由**世界坐标**算，平面怎么挪都不影响图案落在哪。
+//     uv = (worldPos.xz - _MaskOrigin) / _MaskTileSize
+// 其中 _MaskOrigin 由 C# 传入、取"平面中心对齐到 tile 倍数"后的值。
+// 这是个**纯视觉修法**：真正"对"的做法是把水洼画进地形材质，但那要把 .mat 改脏
+// （天空盒那次已经踩过一次），而且在 6000+ 碰撞体、多个地面材质的情况下
+// 逐个改共享资产风险太高。世界锁定 UV 效果等价，且一个共享材质都不用碰。
+// ══════════════════════════════════════════════════════════════════════
+//
 // 为什么不用屏幕空间反射（SSPR）：
 //   内置管线下 SSPR 要 OnRenderImage + 深度重建 + 屏幕步进，全屏拷贝好几次，
 //   低端机上不稳；而我们只需要"地面反光"这一个效果。
@@ -23,6 +40,8 @@ Shader "CampusUI/WetGround"
     Properties
     {
         _MaskTex ("Puddle Mask (R)", 2D) = "black" {}
+        _MaskOrigin ("Mask World Origin", Vector) = (0, 0, 0, 0)
+        _MaskTileSize ("Mask Tile Size (m)", Float) = 40
         _WaterColor ("Water Tint", Color) = (0.05, 0.07, 0.09, 1)
         _SkyColor ("Sky Zenith", Color) = (0.42, 0.55, 0.78, 1)
         _HorizonColor ("Sky Horizon", Color) = (0.70, 0.75, 0.80, 1)
@@ -67,6 +86,8 @@ Shader "CampusUI/WetGround"
 
             sampler2D _MaskTex;
             float4 _MaskTex_ST;
+            float4 _MaskOrigin;      // 遮罩平铺的世界原点（xz 有效）
+            float  _MaskTileSize;    // 一次平铺覆盖的世界尺寸（米）
             fixed4 _WaterColor;
             fixed4 _SkyColor;
             fixed4 _HorizonColor;
@@ -89,8 +110,9 @@ Shader "CampusUI/WetGround"
             struct v2f
             {
                 float4 pos      : SV_POSITION;
-                float2 uv       : TEXCOORD0;
+                float2 uv       : TEXCOORD0;   // 世界锁定 UV（采样水洼遮罩）
                 float3 worldPos : TEXCOORD1;
+                float2 uvLocal  : TEXCOORD3;   // 平面局部 UV 0~1（只用于边缘淡出）
                 UNITY_FOG_COORDS(2)
             };
 
@@ -137,7 +159,24 @@ Shader "CampusUI/WetGround"
                 v2f o;
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.pos      = UnityWorldToClipPos(o.worldPos);
-                o.uv       = TRANSFORM_TEX(v.uv, _MaskTex);
+
+                // 【P13】世界锁定的 UV —— 水坑图案钉在地面上，不跟平面移动。
+                // 不用 TRANSFORM_TEX(v.uv, _MaskTex)：那是物体空间 UV，平面一挪图案就跟着挪。
+                //
+                // _MaskOrigin 由 C# 传入且**固定为世界原点**（不随平面/相机动），
+                // 所以 UV 只取决于该像素在世界里的绝对位置 → 图案在世界空间完全静止。
+                // 平面怎么吸附、怎么跳格都不影响这里的结果。
+                //
+                // _MaskTileSize = 40m：一张 512×512 的噪声图铺满 40m，
+                // 缩放与队友原版观感一致，水洼疏密不用重新调。
+                o.uv = (o.worldPos.xz - _MaskOrigin.xz) / max(0.001, _MaskTileSize);
+
+                // 边缘淡出必须用**平面局部 UV**，不能用上面那个世界 UV。
+                // 世界 UV 可能是 (3.4, 7.1) 这种大范围，拿它算 length(uv-0.5)
+                // 会得到恒大于 1 的结果 → 整片被 discard → 水膜完全消失。
+                // 这是把 UV 从物体空间切到世界空间时最容易漏的一处。
+                o.uvLocal = v.uv;
+
                 UNITY_TRANSFER_FOG(o, o.pos);
                 return o;
             }
@@ -148,9 +187,24 @@ Shader "CampusUI/WetGround"
                 float puddle = mask.r;
 
                 // 平面 UV 到中心的距离 → 边缘淡出，避免看到一块方形水膜
-                float2 c = i.uv - 0.5;
-                float r = length(c) * 2.0;
-                float edge = 1.0 - smoothstep(_EdgeFade, 1.0, r);
+                //
+                // ⚠️【P13】与 SnowGround.shader 同型的退化保护：smoothstep(a,b,x) 内部是
+                // (x-a)/(b-a)，当 _EdgeFade 被调到 1.0（Range 上限是 1.2，能调到）时
+                // b-a = 0 → 0/0 = NaN，alpha 归零、整片水膜静默消失。
+                // 现在 C# 侧用的是默认 0.55 所以没暴露，但这个属性对外可见，必须防。
+                //
+                // 另注意：这里必须用 i.uvLocal（平面局部 0~1），不是 i.uv（世界 UV）。
+                float edge;
+                if (_EdgeFade < 0.999)
+                {
+                    float2 c = i.uvLocal - 0.5;
+                    float r = length(c) * 2.0;
+                    edge = 1.0 - smoothstep(_EdgeFade, 1.0, r);
+                }
+                else
+                {
+                    edge = 1.0;
+                }
                 if (edge <= 0.002) discard;
 
                 // 涟漪法线

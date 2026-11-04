@@ -35,7 +35,8 @@ namespace SchoolTwin.Weather
         public float rain;            // 0~1.6 雨强
         public float snow;            // 0~1.2 雪强
         public float wind;            // 0~1 风（影响粒子横向漂移与风声）
-        public float cloud;           // 0~1 云穹顶不透明度
+        public float cloud;           // 0~1 云穹顶不透明度（有噪声塑形的云朵本体）
+        public float overcast;        // 0~1 阴天帷幔：平坦压住天空底色，与 cloud 分工见 CloudDome.shader
         public Color cloudColor;
 
         // ---- 特殊 ----
@@ -73,6 +74,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.70f, 0.75f, 0.80f),
             rain = 0f, snow = 0f, wind = 0.08f,
             cloud = 0f,
+            overcast = 0f,
             cloudColor = new Color(1f, 1f, 1f),
             lightning = 0f,
             star = 0f
@@ -91,6 +93,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.66f, 0.70f, 0.75f),
             rain = 0f, snow = 0f, wind = 0.22f,
             cloud = 0.28f,
+            overcast = 0.10f,
             cloudColor = new Color(0.95f, 0.96f, 0.98f),
             lightning = 0f,
             star = 0f
@@ -109,6 +112,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.62f, 0.65f, 0.69f),
             rain = 0f, snow = 0f, wind = 0.32f,
             cloud = 0.55f,
+            overcast = 0.55f,
             cloudColor = new Color(0.72f, 0.74f, 0.78f),
             lightning = 0f,
             star = 0f
@@ -127,6 +131,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.55f, 0.59f, 0.64f),
             rain = 1.0f, snow = 0f, wind = 0.50f,
             cloud = 0.72f,
+            overcast = 0.86f,
             cloudColor = new Color(0.55f, 0.58f, 0.63f),
             lightning = 0f,
             star = 0f
@@ -145,6 +150,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.42f, 0.45f, 0.50f),
             rain = 1.6f, snow = 0f, wind = 0.90f,
             cloud = 0.86f,
+            overcast = 0.94f,
             cloudColor = new Color(0.35f, 0.38f, 0.44f),
             lightning = 1f,
             star = 0f
@@ -163,6 +169,7 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.74f, 0.76f, 0.78f),
             rain = 0f, snow = 0f, wind = 0.05f,
             cloud = 0.40f,
+            overcast = 0.90f,
             cloudColor = new Color(0.80f, 0.82f, 0.84f),
             lightning = 0f,
             star = 0f
@@ -170,8 +177,13 @@ namespace SchoolTwin.Weather
 
         public static readonly EnvSample Snow = new EnvSample
         {
-            skyTint = new Color(0.68f, 0.73f, 0.82f),
-            exposure = 0.95f,
+            // 【P13】原值 (0.68, 0.73, 0.82) 是"淡蓝"，配 Skybox/Procedural 在白天仍偏蓝。
+            // 雪天的天光其实是一种**低饱和的灰白**（雪云把整个短波端都散射掉了），
+            // 所以把 R/G/B 拉近、整体往中性灰推 —— 三个通道差值从 0.14 收到 0.05。
+            skyTint = new Color(0.72f, 0.75f, 0.80f),
+            // 曝光从 0.95 提到 1.02：雪天要"亮而灰"，全靠曝光提亮会让灰色变白、蓝天变浅，
+            // 但 0.95 太暗（配合下雪天的 sunIntensity=0.52 会让整体偏阴森）。
+            exposure = 1.02f,
             atmosphere = 1.10f,
             sunDisk = 0.014f,
             sunColor = new Color(0.95f, 0.97f, 1f),
@@ -181,6 +193,9 @@ namespace SchoolTwin.Weather
             fogColor = new Color(0.79f, 0.83f, 0.88f),
             rain = 0f, snow = 1.0f, wind = 0.20f,
             cloud = 0.62f,
+            // 雪天必须是最强的阴天帷幔：雪只有落在"看不见蓝天"的灰白天空下才成立。
+            // 0.94 是刻意留 6% 让天空盒透一点自身的层次，全 1.0 会像贴了一张灰纸。
+            overcast = 0.94f,
             cloudColor = new Color(0.82f, 0.85f, 0.90f),
             lightning = 0f,
             star = 0f
@@ -209,6 +224,7 @@ namespace SchoolTwin.Weather
             s.snow = Mathf.Lerp(a.snow, b.snow, t);
             s.wind = Mathf.Lerp(a.wind, b.wind, t);
             s.cloud = Mathf.Lerp(a.cloud, b.cloud, t);
+            s.overcast = Mathf.Lerp(a.overcast, b.overcast, t);
             s.cloudColor = Color.Lerp(a.cloudColor, b.cloudColor, t);
             s.lightning = Mathf.Lerp(a.lightning, b.lightning, t);
             s.star = Mathf.Lerp(a.star, b.star, t);

@@ -19,6 +19,7 @@ Shader "CampusUI/CloudDome"
         _Noise3D ("Cloud Volume (alpha = density)", 3D) = "" {}
         _Color ("Tint", Color) = (1,1,1,1)
         _Opacity ("Opacity", Range(0,1)) = 0.5
+        _Overcast ("Overcast Veil", Range(0,1)) = 0
         _Radius ("Sample Radius", Range(0.05,0.48)) = 0.34
         _Speed ("Drift", Float) = 0.02
         _HorizonFade ("Horizon Fade", Range(0,1)) = 0.30
@@ -49,6 +50,7 @@ Shader "CampusUI/CloudDome"
             sampler3D _Noise3D;
             float4 _Color;
             float _Opacity;
+            float _Overcast;
             float _Radius;
             float _Speed;
             float _HorizonFade;
@@ -95,7 +97,22 @@ Shader "CampusUI/CloudDome"
                 // Fade below the horizon so the dome never shows under the ground.
                 float horizon = smoothstep(-_HorizonFade, 0.02, d.y);
 
-                return fixed4(_Color.rgb, saturate(c * _Opacity * horizon));
+                // 【P13】阴天/雨雪天的"实心云盖"。
+                //
+                // 问题：云穹顶的 alpha 上限一直是 _Opacity（= 天气预设的 cloud 值），
+                // 雪天 cloud = 0.62，也就是**最多只能遮住 62% 的天空**，剩下 38%
+                // 仍是 Skybox/Procedural 算出来的蓝天 —— 于是"下着雪、天还是湛蓝"。
+                //
+                // 为什么不能直接调大 cloud：那是「云的多少」，云多了会变成一朵一朵的白团，
+                // 天空反而更亮更花；雪天要的是"整个天被一层灰白压住"，是**均匀的帷幔**，
+                // 不是更浓的云。所以拆成两个语义：
+                //   _Opacity  云朵本体（噪声塑形，有明暗起伏）
+                //   _Overcast 阴天帷幔（平坦、无噪声、只负责压住底色）
+                // 最终 alpha 取两者的 max，而不是相加：相加会在云缝处过曝。
+                float veil = _Overcast * horizon;
+
+                float a = saturate(max(c * _Opacity, veil) * horizon);
+                return fixed4(_Color.rgb, a);
             }
             ENDCG
         }
