@@ -1,14 +1,14 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-04 11:12:52**
+> 生成时间：**2026-11-04 11:19:00**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**断点正在施工**：最后改动 `TwinFullLayer.Pages.cs`（34 分钟前）。未提交代码文件 **20** 个。
+**断点正在施工**：最后改动 `TwinFullLayer.Pages.cs`（40 分钟前）。未提交代码文件 **0** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
@@ -257,43 +257,18 @@
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **27** 个文件未提交（代码 20 / 文档与其他 1）。
+共 **2** 个文件未提交（代码 0 / 文档与其他 0）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/Data/RecordingReader.cs` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/Data/TwinPlayer.cs` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/Twin/TwinSiteLayout.cs` | 2 小时前 |
-| 代码 | `Assets/_Project/Scripts/Twin/TwinSourceSwitcher.cs` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs` | — |
-| 其他 | `Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs.meta` | — |
-| 代码 | `Assets/_Project/Scripts/UI/TwinClickRow.cs` | 2 小时前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinControlPanel.cs` | — |
-| 其他 | `Assets/_Project/Scripts/UI/TwinControlPanel.cs.meta` | — |
-| 代码 | `Assets/_Project/Scripts/UI/TwinDetailPanel.cs` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinDrawer.cs` | 2 小时前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinFullLayer.Pages.cs` | 34 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinPointListPanel.cs` | — |
-| 其他 | `Assets/_Project/Scripts/UI/TwinPointListPanel.cs.meta` | — |
-| 代码 | `Assets/_Project/Scripts/UI/TwinSystemPage.cs` | 43 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinUIFactory.cs` | 2 小时前 |
-| 文档 | `Docs/P00_项目总览_交接基线.md` | 2 小时前 |
-| 文档 | `Docs/P27_数据真实性_踩坑日志.md` | 40 分钟前 |
-| 文档 | `Docs/STATUS.md` | 25 分钟前 |
-| 其他 | `tools/status_checks.txt` | 33 分钟前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinPlaybackBar.cs` | 1 小时前 |
-| 其他 | `Assets/_Project/Scripts/UI/TwinPlaybackBar.cs.meta` | 1 小时前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs` | 43 分钟前 |
-| 其他 | `Assets/_Project/Scripts/UI/TwinSourceHealthCard.cs.meta` | 1 小时前 |
-| 文档 | `Docs/P12_旧面板清理_断点.md` | 32 分钟前 |
-| 其他 | `Docs/异环——时间与天气系统参考调研` | 31 分钟前 |
+| 文档 | `Docs/P00_项目总览_交接基线.md` | 0 秒前 |
+| 文档 | `Docs/P13_时间天气系统融合方案_定盘.md` | 31 秒前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `TwinFullLayer.Pages.cs` | 34 分钟前 | 🔥 正在干 |
+| 断点 | `TwinFullLayer.Pages.cs` | 40 分钟前 | 🔥 正在干 |
 | 见微 | `08_数据统计_全屏.png` | 1 天前 | 歇着 |
 | 心跳 | `P3_时序历史层_调研报告_断点.md` | 3 天前 | 歇着 |
 | 挑刺 | `P30_light_probe_exp.png` | 4 天前 | 歇着 |
@@ -301,7 +276,9 @@
 
 ## 4. 今日提交
 
-今日无提交。
+| 时间 | 提交 | 说明 |
+|---|---|---|
+| 11:16 | `e1985ac` | feat(P12+P13): 旧面板清理收口 + 数据源回放/健康度 + 异环调研入库 |
 
 ## 5. 文档新鲜度（谁过期了）
 
@@ -309,10 +286,11 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `STATUS.md` | 356 | 25 分钟前 | ✅ 新鲜 |
-| `P12_旧面板清理_断点.md` | 737 | 32 分钟前 | ✅ 新鲜 |
-| `P27_数据真实性_踩坑日志.md` | 807 | 40 分钟前 | ✅ 新鲜 |
-| `P00_项目总览_交接基线.md` | 1078 | 2 小时前 | ✅ 新鲜 |
+| `P00_项目总览_交接基线.md` | 1079 | 0 秒前 | ✅ 新鲜 |
+| `P13_时间天气系统融合方案_定盘.md` | 204 | 31 秒前 | ✅ 新鲜 |
+| `STATUS.md` | 356 | 6 分钟前 | ✅ 新鲜 |
+| `P12_旧面板清理_断点.md` | 737 | 38 分钟前 | ✅ 新鲜 |
+| `P27_数据真实性_踩坑日志.md` | 807 | 46 分钟前 | ✅ 新鲜 |
 | `P7_设备编号唯一化_断点.md` | 1091 | 13 小时前 | ✅ 新鲜 |
 | `P6_D5单位归一与D6量程核对_断点.md` | 353 | 1 天前 | ⚠️ 超 24h |
 | `机房交互_技术实现汇报.md` | 296 | 1 天前 | ⚠️ 超 24h |
@@ -333,12 +311,12 @@
 | `P3_时序历史层_调研报告_断点.md` | 340 | 3 天前 | ❌ 超 72h |
 | `P30_昼夜光照预设_执行记录_打光.md` | 126 | 4 天前 | ❌ 超 72h |
 | `P30_待办_相机与角色材质_打光.md` | 80 | 4 天前 | ❌ 超 72h |
-| `P29-6_全屏态布局规格.md` | 283 | 4 天前 | ❌ 超 72h |
 
 ## 6. 最近 10 次提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11-04 11:16 | `e1985ac` | feat(P12+P13): 旧面板清理收口 + 数据源回放/健康度 + 异环调研入库 |
 | 11-03 22:44 | `ffc406f` | docs(P00+P27): 踩坑日志落盘 + 基线 v1.23 + 开工前必读 |
 | 11-03 22:35 | `8de388b` | feat(P6-P11+P27): 单位归一 · 编号唯一化 · 详情整页 · 数据真实性 |
 | 11-02 20:23 | `b4c5f8c` | docs(P00): 看板与统计页视觉快照刷新 |
@@ -348,7 +326,6 @@
 | 11-02 19:54 | `3bdc823` | fix(Tools): 判据工具剔除注释行 —— 同一天误报三次的根因 |
 | 11-02 19:34 | `fe04088` | docs(P5-5): 统计页收尾任务包 —— 新发现 2 条口径文案矛盾（答辩致命） |
 | 11-02 19:13 | `ea1d377` | docs(P5-4): 统计页视觉缺口补充单 —— 7 条缺口 + 5 条机器判据 |
-| 11-02 18:14 | `4795b79` | docs(P5-3): 统计页视觉评审模板 —— 见微只评审，不派工 |
 
 ---
 
