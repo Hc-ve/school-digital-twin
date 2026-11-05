@@ -78,6 +78,47 @@ namespace SchoolTwin.Present
         [Range(0f, 1f)]
         [SerializeField] private float _beepVolume = 0.75f;
 
+        // ── 【P14 2026-11-05】空调双通道反馈（气流粒子 + 程序化嗡鸣）──────────
+        //
+        // 做法源自队员**王绍锋**的教室控制台项目（详见 AcAirflowFeedback 类注释）。
+        // 懒构建：第一次遇到 AC 的 SetPower 执行成功时才建 ——
+        // 避免"整个演示流程根本没用空调"时白建 5 套粒子+音源。
+        //
+        // ⚠️ 它是**瞬态**的（不是 MonoBehaviour），所以必须由本类
+        // 在 OnDestroy / OnDisable 里显式 Destroy —— 否则退出 Play 后
+        // 挂在空调锚点下的粒子物体还在（锚点是场景物体，不会跟着死）。
+        private AcAirflowFeedback _acFeedback;
+
+        /// <summary>【P14】懒建空调反馈。构建失败后会记下原因，不会每帧重试。</summary>
+        private void EnsureAcFeedback()
+        {
+            if (_acFeedback != null) return;
+            _acFeedback = new AcAirflowFeedback();
+            _acFeedback.Build();
+            if (!_acFeedback.IsBuilt)
+            {
+                Debug.LogWarning("[P14] 空调反馈构建失败：" + _acFeedback.FailReason);
+            }
+        }
+
+        /// <summary>【P14】逐帧推进空调反馈（嗡鸣淡入淡出 + 断电强制停止）。</summary>
+        private void TickAcFeedback(float unscaledDt)
+        {
+            // 没建过就什么都不做 —— 不能在这里 EnsureAcFeedback()，
+            // 那等于每帧都尝试建一次，把「演示流程不涉及空调」的场景变成
+            // 每帧一次 Registry 查询 + 5 次 GetComponentsInChildren。
+            if (_acFeedback == null) return;
+            _acFeedback.Tick(unscaledDt);
+        }
+
+        /// <summary>【P14】释放空调反馈（粒子物体与音源挂在场景锚点下，必须显式销毁）。</summary>
+        private void DestroyAcFeedback()
+        {
+            if (_acFeedback == null) return;
+            _acFeedback.Destroy();
+            _acFeedback = null;
+        }
+
         [Header("轮询")]
         [Tooltip("多久读一次回读值（秒）。灯是开关量，0.1 秒已经看不出延迟")]
         [SerializeField] private float _pollInterval = 0.1f;
@@ -354,6 +395,15 @@ namespace SchoolTwin.Present
             StopAllCoroutines();
             _shutdownRoutine = null;
 
+            // 【P14】空调反馈也要在这里收一次。
+            //
+            // 为什么 OnDisable 和 OnDestroy 都写：退出 Play 时两者的调用顺序
+            // **不保证**，而 `_acFeedback` 是普通 C# 对象（不是 MonoBehaviour），
+            // 它不会因为场景卸载而自动消失 —— 挂在空调锚点下的粒子物体
+            // 是**孤儿**，锚点死后它才被连带销毁，但那之前 Tick 可能再碰一次。
+            // DestroyAcFeedback 是幂等的（第二次 null 早退），写两处没有副作用。
+            DestroyAcFeedback();
+
             // 座位快照是运行时 new 的 Texture2D，不销毁会随每次进出 PPT 累积
             if (_seatSnapshot != null)
             {
@@ -366,6 +416,10 @@ namespace SchoolTwin.Present
         {
             TwinCommandCenter center = TwinCommandCenter.Instance;
             if (center != null && _commandHandler != null) center.Changed -= _commandHandler;
+
+            // 【P14】空调气流反馈必须先释放 —— 粒子物体与音源挂在**场景锚点**下面，
+            // 锚点不会跟着本组件销毁，不显式清就会每次进出 Play 留 5 套粒子。
+            DestroyAcFeedback();
 
             foreach (KeyValuePair<string, LampVisual> kv in _lamps)
             {
@@ -471,6 +525,12 @@ namespace SchoolTwin.Present
 
             // 【P26】PPT 模式下补挂贴图目标（投影仪晚于 PPT 就绪时用）
             TickPptAttach();
+
+            // 【P14】空调气流反馈：嗡鸣淡入淡出 + 断电强制停止。
+            // 必须逐帧（不是 10Hz 轮询）：0.7s 的淡出在 10Hz 下只有 7 个采样点，
+            // 听起来会一顿一顿的。用 unscaledDeltaTime 是因为暂停/慢动作时
+            // 声音也该按真实时间走。
+            TickAcFeedback(Time.unscaledDeltaTime);
 
             if (Time.unscaledTime < _nextPoll) return;
             _nextPoll = Time.unscaledTime + Mathf.Max(0.02f, _pollInterval);
@@ -4734,7 +4794,36 @@ namespace SchoolTwin.Present
 
         private void OnCommandChanged(TwinCommand cmd)
         {
-            if (cmd == null || !_beepOnReceive) return;
+            if (cmd == null) return;
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P14 2026-11-05】空调气流反馈：只在**执行成功后**启动。
+            //
+            // 判据是 `Actuated`（设备已动作，phase="actuated"）或 `Confirmed`
+            // （回读确认完成），**不是 `Accepted`**。
+            //
+            // 为什么这条必须写清楚：任务包明令禁止「挂到命令下发瞬间」——
+            // 那样是**假反馈**。命令可能被拒绝、可能超时、可能设备根本没响应，
+            // 而画面上气流已经在吹了 —— 评委看到的是"系统说开了但实际没开"。
+            //
+            // 注意下面「滴」一声用的恰恰是 `Accepted`，那是**故意的**：
+            // 真实空调收到信号就滴一声（那时候还没执行完）。
+            // 两个反馈的时机语义不同，不要合并。
+            // ══════════════════════════════════════════════════════════════
+            if (cmd.State == CommandState.Actuated || cmd.State == CommandState.Confirmed)
+            {
+                TwinDeviceModel acModel = TwinDeviceModels.Resolve(cmd.TwinId);
+                if (acModel != null &&
+                    string.Equals(acModel.Type, "AC", StringComparison.Ordinal) &&
+                    cmd.Action == CommandAction.SetPower)
+                {
+                    EnsureAcFeedback();
+                    if (_acFeedback != null)
+                        _acFeedback.OnCommandActuated(cmd.TwinId, cmd.Value >= 0.5f);
+                }
+            }
+
+            if (!_beepOnReceive) return;
 
             // 「收到」= Accepted。用 Accepted 而不是 Confirmed：
             // 真实空调是在**收到信号**时滴一声，那时候还没执行完。

@@ -667,3 +667,36 @@ P30-07 | 【诊断】会话累计必须存 EditorPrefs（域重载开着，stati
 P30-08 | 【诊断】必须能一键清零累计（复验"从零开始能跑多久"） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:public static void ResetSessionCounters\(\)
 P30-09 | 【泄漏】Destroy 必须解绑 errorReceived（与 prepareCompleted 同理，订阅会吊住实例） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.errorReceived -= OnVideoError;
 P30-10 | 【禁令】重建时只换组件、必须复用原来那张 videoRT（RT 已被材质与18台座位引用，换掉是另一场事故） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.targetTexture = _videoRT;
+P14-01 | 【时机红线】空调反馈只许挂在 Actuated/Confirmed 上，禁止挂 Accepted —— 挂下发瞬间是假反馈（命令可能被拒/超时，画面上气流却在吹） | grep:1:Assets/_Project/Scripts/Present/TwinDevicePresenter.cs:cmd\.State == CommandState\.Actuated \|\| cmd\.State == CommandState\.Confirmed
+P14-02 | 【断电红线】断电必须强制停粒子与嗡鸣（拉闸时没有任何命令下发，只在命令回调里查 IsPowered 会漏掉 → 拉闸后空调还在吹） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:bool powered = TwinCircuit\.IsPowered\(u\.TwinId\);
+P14-03 | 【零素材】嗡鸣必须走谐波合成路数，不许读 wav（沿 MakeBeep/BuildBellChime 的算式；读素材会破零资源红线） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private AudioClip BuildHumClip\(\)
+P14-04 | 【零素材】不许出现 wav 加载调用（Resources.Load / AudioClip 从文件读都禁止） | grep0:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:Resources\.Load
+P14-05 | 【关机不突断】关空调必须 StopEmitting 让残留自然飘散，不许 Clear 硬清屏 | grep+:2:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:ParticleSystemStopBehavior\.StopEmitting\)
+P14-06 | 【关机不突断】不许对粒子调 Clear()（Clear 会瞬间抹掉空中已有的粒子，观感是"啪一下没了"；注意本判据只针对 ps.Clear，List.Clear 是正常操作） | grep0:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:Air\.Clear\(
+P14-07 | 【嗡鸣常驻】嗡鸣必须靠 volume 控制、不许反复 Play/Stop（反复起播有延迟，王绍锋 README §2.1「无起播延迟」就是要避开这个） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:u\.Hum\.volume = HumMaxVolume \* u\.HumLevel;
+P14-08 | 【无缝循环】嗡鸣循环长度必须让各谐波落在整数周期上（50/100/150Hz 在 4s 内分别是 200/400/600 周期）。4s 而非 2s：2s 的噪声循环重复感可察觉 | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private const float HumLoopSeconds = 4f;
+P14-09 | 【泄漏】粒子物体与音源挂在场景锚点下，必须在 OnDisable+OnDestroy 显式释放（锚点不跟着组件死，不释放则每次进出 Play 留 5 套） | grep+:1:Assets/_Project/Scripts/Present/TwinDevicePresenter.cs:DestroyAcFeedback\(\);
+P14-10 | 【禁止猜节点名】出风口定位不许按名字找（王绍锋的 AirConditioner/AC_Body 在本项目 0 命中），必须按包围盒几何推导 | grep:1:Assets/_Project/Scripts/Present/AcVentLocator.cs:private static void DeriveVent\(Bounds b
+P14-11 | 【禁改场景】反馈必须运行时建，不许改场景文件（任务包禁止改场景；任何场景 .unity 的改动都是越界） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:GameObject root = new GameObject\("AcAirflow_
+P14-12 | 【不重复建】AcAirflowFeedback.Build 必须幂等（重复调用不许重复建粒子） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:if \(_built \|\| _buildFailed\) return;
+P14-13 | 【王绍锋署名】代码注释必须写明气流反馈做法源自队员王绍锋的教室控制台项目（贡献证据，答辩分工归属）。注：判据工具默认剔除注释行，署名天然写在注释里，故改查踩坑日志（md 不剔注释） | grep+:1:Docs/P14_空调反馈_踩坑日志.md:王绍锋
+P14-14 | 【诊断】5 台空调的 TwinId 必须写全（4 个班级 + 教导处，漏一台就少一路反馈） | grep+:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:ClassDirector/AC/Unit_01
+P14-15 | 【形态】气流必须是"光丝"不是"圆点"：渲染模式必须 Stretch（billboard 各向同性 → 无论多大都是点阵，点阵永远不像气） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:pr\.renderMode = ParticleSystemRenderMode\.Stretch;
+P14-16 | 【形态】必须开 Noise 模块（无噪声的 Stretch 是一把笔直的针，像激光；丝状感靠轨迹被低频噪声推着走） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:noise\.enabled = true;
+P14-17 | 【形态】velocityScale 必须 > 0（=0 等于关掉速度拉伸，回到圆点；参考图的气流是沿吹风方向拉长的） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:pr\.velocityScale = 0\.35f;
+P14-18 | 【形态】重力必须为正（负 gravityModifier 是往上飘像烟；冷气是下沉的，第一版方向搞反是不像空调的隐性原因） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:main\.gravityModifier = 0\.012f;
+P14-19 | 【形态】混合模式必须是 Alpha Blend 不是 Additive（教室是白天白墙，Additive 在白背景上不产生可见差异 → 丝状结构全被吃掉） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:BlendMode\.OneMinusSrcAlpha
+P14-20 | 【形态】贴图必须是高斯长尾不是实心圆（四次方衰减拉长后是"边缘清晰的实心棒"；高斯一路拖到边缘才归零，才是两端渐隐的丝） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:Mathf\.Exp\(-k \* r2\)
+P14-21 | 【禁假判据】不许写"位置高于 4 米就是假锚点"这类阈值 —— 本场景 Interior 有两层楼，二楼地板 y≈3.5，6 米的空调是正常吊装；接进去会误杀二楼两台 | grep0:Assets/_Project/Scripts/Present/AcVentLocator.cs:IsMockAnchor
+P14-22 | 【房间参照】房间中心必须取房间几何包围盒中心，不许取根节点 transform.position（FBX 空父节点 pivot 常在门口/墙角，会导致吹风方向符号翻转） | grep:1:Assets/_Project/Scripts/Present/AcVentLocator.cs:private static Bounds RoomBoundsNear
+P14-23 | 【形状判据】找空调必须用比例判据不只绝对值（第一版四条绝对阈值全被花盆架 FlowerHolder01b size=(0.64,0.50,0.27) 通过，一条区分力都没有） | grep:1:Assets/_Project/Scripts/Present/AcVentLocator.cs:float ratioThick = horizMax
+P14-24 | 【API】NoiseModule 的倍频属性是 octaveCount 不是 octaves（写错编译失败 CS1061） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:noise\.octaveCount = 1;
+P14-25 | 【音频可听性】嗡鸣满音量必须落在 0.15~0.35 区间：低于 0.15 = 听不见（0.16 只有提示音 1/6，叠喇叭低频衰减即消失），高于 0.35 = 偏吵（0.55 已被主理人试听否决） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private const float HumMaxVolume = 0.18f;
+P14-26 | 【音频真实度】必须含宽带风噪层，只叠谐波是变压器声不是空调声（真实空调主成分是出风湍流噪声） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:MakeBandNoise\(wind
+P14-27 | 【音频真实度】风噪下限必须高于笔记本喇叭低频死区（约 150~250Hz），取 180Hz 以上 | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private const float WindNoiseLowHz = 180f;
+P14-28 | 【音频禁招】噪声循环不许做交叉淡化（4s 直接截断的接缝 0.1059 落在 76.9 百分位，已被噪声自身波动掩蔽；交叉淡化反而让末尾方差减半 → 可听「突然变轻」） | grep0:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:xfade
+P14-29 | 【音频禁招】不许用 UnityEngine.Random 生成噪声（会推进全局随机状态，让飘雪/灯光等与「有没有开过空调」产生关联） | grep0:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:UnityEngine\.Random
+P14-30 | 【3D衰减】spatialBlend 不得高于 0.5、maxDistance 不得小于 20（满 3D + 短衰减会让站讲台完全听不见） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:src\.maxDistance = 30f;
+P14-31 | 【诊断】必须有音频链路自检（clip 长度/峰值/音源数/Listener），否则"听不见"分不清是没生成还是没设备 | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private void LogAudioSelfCheck\(\)
+P14-32 | 【嗡鸣常驻】只 Play 一次，不许 Pause（Pause 会释放混音器通道 + time 不归零导致每次起始相位不同） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:if \(!u\.HumStarted && u\.HumLevel > 0\.001f\)
+P14-33 | 【断电】断电必须真 Stop 并复位 HumStarted（只把 volume 归零会让音源继续无声占通道） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:u\.HumStarted = false;
