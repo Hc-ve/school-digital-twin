@@ -209,6 +209,10 @@ namespace SchoolTwin.Weather
         private Renderer[] roofCandidates;
         private bool roofCandidatesBuilt;
 
+        // 【P13 Bug2】观景模式探测的短时缓存（详见 IsFreeCamMode）
+        private bool _freeCamCached;
+        private float _freeCamProbeTime = -1f;
+
         // 【P13】给"40m 上限探测"用的独立缓冲。不能复用 ceilHits：
         // 那份数据是主判定刚算出的结果，借来借去会把结论搅乱。
         private readonly RaycastHit[] farHits = new RaycastHit[32];
@@ -837,6 +841,82 @@ namespace SchoolTwin.Weather
 
             BuildSnowFar();   // 远场白兜底：覆盖近场盘到雪天雾起之间的环带，消除地平线裸地形缺口
             EnsureTreeSnow(); // 自动挂载树根积雪组件(《异环》"树根被雪埋"近似)
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 Bug3 已停用 —— 2026-11-05 12:50】
+            //
+            // EnsureRoofSnow() 打出来的雪壳**污染了整个场景**，四路连带故障：
+            //
+            //   ① 机房幕布发黑：雪壳 renderQueue=2997，盖在幕布与所有屏幕之上
+            //   ② 角色浮空：雪壳是朝上大面，被 SampleGroundHeight 选中当"地面"
+            //   ③ 脚印消失：同一份错误采样，脚印世界坐标全算错
+            //   ④ 屋顶仍无雪：4067 个面里混了大量非屋顶面，自己糊成一团
+            //
+            // ── 真根因：minRoofY 是**世界绝对高度**，不是"相对该建筑" ──────
+            // 机房在 1F、天花板约 3m，而 minRoofY=3.2f 只拦得住地面铺装。
+            // 于是室内二层地板、走廊吊顶、楼梯平台、看台顶面全被当成"屋顶"
+            // 复制进了雪壳 —— 截图上那块从天花板斜插进机房的黑色几何体就是它。
+            //
+            // ── 为什么不是调参数能救 ──────────────────────────────────
+            // 抬高 minRoofY 会连带漏掉 1~2 层楼的屋顶（教室楼本身才 12m）；
+            // 按建筑根节点分组又需要先有一份可信的建筑清单，而本工程
+            // 1393 个 PrefabInstance、建筑网格全在 prefab 里，没有现成清单。
+            // 答辩前一天动这个，风险远大于收益。
+            //
+            // ── 处置：整块停用，保留代码与文档，等机房稳定后单独一轮重做 ──
+            // SnowOnRoofs.cs 文件保留（不删），只摘掉这里的挂载调用；
+            // shader 侧的 _MaskOff / _Cull 是**纯加法**（默认值 = 原行为），
+            // 留着不影响地面雪盘，重做时直接可用。
+            // ══════════════════════════════════════════════════════════════
+            // EnsureRoofSnow();
+        }
+
+        /// <summary>
+        /// 【P13 Bug3】自动挂载屋顶积雪组件。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// ⛔【2026-11-05 12:50 已停用 —— 重新启用前必须先读完这段】
+        ///
+        /// 本方法打出的雪壳会**污染整个场景**，实测四路连带故障：
+        ///   ① 机房幕布发黑（renderQueue 2997 盖在所有屏幕之上）
+        ///   ② 角色浮空（被 SampleGroundHeight 当成"地面"）
+        ///   ③ 脚印消失（同一份错误采样）
+        ///   ④ 屋顶反而仍无雪（混入大量非屋顶面，自己糊成一团）
+        ///
+        /// 真根因：`SnowOnRoofs.minRoofY` 是**世界绝对高度**，不是相对建筑。
+        /// 机房在 1F、天花板 3m，而 minRoofY=3.2f 拦不住二层地板、走廊吊顶、
+        /// 楼梯平台、看台顶面 —— 全被当成"屋顶"复制了。
+        ///
+        /// 要重做，必须先解决"如何只取真正的屋顶"：
+        ///   · 按建筑根节点分组（需要先有可信的建筑清单）
+        ///   · 或按"某点向上最近的面"逐点探测（而不是全场景扫三角形）
+        /// 单纯调 minRoofY 会连带漏掉 1~2 层楼的屋顶，不是参数问题。
+        /// ══════════════════════════════════════════════════════════════════
+        ///
+        /// 现象：下雪天地面、树根、草皮全白了，唯独**建筑屋顶还是原色**，
+        /// 像被单独挖掉一块雪 —— 非常突兀。
+        ///
+        /// 为什么现有三块雪盘盖不到屋顶：近场 90m 盘、远场 260m 盘、树根 3m 圆盘
+        /// 全部是**水平板**，且定位方式都是"逐顶点向下打射线贴地"
+        /// （见 SampleGroundHeight，它把 `dy > MaxRise(1.5m)` 的点直接丢弃）。
+        /// 屋顶在 refY+12 ~ refY+20，高出十几倍 → 全部被丢弃。
+        /// 即便不丢弃，一块贴地的水平板在拓扑上也不可能同时贴地面又贴屋顶。
+        /// 所以这不是参数没调好，是**数据通路根本不支持**。
+        ///
+        /// ⚠️ 与 EnsureTreeSnow 同一个坑，必须照抄它的做法：
+        /// SnowOnRoofs 的顶点全部是**世界坐标**（相邻三角形之间纹理才连续），
+        /// 它必须钉在世界原点，而本组件 LateUpdate 每帧把 transform 搬到相机位置。
+        /// 若把它挂成本组件的子节点，整块雪壳会跟着相机平移，
+        /// 几十片屋顶雪随着相机移动而整体漂移（白线 bug 的同型病）。
+        /// 它自己 Build() 里也会 SetParent(null) 脱离，所以判存在必须用
+        /// **全场景查找**，不能用 GetComponentInChildren（脱离后就找不到了，
+        /// 每次重建都会再生成一个 → 多份雪壳叠在一起，明暗翻倍）。
+        /// </summary>
+        private void EnsureRoofSnow()
+        {
+            if (Object.FindObjectOfType<SnowOnRoofs>(true) != null) return;
+            var rgo = new GameObject("RoofSnowShell");
+            rgo.transform.position = Vector3.zero;
+            rgo.AddComponent<SnowOnRoofs>();
         }
 
         /// <summary>
@@ -1162,9 +1242,36 @@ namespace SchoolTwin.Weather
                 }
             }
 
-            // ---- 【P13】角色站到雪面上（视觉抬升，不动物理）----
-            // 用 playerSnowAmount（含 indoorFade）：室内地板没有雪，人不能浮起来。
-            playerSnowAmount = groundSnowAmount * indoorFade;
+            // ══════════════════════════════════════════════════════════════════
+            // 【P28 2026-11-05】脚印与抬升**不再吃 indoorFade**
+            //
+            // 原式：playerSnowAmount = groundSnowAmount * indoorFade
+            //
+            // 问题不在于 indoorFade 算错，而在于**它不该出现在这个乘积里**。
+            // indoorFade 是"头顶有没有遮挡"的平滑值，而"脚底下有没有雪"
+            // 是另一件事。两者被乘在一起之后，任何一次室内判定抖动
+            // 都会瞬间把脚印和抬升一起抹掉：
+            //
+            //   出门 → 判定翻成室内 → indoorFade 0.33 秒内滑到 0
+            //        → snowAmount 归零 → 脚印立刻停、角色立刻往下沉
+            //   回到楼里 → 判定翻回室外 → 又慢慢长回来 → 脚印"复活"
+            //
+            // 主理人报的四个现象全部由此而来：
+            //   · 走出门口一定范围才有脚印，出去就没了
+            //   · 往回走角色下陷、脚完全埋进雪里
+            //   · 走远看不见、走近又出现（判定在 AABB 边界上反复翻）
+            //
+            // 真正的室内外区分应该由**脚下有没有雪面**来回答，而不是靠
+            // 头顶射线。室内地板本来就没有 SnowGround 盖着，那些地方
+            // 采不到雪面高度，抬升自然为 0 —— 不需要 indoorFade 帮忙。
+            // 脚印那边同理：室内地面的世界坐标不在雪盘覆盖范围内，
+            // shader 里 `FootprintAt` 比对的是雪面顶点的世界 XZ，
+            // 楼内地板上根本不会显示（雪盘被墙挡着，也画不到楼里）。
+            //
+            // 所以这里直接给 groundSnowAmount（= 积雪量 × 高度淡出），
+            // 让"雪有多少"成为唯一决定因素。
+            // ══════════════════════════════════════════════════════════════
+            playerSnowAmount = groundSnowAmount;
             UpdatePlayerOnSnow(dt, playerSnowAmount);
 
             // ---- 【P13】雪地脚印 ----
@@ -2315,6 +2422,10 @@ namespace SchoolTwin.Weather
                 // 排除自身子物体（CloudDome / 雪盘 / 雨雪粒子都在本组件下，
                 // 它们的 Renderer 会跟着相机跑，混进来会把自己判成室内）。
                 Renderer[] all = GetComponentsInChildren<Renderer>(true);
+                // 【P13 第十四次修】建表时也把玩家排除掉，省掉每帧几十次
+                // IsChildOf 的开销。注意这**不能替代**下面的逐项判定 ——
+                // 本表只建一次并缓存，若此刻角色还没生成，这一次就白过滤。
+                Transform playerAtBuild = PlayerRoot();
                 var list = new System.Collections.Generic.List<Renderer>(96);
                 Renderer[] scene = GameObject.FindObjectsOfType<Renderer>();
                 for (int i = 0; i < scene.Length; i++)
@@ -2327,6 +2438,7 @@ namespace SchoolTwin.Weather
                     for (int k = 0; k < all.Length; k++)
                         if (all[k] == rd) { isSelf = true; break; }
                     if (isSelf) continue;                            // 自己的穹顶/雪盘不要
+                    if (playerAtBuild != null && rd.transform.IsChildOf(playerAtBuild)) continue;  // 角色不是屋顶
                     list.Add(rd);
                 }
                 roofCandidates = list.ToArray();
@@ -2363,10 +2475,55 @@ namespace SchoolTwin.Weather
             bool found = false;
             float best = float.MaxValue;
 
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第十四次修 · 2026-11-05】**必须排除玩家自己的渲染网格**。
+            //
+            // 这是「角色浮空 + 走雪地不留脚印」同时失效的真根因，而且是我
+            // 自己在前几次修里引进的 —— 加兜底时只想到"场景里的屋面没有
+            // Collider"，完全忘了**角色本身也是一块有包围盒的网格**。
+            //
+            // 现场证据（`[P13][室内自检]`，室外露天路面）：
+            //     头顶射线 = Alpha_Joints（渲染网格兜底） 1.71m  法线Y=-1.00
+            //     40m 探测 = 40m 内没有任何碰撞体      ← 人在室外，头顶是天空
+            //     自命中   = True                      ← 射线只打到自己
+            //     indoor   = True / indoorFade = 0.000
+            //
+            // `Alpha_Joints` 是角色骨骼蒙皮网格（身高 1.71m）。它对本方法
+            // 来说**完美满足全部判据**：
+            //   ① bounds.max.y = 脚底 + 1.71 > headY（脚底 + 0.5）✓
+            //   ② 远低于 roofTopLimit（+30m）✓
+            //   ③ 玩家 XZ 恒在自己的包围盒内 ✓
+            //   ④ ySpan = 1.71 > 0.6，不是薄片 ✓
+            //   ⑤ xSpan/zSpan 都不到 1m，不是场地外壳 ✓
+            // 于是「站在室外」被判成「在屋里」。
+            //
+            // 连锁后果正是主理人反馈的那两条，而且**只有一个根因**：
+            //     indoor = true
+            //       → indoorFade → 0
+            //       → playerSnowAmount = groundSnowAmount × 0 = 0
+            //       → UpdatePlayerOnSnow 的 want 乘 0 → 抬升恒 0 → **角色陷进雪里**
+            //       → UpdateFootprints 的 depth ≤ 0.01 → 直接 return → **一个脚印都不留**
+            // 自检里 `已抬升 = 0.000` / `脚印 = 0/32` 就是这么来的。
+            // 注意 `雪面顶 - 脚底 = 0.270` 是对的 —— 算得没错，只是被乘了 0。
+            //
+            // 修复前后对照（昨天能跑、今天不能，差异只在这一段）：
+            //     昨天：已抬升 0.302 到位 / 脚印 12/32 grounded=True
+            //     今天：已抬升 0.000      / 脚印 0/32
+            //
+            // ── 为什么不能只靠建表时过滤（见上面 roofCandidates 的建设处）──
+            // 候选表是**首次调用时建一次**并缓存的。若那一刻角色还没生成
+            // （TwinPlayer 由其它组件在 Start 里 Ensure），过滤就漏了。
+            // 所以这里**每次遍历都再判一次**：建表过滤省开销，这里判保证正确。
+            // ══════════════════════════════════════════════════════════════
+            Transform selfRoot = PlayerRoot();
+
             for (int i = 0; i < roofCandidates.Length; i++)
             {
                 Renderer rd = roofCandidates[i];
                 if (rd == null || !rd.enabled) continue;
+
+                // ⓪ 玩家自己的蒙皮网格不是屋顶。缺这一条就是上面那一整段事故。
+                if (selfRoot != null && rd.transform.IsChildOf(selfRoot)) continue;
 
                 Bounds b = rd.bounds;
 
@@ -2376,7 +2533,7 @@ namespace SchoolTwin.Weather
                 // ② 顶面不能太高 —— 天空穹顶/远景山体之类，排除
                 if (b.max.y > roofTopLimit) continue;
 
-                // ③ 玩家 XZ 落在包围盒内
+                // ③ 玩家 XZ 落在包围盒内 —— **这一步只是粗筛，不能作结论**
                 if (from.x < b.min.x || from.x > b.max.x) continue;
                 if (from.z < b.min.z || from.z > b.max.z) continue;
 
@@ -2393,10 +2550,63 @@ namespace SchoolTwin.Weather
                 float zSpan = b.max.z - b.min.z;
                 if (xSpan > 80f || zSpan > 80f) continue;
 
-                if (b.max.y < best)
+                // ══════════════════════════════════════════════════════════════
+                // 【P28 2026-11-05 · 决定性修复】**AABB 通过 ≠ 头顶有屋顶**
+                //
+                // 上面 ③ 只是"我落在这块网格的轴对齐包围盒里"，它对**任何**
+                // 非矩形建筑都会误判。现场证据（主理人 16:38 截图，人站在
+                // 教学楼外的空地上，四周开阔）：
+                //
+                //     头顶射线 = Corridor（渲染网格兜底） 4.01m
+                //     40m 上限探测 = 40m 内没有任何碰撞体
+                //     房间边界 = X[-11.8, 18.4]  Z[-18.4, 1.0]
+                //     indoor = True / indoorFade = 0.000
+                //
+                // `Corridor` 是**整栋走廊的合并网格**，它的 AABB 是 30×19m 的
+                // 大方块。楼是 L 形/带内院的，方块里必然含进楼外的空地 ——
+                // 人站在那儿，③ 通过，于是判成"在屋里"。
+                //
+                // 这一条误判一次性解释了主理人报的**全部四个现象**：
+                //   · 走出门口一定范围才有脚印   ← 门口那段恰好在 AABB 外
+                //   · 出去这个范围就没脚印了     ← 进了 AABB，snowAmount→0
+                //   · 往回走角色下陷、脚全埋进雪里 ← 抬升 want 被乘 0
+                //   · 走远看不见、走近又出现     ← 判定在边界上反复翻转
+                //
+                // ── 为什么不用 MeshCollider 求交 ────────────────────────────
+                // 这些建筑根本没有 Collider（`40m 内没有任何碰撞体` 就是证据），
+                // 这正是当初要写这套"渲染网格兜底"的原因。运行时给它们
+                // AddComponent<MeshCollider> 能行，但那是**往场景里加物理体**，
+                // 立刻会污染所有向下射线（地面采样会把屋顶当地面 → 角色浮空，
+                // 就是 F20 那个雪壳事故的翻版）。**绝不能在渲染兜底里造碰撞体。**
+                //
+                // ── 用什么代替：顶点高度图 ──────────────────────────────────
+                // 直接问"这个网格在我 XZ 上方到底有没有实体表面"：
+                // 把网格顶点变换到世界坐标，凡落在 (from.x±R, from.z±R) 这个
+                // 小方块内的，取它们的最高 y。若存在这样的顶点且高度在头顶之上，
+                // 才算"头顶被盖住"。否则这块网格只是**包围盒路过**，跳过。
+                //
+                // 精度：R = 0.6m 的邻域内只要有一个顶点就认定有表面。
+                // 建筑屋顶是密集三角网格（通常 0.5~2m 一个顶点），
+                // 而 AABB 里的"空地"离最近的真实墙面往往 3m 以上 —— 这个
+                // 尺度差足以稳定区分，不需要做真正的三角形求交（那要
+                // 遍历所有三角面，3249 顶点 × 上百个候选网格会直接卡帧）。
+                //
+                // 代价：网格极稀疏（顶点间距 > 1.2m）的屋顶会被漏判成室外。
+                // 这个方向的错误是**可接受**的 —— 漏判室内只是"室外在下雪时
+                // 屋里也下"，而误判室内是"整片雪地没有脚印、角色陷进雪里"。
+                // 与 §1.6 里那条"宁可漏判室内"的取向一致。
+                // ══════════════════════════════════════════════════════════════
+                float surfaceY;
+                if (!TryGetSurfaceYAt(rd, from.x, from.z, RoofProbeRadius, out surfaceY)) continue;
+
+                // 头顶必须真的有表面（而不是包围盒的上沿）
+                if (surfaceY <= headY) continue;
+                if (surfaceY > roofTopLimit) continue;
+
+                if (surfaceY < best)
                 {
-                    best = b.max.y;
-                    roofY = b.max.y;
+                    best = surfaceY;
+                    roofY = surfaceY;
                     roofName = rd.gameObject.name;
                     found = true;
                 }
@@ -2404,6 +2614,102 @@ namespace SchoolTwin.Weather
 
             return found;
         }
+
+        /// <summary>
+        /// 查询某个渲染网格在给定世界 XZ 邻域内，**实际存在的表面**的最高 y。
+        ///
+        /// 返回 false 表示这个位置根本没有该网格的顶点（= 包围盒路过，不是真的盖住）。
+        ///
+        /// ── 为什么要缓存世界顶点 ──────────────────────────────────────
+        /// `Mesh.vertices` **每次调用都返回一份新数组**（Unity 的已知行为，
+        /// 不是属性访问那么便宜）。本方法每 0.15s 被调一次，候选网格每次
+        /// 5000 顶点 × 12 字节 = 60KB，一秒就是 400KB 的纯垃圾 ——
+        /// 在答辩现场会变成周期性的 GC 卡顿。
+        ///
+        /// 缓存 key 用 **Renderer 而不是 Mesh**：建筑是 prefab 实例，
+        /// `sharedMesh` 在多个实例间共享，但它们的**世界位置不同**，
+        /// 按 Mesh 缓存会把 A 栋的顶点当成 B 栋的。
+        /// 场景是静态的（没有可移动的建筑），所以缓存永不失效。
+        /// </summary>
+        private bool TryGetSurfaceYAt(Renderer rd, float wx, float wz, float radius, out float surfaceY)
+        {
+            surfaceY = 0f;
+
+            Vector3[] worldVerts = GetWorldVertsCached(rd);
+            if (worldVerts == null || worldVerts.Length == 0) return false;
+
+            float r2 = radius * radius;
+            bool any = false;
+            float bestY = float.MinValue;
+
+            for (int i = 0; i < worldVerts.Length; i++)
+            {
+                Vector3 w = worldVerts[i];
+                float dx = w.x - wx;
+                float dz = w.z - wz;
+                if (dx * dx + dz * dz > r2) continue;
+
+                if (w.y > bestY) bestY = w.y;
+                any = true;
+            }
+
+            if (!any) return false;
+            surfaceY = bestY;
+            return true;
+        }
+
+        /// <summary>按 Renderer 缓存世界坐标顶点（见 TryGetSurfaceYAt 的说明）。</summary>
+        private Vector3[] GetWorldVertsCached(Renderer rd)
+        {
+            if (roofVertCache == null)
+                roofVertCache = new System.Collections.Generic.Dictionary<Renderer, Vector3[]>(64);
+
+            Vector3[] cached;
+            if (roofVertCache.TryGetValue(rd, out cached)) return cached;
+
+            MeshFilter mf = rd.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null)
+            {
+                roofVertCache[rd] = null;
+                return null;
+            }
+
+            Mesh mesh = mf.sharedMesh;
+            // `isReadable == false` 时 `.vertices` 会抛。本项目的建筑网格都是
+            // 导入的可读资源，但这条调用在 Update 链上 —— 任何异常都会让
+            // 整个天气系统停摆，所以必须兜住。
+            if (!mesh.isReadable)
+            {
+                roofVertCache[rd] = null;
+                return null;
+            }
+
+            Vector3[] local;
+            try { local = mesh.vertices; }
+            catch (System.Exception)
+            {
+                roofVertCache[rd] = null;
+                return null;
+            }
+
+            if (local == null || local.Length == 0)
+            {
+                roofVertCache[rd] = null;
+                return null;
+            }
+
+            Matrix4x4 m = rd.transform.localToWorldMatrix;
+            for (int i = 0; i < local.Length; i++)
+                local[i] = m.MultiplyPoint3x4(local[i]);
+
+            roofVertCache[rd] = local;
+            return local;
+        }
+
+        private System.Collections.Generic.Dictionary<Renderer, Vector3[]> roofVertCache;
+
+        /// <summary>屋顶表面采样的水平邻域半径（米）。见 IndoorByRendererRoof ⑤ 的精度说明。</summary>
+        private const float RoofProbeRadius = 0.6f;
 
         // =====================================================================
         // 【P13】角色站到雪面上
@@ -2444,9 +2750,19 @@ namespace SchoolTwin.Weather
         /// </summary>
         private void UpdatePlayerOnSnow(float dt, float snowAmount)
         {
+            // 【P28】根节点换了（PlayerRoot 的兜底缓存过期重查）→ 模型引用必须跟着失效。
+            // 否则抬升会作用在旧对象上：表现为"角色不动、别的什么东西在动"，
+            // 或者模型一路飘走（因为 playerBaseLocalPos 记的是旧对象的位置）。
+            Transform rootNow = PlayerRoot();
+            if (_playerModel != null && rootNow != null && !_playerModel.IsChildOf(rootNow))
+            {
+                _playerModel = null;
+                playerLiftNow = 0f;
+            }
+
             if (_playerModel == null)
             {
-                Transform root = PlayerRoot();
+                Transform root = rootNow;
                 if (root == null) return;
                 // 模型子物体名字被 TwinCharacterSetup 固定成 "Model"
                 _playerModel = root.Find("Model");
@@ -2533,13 +2849,27 @@ namespace SchoolTwin.Weather
         //     所以按**半步 0.36m** 发射、左右交替 → 视觉上就是连续的足迹带。
         //   · 横向偏移 0.11m：成人两脚中心间距约 0.20~0.24m，半径就是这个值。
         //   · 半径 0.16m：略大于鞋长的一半（0.13m），留出雪被挤开的边缘。
-        //   · 寿命 240s：雪一直在下，4 分钟足够让 32 个槽位（≈11.5m 足迹带）
-        //     里最老的印子淡到看不见，不会出现"走了半个操场，几十步前那脚还在"。
-        private const int PrintMax = 32;
+        //
+        // ── 【P28 2026-11-05】容量与寿命重新对齐 ──────────────────────────
+        // 原组合是 PrintMax=32 + PrintLife=240，两个数自相矛盾：
+        //   32 槽 × 0.36m = 11.52m，按 2.2m/s 只要 **5.2 秒**就走满一圈，
+        //   最早的印子被环形缓冲覆盖 —— 寿命 240 秒根本轮不到生效。
+        // 现场表现就是主理人说的「走远往回看，脚印还会消失，走进又出现了」。
+        //
+        // 现组合是 128 槽 + 90 秒：
+        //   128 × 0.36m = **46.08m** 足迹带，走满需 20.9 秒；
+        //   90 秒寿命中前 63 秒深度不衰减，最后 27 秒淡出。
+        //   于是"走出一段再回头看"这一整段（答辩的核心动作）全程可见，
+        //   而站着不动 90 秒后整片足迹被雪填平，也符合直觉。
+        //
+        // 为什么不是 256：92m 已超出"回头看"的实用距离，而每多一槽，
+        // 每个像素就多一次常量缓冲读取。128 是容量与成本的分界，
+        // 配套的整片剔除（shader 的 _PrintBounds）让实际开销几乎不变。
+        private const int PrintMax = 128;
         private const float PrintStride = 0.36f;
         private const float PrintSideOffset = 0.11f;
         private const float PrintRadiusM = 0.16f;
-        private const float PrintLifeSec = 240f;
+        private const float PrintLifeSec = 90f;
 
         private readonly Vector4[] prints = new Vector4[PrintMax];   // xy=世界xz, z=落印时刻, w=强度
         private int printWrite;          // 环形缓冲：下一个写入槽
@@ -2549,6 +2879,10 @@ namespace SchoolTwin.Weather
         private int printFootSide = 1;   // +1 / -1 交替，模拟左右脚
         private bool printCleared = true; // 材质里的脚印是否已清空
         private Material printMatCached;   // 上一次写入脚印的材质；换实例说明鞋印已丢
+
+        // 【P28】脚印门槛诊断（只打 3 次，见 UpdateFootprints 里的说明）
+        private int printDiagCount;
+        private float printDiagAt = -999f;
 
         private CharacterController _playerCc;
         private bool _playerCcSearched;
@@ -2563,7 +2897,7 @@ namespace SchoolTwin.Weather
         /// 盘怎么动都不影响印子的位置。
         ///
         /// ── 为什么写进材质而不是生成 GameObject ────────────────────────────
-        /// 每个脚印一个面片会有 32 个 DrawCall，且要和雪面做 Z 排序（雪面是
+        /// 每个脚印一个面片会有 PrintMax 个 DrawCall，且要和雪面做 Z 排序（雪面是
         /// Transparent 队列 2996，面片插在中间必然穿插）。写进 shader 常量数组
         /// 只需要一次 SetVectorArray，零额外 DrawCall，也不会和雪面抢深度。
         /// </summary>
@@ -2572,9 +2906,9 @@ namespace SchoolTwin.Weather
             if (snowGroundMat == null) return;
 
             // 材质被重建过（雪盘被销毁重建 / 切场景后重新构建）→ 旧材质里的脚印全丢，
-            // 但 C# 侧的 printUsed 还记着 32 个、prints[] 里还存着旧坐标。
-            // 不重置就会"自检说有 32 个脚印、画面上一个都没有"，而且下一秒
-            // EmitPrint 会把那 32 个旧坐标原样推回材质 —— 幽灵足迹复活。
+            // 但 C# 侧的 printUsed 还记着已写入的槽数、prints[] 里还存着旧坐标。
+            // 不重置就会"自检说有 N 个脚印、画面上一个都没有"，而且下一秒
+            // EmitPrint 会把那些旧坐标原样推回材质 —— 幽灵足迹复活。
             if (!ReferenceEquals(printMatCached, snowGroundMat))
             {
                 printMatCached = snowGroundMat;
@@ -2589,8 +2923,43 @@ namespace SchoolTwin.Weather
             // "雪都快没了脚印还在"的错位。
             float depth = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.15f, 0.75f, snowAmount));
 
+            // ══════════════════════════════════════════════════════════════
+            // 【P28 2026-11-05】脚印"一个都不出"的门槛诊断（只打 3 次）
+            //
+            // 上一轮改完仍然 0/32，而 `SnowAmount` 只有 0.42 —— **没到自动自检的
+            // 0.5 阈值**，于是整个 Play 里一条脚印相关日志都没有。这就是
+            // "改完不知道有没有生效"的根源：成功的路径上一片安静。
+            //
+            // 这段把从进函数到落印之间的**每一道闸门**都打出来，任何一道没过
+            // 都能一眼看出是哪一道。落印成功也打（第 1 次），用来对比。
+            // 封顶 3 次：用户一走动就会每帧进这个函数，不封顶必刷屏（P26 的教训）。
+            // ══════════════════════════════════════════════════════════════
+            Transform dbgRoot = PlayerRoot();
+            bool dbgGrounded = dbgRoot != null && IsPlayerGrounded(dbgRoot);
+
+            if (printDiagCount < 3 && (Time.time - printDiagAt > 1.5f))
+            {
+                printDiagAt = Time.time;
+                printDiagCount++;
+                Debug.Log("[P28][脚印诊断 #" + printDiagCount + "/3]\n"
+                    + "    snowAmount   = " + snowAmount.ToString("F3")
+                    + "   （< 0.15 → depth 归零，一整段都不留印）\n"
+                    + "    depth        = " + depth.ToString("F3")
+                    + (depth <= 0.01f ? "   ← **闸门①未过：雪量太小**" : "   闸门①通过") + "\n"
+                    + "    snowGroundMat= " + (snowGroundMat != null ? "ok" : "**null**") + "\n"
+                    + "    playerRoot   = " + (dbgRoot != null ? dbgRoot.name : "**null**")
+                    + "   pos=" + (dbgRoot != null ? dbgRoot.position.ToString("F2") : "?") + "\n"
+                    + "    grounded     = " + dbgGrounded
+                    + "   cc=" + (_playerCc != null ? "有" : "**null（root 不是角色）**") + "\n"
+                    + "    printUsed    = " + printUsed + "/" + PrintMax
+                    + "   hasLast=" + printHasLast + "   已推材质 _PrintCount="
+                    + (snowGroundMat != null ? snowGroundMat.GetFloat(IdPrintCount).ToString("F0") : "?") + "\n"
+                    + "    足迹带       = " + (PrintMax * PrintStride).ToString("F1") + "m（"
+                    + PrintMax + " 槽 × " + PrintStride.ToString("F2") + "m）  寿命 " + PrintLifeSec.ToString("F0") + "s");
+            }
+
             // 雪化了 / 切回晴天 → 清空历史脚印。
-            // 必须清：否则"雪→晴→雪"之后，上一场雪留在缓冲里的 32 个点会
+            // 必须清：否则"雪→晴→雪"之后，上一场雪留在缓冲里的那些点会
             // 凭空复活在半路上（那地方的雪早化没了），看着像幽灵足迹。
             if (depth <= 0.01f)
             {
@@ -2649,6 +3018,7 @@ namespace SchoolTwin.Weather
             printLastPos += dir * dist;
         }
 
+        
         /// <summary>
         /// 室外**地面**（世界 y）。用于给雪盘定位与铺地形提供基准高度。
         ///
@@ -2700,6 +3070,19 @@ namespace SchoolTwin.Weather
             printHasLast = false;
             printFootSide = 1;
             if (printMatCached != null) printMatCached.SetFloat(IdPrintCount, 0f);
+
+            // ⚠️ 缓冲清零还不够：`_Prints[]` 数组里仍躺着上一场的 128 个旧坐标。
+            // shader 靠 `p.w < 0.001` 跳过空槽，而 C# 这边**没清过数组本身**，
+            // 只是把 _PrintCount 置 0 让 FootprintAt 整体早退。
+            // 一旦下一次 EmitPrint 把 _PrintCount 推回 1，那些 w=1 的旧槽
+            // 会立刻"复活"在半路上（上一场雪留下的位置）——
+            // 这正是注释里说的幽灵足迹。所以数组必须真的清空。
+            for (int i = 0; i < prints.Length; i++) prints[i] = Vector4.zero;
+
+            // 包围盒也要一起复位，否则会留着一个覆盖旧足迹的大盒子，
+            // 让新一场的剔除失效（退化成大面积 128 次循环）。
+            if (printMatCached != null)
+                printMatCached.SetVector(IdPrintBounds, new Vector4(1f, 1f, -1f, -1f));
         }
 
         /// <summary>在指定世界位置落一个脚印，并把整个缓冲推给材质。</summary>
@@ -2724,19 +3107,89 @@ namespace SchoolTwin.Weather
 
             snowGroundMat.SetVectorArray(IdPrints, prints);
             snowGroundMat.SetFloat(IdPrintCount, printUsed);
+            UpdatePrintBounds();
+        }
+
+        /// <summary>
+        /// 重算所有**有效**脚印的世界 xz 包围盒，推给 shader 做整片剔除。
+        ///
+        /// ── 为什么必须重算，不能只扩张 ─────────────────────────────────────
+        /// 环形缓冲会**覆盖**旧槽位。若包围盒只做 max/min 单调扩张，
+        /// 走出一段再折返时，盒子里会包含早已被覆盖掉的旧区域 ——
+        /// 于是"剔除"失去意义，越来越多像素进 128 次循环，
+        /// 而这正是加包围盒要避免的事。
+        ///
+        /// ── 成本 ──────────────────────────────────────────────────────────
+        /// 只在 EmitPrint（约 6 次/秒）与 ResetPrints 时调用，遍历 128 个
+        /// Vector4 是微秒级。跟"每像素 128 次"完全不是一个量级，不需要再优化。
+        ///
+        /// ── 为什么时间过期的也算有效 ──────────────────────────────────────
+        /// 过期脚印在 shader 里 m 归 0，画面上看不见，但它仍占着槽位。
+        /// 若按"是否过期"筛选，盒子的收缩就依赖 _Time.y 与 C# 的时钟同步，
+        /// 两边一旦漂移（暂停、时间缩放）就会出现"印子还在但盒子把它剔掉了"。
+        /// 按槽位的 w 判空（w=0 是空槽）就够了 —— 覆盖面稍大一点无害。
+        /// </summary>
+        private void UpdatePrintBounds()
+        {
+            if (snowGroundMat == null) return;
+
+            float minX = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxZ = float.MinValue;
+            bool any = false;
+
+            for (int i = 0; i < prints.Length; i++)
+            {
+                Vector4 p = prints[i];
+                if (p.w < 0.001f) continue;    // 空槽
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minZ) minZ = p.y;    // y 分量存的是世界 z
+                if (p.y > maxZ) maxZ = p.y;
+                any = true;
+            }
+
+            // 没有任何脚印时给一个"必然不命中"的盒（min > max），
+            // shader 第一句 XZ 比较就会返回 0，不会退化成全屏遍历。
+            if (!any)
+            {
+                snowGroundMat.SetVector(IdPrintBounds, new Vector4(1f, 1f, -1f, -1f));
+                return;
+            }
+
+            snowGroundMat.SetVector(IdPrintBounds, new Vector4(minX, minZ, maxX, maxZ));
         }
 
         /// <summary>
         /// 角色是否踩在地面上。
         /// 优先用 CharacterController.isGrounded；没有控制器（第一人称模式等）时
         /// 保守返回 true —— 宁可多留几个脚印，也不要整片雪地一个印都没有。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// 【P28 2026-11-05】**不要缓存"找不到"这个结果**
+        ///
+        /// 原实现：
+        ///     if (!_playerCcSearched) { _playerCcSearched = true; _playerCc = root.GetComponent<...>(); }
+        /// 第一次调用若 `root` 还不是角色（见 PlayerRoot 的 cam.transform.root 兜底），
+        /// 拿到 null 后 `_playerCcSearched` 已置 true，**从此永远不再查**。
+        ///
+        /// 现场证据：自检里同时出现这两行，而它们是互相矛盾的 ——
+        ///     [TwinPlayer] 接线检查：CharacterController=True      ← 角色身上明明有
+        ///     脚印 = 0/32 个（无 CharacterController，按接地处理）   ← 这里却说没有
+        /// 唯一解释就是 root 不是角色，且这个 null 被永久缓存了。
+        ///
+        /// 现在改成：**只在拿到了 CharacterController 时才停止搜索**。
+        /// 每帧多一次 GetComponent 的代价，换掉一个永久性误判，值得。
+        /// （GetComponent 在同一个对象上重复调用会被 Unity 的组件缓存加速，
+        ///   这里还挂了 0.15s 级的间接节流 —— 只有 root 一直不对时才会持续走到。）
+        /// ══════════════════════════════════════════════════════════════════
         /// </summary>
         private bool IsPlayerGrounded(Transform root)
         {
-            if (!_playerCcSearched)
+            if (_playerCc == null && !_playerCcSearched)
             {
-                _playerCcSearched = true;
-                _playerCc = root.GetComponent<CharacterController>();
+                _playerCc = root != null ? root.GetComponent<CharacterController>() : null;
+                // 只有真的拿到了才封口。拿不到就下一帧接着找。
+                _playerCcSearched = _playerCc != null;
             }
             return _playerCc == null || _playerCc.isGrounded;
         }
@@ -2832,6 +3285,23 @@ namespace SchoolTwin.Weather
             sb.AppendLine("    _PrintDepth  = " + (snowGroundMat != null ? snowGroundMat.GetFloat(IdPrintDepth).ToString("F3") : "?")
                           + "   _PrintCount = " + (snowGroundMat != null ? snowGroundMat.GetFloat(IdPrintCount).ToString("F0") : "?")
                           + "   （Count=0 而脚印>0 = 没推给材质）");
+
+            // 【P28】足迹带的实际长度与包围盒 —— 这是"走远看不见"的唯一口径。
+            // 环封之后足迹带 = PrintMax × PrintStride，与"玩家实际走过多少米"无关。
+            sb.AppendLine("    足迹带容量   = " + PrintMax + " 槽 × " + PrintStride.ToString("F2") + "m = "
+                          + (PrintMax * PrintStride).ToString("F1") + " m"
+                          + "   （按 2.2m/s 走满需 " + (PrintMax * PrintStride / 2.2f).ToString("F1") + "s）"
+                          + "   寿命 " + PrintLifeSec.ToString("F0") + "s");
+            if (snowGroundMat != null)
+            {
+                Vector4 bb = snowGroundMat.GetVector(IdPrintBounds);
+                bool valid = bb.z >= bb.x && bb.w >= bb.y;
+                sb.AppendLine("    _PrintBounds = " + (valid
+                                  ? ("X[" + bb.x.ToString("F2") + ", " + bb.z.ToString("F2") + "]  Z["
+                                     + bb.y.ToString("F2") + ", " + bb.w.ToString("F2") + "]  "
+                                     + "  =" + (bb.z - bb.x).ToString("F1") + "×" + (bb.w - bb.y).ToString("F1") + "m")
+                                  : "空（min>max，整片剔除生效）"));
+            }
             if (printUsed > 0)
             {
                 int last = (printWrite - 1 + PrintMax) % PrintMax;
@@ -2982,6 +3452,7 @@ namespace SchoolTwin.Weather
         private static readonly int IdPrintRadius = Shader.PropertyToID("_PrintRadius");
         private static readonly int IdPrintDepth = Shader.PropertyToID("_PrintDepth");
         private static readonly int IdPrintLife = Shader.PropertyToID("_PrintLife");
+        private static readonly int IdPrintBounds = Shader.PropertyToID("_PrintBounds");
 
         private static void SetDome(Material m, Color rgb, float opacity)
         {
@@ -3270,9 +3741,62 @@ namespace SchoolTwin.Weather
             Transform pr = PlayerRoot();
             if (pr != null) anchorSrc = pr.position;   // 有角色就锚角色，转头不再移动雪盘
 
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 Bug2 修：积水层的锚点必须单独算，不能沿用雪盘那套"锚角色"
+            //
+            // ── 主理人报的现象 ────────────────────────────────────────────
+            // "观景模式下部分区域有水坑，水坑区域显示不全"
+            // "第三人称看到室外有些地方是有水坑的，但观景模式下部分水坑不显示"
+            //
+            // ── 根因 ──────────────────────────────────────────────────────
+            // 积水层是**相机脚下 40m 见方**的一块贴地平面，靠 Follow 每帧挪位置。
+            // 但上一版把锚点取成了角色位置（anchorSrc = pr.position），
+            // 于是：
+            //   · 第三人称：相机吊在角色后上方，两者相距 4~5m，
+            //     平面仍大致盖住视野 → 看起来正常
+            //   · 观景模式：相机可以飞出去几十米，而平面**留在角色脚下**，
+            //     相机看的地方根本没有平面 → 水坑整片消失
+            // 截图里那片水坑边界是笔直的矩形，正是这块 40m 方块的边缘。
+            //
+            // ── 为什么不能简单改成"永远跟相机" ────────────────────────────
+            // 角色模式下平面跟相机，会像早先"水坑粘在镜头前滑"那样：
+            // 第三人称镜头绕角色转，平面就横着扫。当时已经把锚点从相机
+            // 改成角色才治好的（见 Follow 的长注释）。所以必须**分模式**：
+            //   · 角色模式 → 锚角色（保持既有正确行为，不动）
+            //   · 观景模式 → 锚相机（相机去哪，水就在哪，这才是观景要的）
+            //
+            // ── 判据为什么用 FreeCameraController.enabled ─────────────────
+            // TwinThirdPersonCamera 的 _freeCamMode 是 private 且无公开属性，
+            // 但它在 ApplyFreeCamMode 里同步了这个控制器的 enabled：
+            //     if (_free != null && _free.enabled != on) _free.enabled = on;
+            // 所以 enabled 与"是否观景模式"严格同义，且不需要改另一个类。
+            // ══════════════════════════════════════════════════════════════
+            bool freeCam = IsFreeCamMode();
+            Vector3 wetAnchor = freeCam ? camPos : anchorSrc;
+
             if (indoorFade > 0.5f)
             {
                 // 室外：重新锚定。
+                //
+                // ══════════════════════════════════════════════════════════
+                // 【P28 2026-11-05】⚠️ 这里**不要搬脚印**（一度想这么做，已否）
+                //
+                // 我一度以为"走远看不见、走近又出现"是雪盘平移把脚印甩在盘外，
+                // 于是加了个 ShiftPrints 把 32 个历史脚印按锚点偏移一起搬。
+                // 那是**错的**，而且会引入更糟的 bug，理由两条：
+                //
+                // ① 脚印是**世界坐标**，雪盘顶点也是**世界坐标**。
+                //    DrapeSnow 里 `wx = px + b.x * takeSize`，px 就是 snowGround
+                //    的当前世界 x —— 盘平移之后，同一片世界区域仍然被新的顶点
+                //    覆盖，`i.worldPos.xz` 依旧能算到那里。**根本没有"甩在盘外"**。
+                // ② 雪盘跟随本身就带 0.25m 节流（DrapeSnow 的 dirty 判据）。
+                //    若脚印也跟着搬，锚点每抖一次脚印就挪一次 —— 结果不是
+                //    "钉在雪面上"，而是**脚印黏着角色一起滑**，比现在更假。
+                //
+                // 真正的原因是**足迹带宽 11.52m**（32 槽 × 0.36m）：
+                // 走远 20m 回头，最早的印子早被环形缓冲覆盖掉了。那是容量问题，
+                // 靠 PrintMax 32→128 解决（见下方常量区），不是坐标问题。
+                // ══════════════════════════════════════════════════════════
                 snowAnchor = new Vector3(anchorSrc.x, 0f, anchorSrc.z);
                 snowAnchorValid = true;
                 outdoorGroundY = ProbeOutdoorGround(anchorSrc);
@@ -3323,7 +3847,15 @@ namespace SchoolTwin.Weather
             // 但它只能治"看得见"，治不了"位置错"：进场那 0.33 秒的淡出过程中，
             // 水面已经在正确/错误的位置之间滑过一次了。位置对了，淡出才只是淡出。
             // ══════════════════════════════════════════════════════════════════
-            if (wet != null) wet.Follow(new Vector3(anchorSrc.x, 0f, anchorSrc.z), outdoorGroundY);
+            if (wet != null)
+            {
+                // 先切模式（会改平面尺寸与 _EdgeFade），再定位。
+                // 顺序不能反：SetFreeCam 内部按"状态有没有变"短路，
+                // 若先 Follow 后 SetFreeCam，尺寸变化要下一帧才生效，
+                // 观景切换那一瞬间会看到一帧"大水坑只显示中间一小块"。
+                wet.SetFreeCam(freeCam);
+                wet.Follow(new Vector3(wetAnchor.x, 0f, wetAnchor.z), outdoorGroundY);
+            }
 
             // ══════════════════════════════════════════════════════════════════
             // 【P13-D9】雨雪粒子发射盒：从"跟相机"改成"跟角色 + 室外地平面"
@@ -3847,25 +4379,100 @@ namespace SchoolTwin.Weather
         /// <summary>玩家根节点。结果缓存；相机会换（数字孪生 ↔ 第一人称）时由 RebindCamera 清缓存。</summary>
         private Transform _playerRoot;
 
+        /// <summary>
+        /// 当前是不是「观景模式」（相机交给 FreeCameraController 自由漫游）。
+        ///
+        /// ── 为什么不读 TwinThirdPersonCamera._freeCamMode ──────────────────
+        /// 它是 private，没有公开属性，也不该为一个天气组件去动玩家摄像机类的封装。
+        /// 而 `ApplyFreeCamMode` 里明确同步了控制器的开关：
+        ///     if (_free != null && _free.enabled != on) _free.enabled = on;
+        /// 所以 `FreeCameraController.enabled` 与"是否观景模式"严格同义。
+        ///
+        /// ── 为什么用 FindObjectOfType 而不是缓存 ───────────────────────────
+        /// 本方法每次 UpdateGround 调一次（0.15s 一次），而 FindObjectOfType 在
+        /// 这个场景（351 个对象）开销可接受；缓存在这里反而是隐患 ——
+        /// 场景切换或控制器被禁用后缓存会变陈旧，判断结果会卡在旧模式上。
+        /// 为了把这 0.15s 一次的开销也压掉，结果用一个短的失效窗口缓存。
+        /// </summary>
+        private bool IsFreeCamMode()
+        {
+            // 0.15s 内复用上次结果：UpdateGround 的节流周期与之一致，
+            // 不会因为缓存而漏掉模式切换（切换是人手按键，远慢于 0.15s）。
+            if (Time.time - _freeCamProbeTime < 0.15f) return _freeCamCached;
+            _freeCamProbeTime = Time.time;
+
+            var fc = FindObjectOfType<SchoolTwin.Interaction.FreeCameraController>();
+            _freeCamCached = fc != null && fc.enabled;
+            return _freeCamCached;
+        }
+
         private Transform PlayerRoot()
         {
-            if (_playerRoot != null) return _playerRoot;
+            // ══════════════════════════════════════════════════════════════
+            // 【P28 2026-11-05】兜底结果**不能永久缓存**
+            //
+            // 原实现是"拿到什么就缓存什么，只要有值就再也不查"。问题是 ① 号
+            // 权威来源（TwinPlayerController）可能在第一次调用时**还没生成**，
+            // 于是走到 ③ 的 `cam.transform.root` —— 而第三人称相机是独立对象，
+            // 它的 root 根本不是角色。这个错误对象被缓存下来，此后所有
+            // 依赖 PlayerRoot 的功能全部错位：
+            //   · 头顶射线起点错 → 室内判定错
+            //   · 脚印位置错     → 印子落在相机脚下而不是人物脚下
+            //   · 接地判定错     → 见 IsPlayerGrounded 里的说明
+            //
+            // 现在区分两种命中：
+            //   · 权威命中（TwinPlayerController）→ 永久缓存，它不会凭空消失
+            //   · 兜底命中（tag / 相机根）        → 只缓存 _FallbackRecheck 秒，
+            //                                       过期后重新找一次，等角色就位
+            // ══════════════════════════════════════════════════════════════
+            if (_playerRoot != null)
+            {
+                bool expired = _playerRootIsFallback
+                               && Time.unscaledTime - _playerRootAt > PlayerRootFallbackRecheck;
+                if (!expired) return _playerRoot;
+                _playerRoot = null;    // 兜底缓存过期，重新查
+                _playerCc = null;      // 换根了，控制器缓存跟着失效
+                _playerCcSearched = false;
+            }
 
-            // ① 第三人称玩家控制器 —— 最权威。用 FindObjectOfType 全扫一次即缓存。
+            // ① 第三人称玩家控制器 —— 最权威。
             var pc = FindObjectOfType<SchoolTwin.Player.TwinPlayerController>();
-            if (pc != null) { _playerRoot = pc.transform; return _playerRoot; }
+            if (pc != null)
+            {
+                _playerRoot = pc.transform;
+                _playerRootIsFallback = false;
+                _playerRootAt = Time.unscaledTime;
+                return _playerRoot;
+            }
 
             // ② tag 兜底
             GameObject byTag = null;
             try { byTag = GameObject.FindGameObjectWithTag("Player"); }
             catch (UnityException) { /* 项目没定义 Player tag 时 FindGameObjectWithTag 会抛 */ }
-            if (byTag != null) { _playerRoot = byTag.transform; return _playerRoot; }
+            if (byTag != null)
+            {
+                _playerRoot = byTag.transform;
+                _playerRootIsFallback = true;
+                _playerRootAt = Time.unscaledTime;
+                return _playerRoot;
+            }
 
             // ③ 最后才用相机的根（第一人称模式下相机常挂在玩家下面，这条有效；
             //    第三人称独立相机走到这里说明前两层都没命中，此时宁可不认，也不要误判整棵树）
-            if (cam != null) _playerRoot = cam.transform.root;
+            if (cam != null)
+            {
+                _playerRoot = cam.transform.root;
+                _playerRootIsFallback = true;
+                _playerRootAt = Time.unscaledTime;
+            }
             return _playerRoot;
         }
+
+        /// <summary>兜底命中的重新探测间隔（秒）。角色通常在 1 秒内生成完毕。</summary>
+        private const float PlayerRootFallbackRecheck = 0.5f;
+
+        private bool _playerRootIsFallback;   // 当前缓存是兜底来源（可被重新探测替换）
+        private float _playerRootAt = -999f;
 
         // 【P13】16 → 32：密林 + 花坛 + 铺装叠在一起时，16 个槽位常被前排树干占满，
 // 后面的真地面被 RaycastNonAlloc 直接丢弃 → 该点采不到地面、退回 groundY，
@@ -3919,6 +4526,12 @@ namespace SchoolTwin.Weather
             // 玩家根也要跟着失效：从数字孪生（无玩家/相机在根）切回第三人称时，
             // 缓存的空值或旧相机根会让 IsPlayerCollider 一直判错，积雪又归零。
             _playerRoot = null;
+            // 【P28】控制器缓存必须一起清 —— 它和 _playerRoot 是一对：
+            // 根换了而控制器还指着旧对象，接地判定就会用错的那个。
+            _playerCc = null;
+            _playerCcSearched = false;
+            _playerRootIsFallback = false;
+            _playerRootAt = -999f;
         }
     }
 }

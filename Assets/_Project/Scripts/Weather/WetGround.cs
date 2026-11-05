@@ -19,15 +19,22 @@ namespace SchoolTwin.Weather
     /// </summary>
     public class WetGround : MonoBehaviour
     {
-        private const float Size = 40f;             // 积水层边长（米）
+        private const float Size = 40f;             // 积水层边长（米）—— 角色模式
+        private const float SizeFreeCam = 120f;     // 观景模式下放大到 120m（见 SetFreeCam）
         private const float GroundOffset = 0.015f;  // 比地面高一点，避免 z-fighting
 
         private const float WetInSeconds = 8f;      // 打湿用时
         private const float DryInSeconds = 26f;     // 蒸发用时（比打湿慢，符合直觉）
 
+        // 边缘淡出：0.55 = 从半径 11m 起淡出、20m 归零（40m 平面时）
+        // 观景模式下必须推到接近 1，否则从高空俯视整片都被淡出圈吃光。
+        private const float EdgeFadeChar = 0.55f;
+        private const float EdgeFadeFreeCam = 0.97f;
+
         private Transform plane;
         private Material mat;
         private bool built;
+        private bool freeCamNow;    // 当前是否处于观景模式（决定平面尺寸与边缘淡出）
 
         private float wetness;      // 0~1，湿滑度累积量
         private bool on;
@@ -39,6 +46,7 @@ namespace SchoolTwin.Weather
         private static readonly int IdMask = Shader.PropertyToID("_MaskTex");
         private static readonly int IdMaskOrigin = Shader.PropertyToID("_MaskOrigin");
         private static readonly int IdMaskTileSize = Shader.PropertyToID("_MaskTileSize");
+        private static readonly int IdEdgeFade = Shader.PropertyToID("_EdgeFade");
 
         public void Build()
         {
@@ -70,6 +78,10 @@ namespace SchoolTwin.Weather
             // 取 40m：与平面尺寸一致，正好一个平面里铺一整张图，
             // 水洼的疏密程度与队友原版的观感接近，不用重新调噪声频率。
             mat.SetFloat(IdMaskTileSize, Size);
+            // 【P13 Bug2】边缘淡出的初值必须与"角色模式"一致，否则 Build 完第一帧
+            // 会用到 shader 里的默认 0.55 而 C# 侧以为已是 0.55 —— 值碰巧相同，
+            // 但显式写出来能让 SetFreeCam 的状态机从确定状态起步。
+            mat.SetFloat(IdEdgeFade, EdgeFadeChar);
             // 世界原点，**只在这里设一次，之后再也不改**。
             // 这是"水坑在世界空间静止"的前提：原点一旦跟着平面/相机动，
             // UV 就又变回相对平面的了（详见 Follow 的注释 ②）。
@@ -140,6 +152,49 @@ namespace SchoolTwin.Weather
             // 这里不写它 —— 写了就把世界锁定又破坏掉了，见上面 ② 的解释。
             // 一句话记法：**平面可以动，原点不能动。平面动只改变"哪里被覆盖"，
             // 原点是 UV 的锚，它一动，图案就跟着平面滑走了。**
+        }
+
+        /// <summary>
+        /// 切换「观景模式」下的积水表现：平面放大 + 边缘淡出推到最外缘。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// 【P13 Bug2：为什么光跟着相机还不够】
+        ///
+        /// 主理人的现象是"观景模式下部分区域有水坑，显示不全"。
+        /// 我先把锚点从角色改成了相机（WeatherVisuals 侧），这一半解决了
+        /// "相机飞远、平面留在原地"的问题。但还有第二个原因：
+        ///
+        ///   平面边长 40m，`_EdgeFade = 0.55` 意味着**半径 11m 起就开始淡出**，
+        ///   到 20m 完全归零。观景模式相机常抬到 15m 以上俯视，
+        ///   视野一下就覆盖到 20~40m 外 —— 那些地方 `edge` 已经是 0，
+        ///   整片地面被 discard 掉，看上去就是"水坑显示不全 / 只有一小块"。
+        ///
+        /// ── 两处一起改，缺一不可 ────────────────────────────────────────
+        ///   ① 平面 40m → 120m：让覆盖范围超出俯视视野
+        ///   ② `_EdgeFade` 0.55 → 0.97：让淡出只发生在最外缘 3~4m，
+        ///      不会在视野中段就把水吃掉
+        ///
+        /// ── 为什么 `_MaskTileSize` 不跟着改 ────────────────────────────
+        /// 它是"一张水洼噪声图铺多远"。改了它，水洼的**疏密与大小**会整体变，
+        /// 与角色模式下看到的观感就不一致了 —— 同一个天气，两种视角应该看到
+        /// 同一片水洼，只是看得更远。所以 tile 保持 40m，只有几何尺寸变。
+        /// 平面从 40 拉到 120 后，UV 会平铺 3 次，噪声是无缝的，接缝看不出来。
+        /// ══════════════════════════════════════════════════════════════════
+        /// </summary>
+        public void SetFreeCam(bool on)
+        {
+            if (mat == null || plane == null) return;
+            if (on == freeCamNow) return;      // 状态没变就什么都不做
+            freeCamNow = on;
+
+            float size = on ? SizeFreeCam : Size;
+
+            // Plane 原型是 10×10 单位 → scale = size / 10
+            plane.localScale = new Vector3(size * 0.1f, 1f, size * 0.1f);
+
+            mat.SetFloat(IdEdgeFade, on ? EdgeFadeFreeCam : EdgeFadeChar);
+
+            // 注意：**不动** _MaskTileSize，理由见上。水洼图案的世界尺寸不能变。
         }
 
         // ══════════════════════════════════════════════════════════════════

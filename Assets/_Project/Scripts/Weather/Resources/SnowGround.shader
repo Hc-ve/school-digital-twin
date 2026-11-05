@@ -40,9 +40,53 @@ Shader "CampusUI/SnowGround"
         _PrintDepth ("Footprint Depth", Range(0, 1)) = 0.55
         _PrintCount ("Footprint Count", Float) = 0
         // 脚印寿命（秒）：雪一直在下时，旧脚印会被新雪慢慢填平。
-        // 不设成永久 —— 否则 32 个槽位环封一圈后，最老的点还亮着，
-        // 会出现"走回半个操场，几十步前那脚还在"的怪现象。
-        _PrintLife  ("Footprint Life (s)", Float) = 240
+        //
+        // 【P28】240 → 90。原值 240 是按"能存 4 分钟"设计的，但缓冲只有
+        // 32 槽、走 5 秒（11.5m）就被覆盖 —— 寿命参数根本轮不到生效，
+        // 两个数是自相矛盾的。改成 128 槽（46m / 21 秒）之后，把寿命
+        // 设成 90 秒才自洽：走完一圈（21s）最早的印子还没淡完，
+        // 而原地站着不动时，90 秒后整片足迹被新雪填平，也符合直觉。
+        // 前 63 秒（70%）深度完全不衰减，最后 27 秒线性淡出。
+        _PrintLife  ("Footprint Life (s)", Float) = 90
+
+        // 所有有效脚印的世界 xz 包围盒（xy = min，zw = max）。
+        // 由 C# 侧维护，供 FootprintAt 做整片剔除 —— 见 CGPROGRAM 里的说明。
+        _PrintBounds("Footprint Bounds", Vector) = (0, 0, 0, 0)
+
+        // ══════════════════════════════════════════════════════════════
+        // 【P13 Bug3】屋顶雪壳模式开关
+        //
+        // 0 = 地面/树根雪盘（默认）：用 _SnowTex 的 alpha 当覆盖率，
+        //     并用它的径向淡出裁掉方形边界。
+        // 1 = 屋顶雪壳：**忽略 _SnowTex 的 alpha**，覆盖率恒为 1；
+        //     厚薄/脏污/微法线全部改从可平铺的 _DetailTex 取。
+        //
+        // ── 为什么必须有这个开关（不是"顺手加个选项"）──────────────────
+        // _SnowTex（SnowPatch）是**遮罩**不是贴图：wrapMode = Clamp，
+        // 且 alpha 带"半径 93%~100% 淡到 0"的径向淡出。
+        // 地面雪盘把整块平面铺满 [0,1] UV，所以采到的是完整的一张。
+        // 但屋顶雪壳按三角形拼出来，UV 只能给**世界坐标**（否则相邻三角形
+        // 之间纹理不连续）→ UV 会跑到几十的范围。
+        // Clamp 之后，几十的 UV 全部钳到边缘那一列像素，而边缘 alpha ≈ 0
+        // → 片元里 `if (cov <= 0.003) discard` 直接把整片屋顶扔掉。
+        // 表现就是"代码跑了、日志说生成了 N 个三角形，但画面上屋顶一点雪都没有"。
+        // 这和 Bug 2 的 `_EdgeFade = 1.0` 是同一种病：
+        // 把"方形平面的边界处理"套用到了"不属于方形平面的几何"上。
+        // ══════════════════════════════════════════════════════════════
+        _MaskOff    ("Ignore Snow Mask (roof shell)", Range(0, 1)) = 0
+
+        // ══════════════════════════════════════════════════════════════
+        // 【P13 Bug3】剔除模式，默认 0 = Off（保持地面雪盘原有行为不变）
+        //
+        // 屋顶雪壳必须用 2（Back）：雪壳是**复制屋顶三角形**得到的，
+        // 保留了原朝向。本工程建筑材质是 Standard 默认 Cull Back（单面），
+        // 于是"从室内抬头看屋顶"看到的是背面 → 屋顶本身被剔除、整块消失
+        // （这正是 Bug 1 纵向判据必须越过天花板的原因）。
+        // 若雪壳也用 Cull Off，就会顺着这个"看不见的屋顶"露出来，
+        // 在天花板上糊一片白 —— 治了室外、坏了室内。
+        // 所以雪壳单独设 _Cull = 2，与它要贴的那张屋顶保持同一种剔除方式。
+        // ══════════════════════════════════════════════════════════════
+        _Cull       ("Cull Mode", Float) = 0
     }
 
     SubShader
@@ -62,7 +106,7 @@ Shader "CampusUI/SnowGround"
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             ZTest LEqual
-            Cull Off
+            Cull [_Cull]
 
             CGPROGRAM
             #pragma target 3.5
@@ -95,6 +139,7 @@ Shader "CampusUI/SnowGround"
             float  _EdgeFade;
             float  _MicroNormal;
             float  _AmbientBoost;
+            float  _MaskOff;    // 【P13 Bug3】1 = 屋顶雪壳：不采 _SnowTex 的 alpha，覆盖率恒 1
 
             // 【P13】脚印数据。
             //
@@ -104,20 +149,34 @@ Shader "CampusUI/SnowGround"
             //     等于给天气系统加一个完整的渲染通道，调试时还看不到数据；
             //   · 数组方案的数据流是 C# 一个 float4[]，随时能在自检里打印出来，
             //     而且不需要任何额外 RT、不需要管分辨率与深度。
-            // 32 个点够不够？角色步幅约 0.7m，32 个点 ≈ 22m 的足迹，
-            // 而雪盘半径 45m —— 但**只有相机附近的足迹看得见**，
-            // 22m 的可见足迹已经远超屏幕范围，够用。超出的按环形缓冲淘汰最旧的。
+            //
+            // ── 容量定多少（P28 2026-11-05 由 32 改为 128）──────────────
+            // 原值 32 的足迹带 = 32 × 0.36m = **11.5 米**，按 2.2m/s 只需 5 秒
+            // 就走满一圈，最早的印子被覆盖 —— 表现为"走远往回看没了"。
+            // 主理人的答辩动作就是"从教学楼门口走出一段再回头看"，11.5m 不够。
+            // 128 槽 = 46.1m（走 21 秒），回头能看到一整段来路，是合适的量级。
+            //
+            // 为什么不是 256：46m 已超出"回头看"的实用范围，而每多一槽，
+            // 每个像素就多一次常量缓冲读取。128 是容量与成本的分界。
+            //
+            // ⚠️ 成本必须配套优化（见下面的 _PrintBounds 剔除）：
+            // 雪盘是 90m × 90m 的整屏级平面，若每个像素无条件遍历 128 次，
+            // 帧率会直接掉档。所以**先做一次包围盒判定**，绝大多数像素
+            // 一次比较就返回 0，只有足迹所在的那一小片才真的进循环。
             //
             // ── 为什么是 float4 而不是 float3 ─────────────────────────────
             // d3d11 的常量缓冲里数组元素按 16 字节对齐，float3 会被补齐成 float4
             // （而且多个 float3 连排时容易踩到跨寄存器读取的坑）。
             // 直接用 float4 = (worldX, worldZ, 生成时间, 强度)，不需要额外对齐处理。
-            #define PRINT_MAX 32
+            #define PRINT_MAX 128
             float4 _Prints[PRINT_MAX];   // xy = 世界 xz，z = 写入时刻，w = 强度
             float  _PrintCount;
             float  _PrintRadius;
             float  _PrintDepth;
             float  _PrintLife;
+            // xy = 所有有效脚印的世界 xz **最小值**，zw = **最大值**。
+            // 由 C# 侧在 EmitPrint / ResetPrints 时维护，供下面做整片剔除。
+            float4 _PrintBounds;
 
             /// <summary>
             /// 求某世界点在所有脚印里"被踩得最深"的程度（0 = 没被踩，1 = 踩到底）。
@@ -126,6 +185,35 @@ Shader "CampusUI/SnowGround"
             float FootprintAt(float2 worldXZ)
             {
                 if (_PrintDepth <= 0.001 || _PrintCount < 0.5) return 0.0;
+
+                // ══════════════════════════════════════════════════════════
+                // 【P28】整片剔除：不在足迹包围盒里的像素**一次比较就返回**。
+                //
+                // 128 槽的循环只在足迹带覆盖的那一小片像素上跑。雪盘 90m 见方、
+                // 足迹带只有几米宽，命中率不到 2% —— 这一句把 98% 的像素
+                // 从 128 次读取压到 4 次比较，是 32→128 能加得起的前提。
+                //
+                // ── 为什么"空盒"用 min > max 表示 ────────────────────────
+                // C# 侧没有任何脚印时推的是 (1, 1, -1, -1)，即 min > max。
+                // 这个组合**不可能**由合法足迹产生（min ≤ max 恒成立），
+                // 是一枚天然的"无效"标记，不需要额外传一个 bool。
+                //
+                // ⚠️ 不要额外把 `min == max` 也当空盒：**只有一个脚印时**
+                // 包围盒恰好退化成 min == max（一个点，x 与 z 各自相同），
+                // 加上那条判据会把刚踩下的第一个印子直接剔掉 ——
+                // 表现为"走一步不出现、走两步才出来"。
+                // 首帧的 Properties 默认 (0,0,0,0) 不需要单独处理：
+                // 那时 `_PrintCount` 是 0，函数开头就已经 return 了。
+                //
+                // 判据要留 _PrintRadius 的余量：包围盒是按**圆心**算的，
+                // 而每个印子有半径，边缘的像素仍要算进去。
+                // ══════════════════════════════════════════════════════════
+                if (_PrintBounds.x > _PrintBounds.z || _PrintBounds.y > _PrintBounds.w) return 0.0;
+
+                float2 bMin = _PrintBounds.xy - _PrintRadius;
+                float2 bMax = _PrintBounds.zw + _PrintRadius;
+                if (worldXZ.x < bMin.x || worldXZ.x > bMax.x) return 0.0;
+                if (worldXZ.y < bMin.y || worldXZ.y > bMax.y) return 0.0;
 
                 float best = 0.0;
                 float r2 = _PrintRadius * _PrintRadius;
@@ -138,8 +226,11 @@ Shader "CampusUI/SnowGround"
                 // ⚠️ 循环边界必须是**编译期常量** PRINT_MAX，不能写 (int)_PrintCount。
                 // d3d11 在 target 3.5 下要求循环次数可静态展开，用运行时值当上界
                 // 会编译报错（或退化成极慢的软件分支）。所以定长遍历、内部跳过空槽。
-                // 不加 [unroll]：32 次展开会让指令数翻几十倍，而动态循环
-                // 在 d3d11 上对常量上界的处理已经足够快，这里没必要换寄存器压力。
+                //
+                // 不加 [unroll]：128 次展开会让指令数翻几十倍（编译期也会很长），
+                // 而动态循环在 d3d11 上对常量上界的处理已经足够快。
+                // 32→128 之后这里更不该展开 —— 展开的收益是省几条循环指令，
+                // 代价是寄存器压力暴涨、可能把整个 frag 挤到 lower 掉。
                 for (int i = 0; i < PRINT_MAX; i++)
                 {
                     // 未使用的槽位 w = 0（C# 侧没填的初始值），直接跳过。
@@ -195,9 +286,24 @@ Shader "CampusUI/SnowGround"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // 采样：a = 覆盖率（实心 + 最外圈淡出），r = 颗粒噪声（只做极轻微的质感扰动）
+                //采样：a = 覆盖率（实心 + 最外圈淡出），r = 颗粒噪声（只做极轻微的质感扰动）
                 fixed4 sn = tex2D(_SnowTex, i.uv);
-                float cov = sn.a;
+
+                // ══════════════════════════════════════════════════════════
+                // 【P13 Bug3】屋顶雪壳模式：覆盖率不采 _SnowTex 的 alpha
+                //
+                // 地面雪盘整块平面铺满 [0,1] UV，_SnowTex 的 alpha 径向淡出
+                // 正好用来裁方形边界，是对的。
+                // 屋顶雪壳的 UV 只能给世界坐标（保证相邻三角形之间纹理连续），
+                // 会跑到几十的范围；Clamp 之后全钳到边缘，alpha ≈ 0
+                // → 下面那句 discard 会把整片屋顶全部扔掉。
+                // 所以屋顶模式下覆盖率恒 1，边缘不做二次裁剪，
+                // 厚薄/脏污/颗粒一律改用可平铺的 _DetailTex（按世界坐标高频采样，
+                // 天然没有边界问题）。
+                // ══════════════════════════════════════════════════════════
+                bool roofMode = _MaskOff > 0.5;
+
+                float cov = roofMode ? 1.0 : sn.a;
                 if (cov <= 0.003) discard;
 
                 // 边缘淡出（双保险，贴图里已经淡过一次，这里再收一次方形边界）
@@ -213,7 +319,13 @@ Shader "CampusUI/SnowGround"
                 // 表现就是"雪量明明是 1.0、雪盘也 active，但地面一片白都没有"。
                 // 这是**未定义行为**，不能靠"恰好没事"过活，必须显式短路。
                 float edge;
-                if (_EdgeFade < 0.999)
+                if (roofMode)
+                {
+                    // 屋顶雪壳：按三角形拼出来的几何没有"方形边界"，
+                    // 不需要、也不能做二次裁剪（会沿每个三角形的 UV 范围切出花纹）。
+                    edge = 1.0;
+                }
+                else if (_EdgeFade < 0.999)
                 {
                     float2 c = i.uv - 0.5;
                     float r = length(c) * 2.0;
@@ -228,8 +340,23 @@ Shader "CampusUI/SnowGround"
 
                 // 微法线：用颗粒噪声的空间梯度扰动法线。梯度取噪声(.r)而不是覆盖率(.a) ——
                 // 覆盖率现在是实心的，取 .a 的梯度恒为 0。幅度刻意压得很小。
-                float gDX = ddx(sn.r);
-                float gDY = ddy(sn.r);
+                //
+                // 【P13 Bug3】屋顶模式下 sn.r 是 Clamp 后的常数，梯度恒 0，
+                // 微法线会完全消失、屋顶雪变成一块死白玻璃。
+                // 改从铺满屋顶的世界坐标采样 _DetailTex 求梯度。
+                float gDX, gDY;
+                if (roofMode)
+                {
+                    float2 dw0 = i.worldPos.xz * 0.06;
+                    float d0 = tex2D(_DetailTex, dw0).r;
+                    gDX = ddx(d0);
+                    gDY = ddy(d0);
+                }
+                else
+                {
+                    gDX = ddx(sn.r);
+                    gDY = ddy(sn.r);
+                }
                 float3 N = normalize(i.worldN + float3(-gDX, 0.0, -gDY) * _MicroNormal * 2.5);
 
                 // 受光：主光 Lambert + 主光实时阴影。
@@ -268,7 +395,14 @@ Shader "CampusUI/SnowGround"
                 // 大尺度厚薄：0~1，越厚越白。
                 // 用 sn.r 的一次项 + 二次项组合，让它有"局部堆成一小坨"的团块感，
                 // 而不是均匀的噪声底纹（纯一次项看起来还是平）。
-                float thick = saturate(sn.r * 1.15 - 0.10);
+                //
+                // 【P13 Bug3】屋顶模式下 sn.r 不可用（Clamp 后是边缘那一个常数），
+                // 改从 _DetailTex 低频采样取"厚薄"，否则整片屋顶会是均匀的一个灰度，
+                // 看不出雪堆起伏。
+                float thickSrc = roofMode
+                               ? tex2D(_DetailTex, i.worldPos.xz * 0.035).r
+                               : sn.r;
+                float thick = saturate(thickSrc * 1.15 - 0.10);
                 float lump = thick * thick;
 
                 // 小尺度脏污：用世界坐标高频采样**平铺**噪声图，得到一个与厚薄不同相位的图案。
