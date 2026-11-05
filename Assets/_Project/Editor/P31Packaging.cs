@@ -56,6 +56,23 @@ namespace SchoolTwin.EditorTools
         /// <summary>打包输出目录（相对工程根）。.gitignore 已忽略，二进制不进仓库。</summary>
         private const string BuildDir = "Builds";
 
+        /// <summary>
+        /// 工程根目录。
+        /// **不用 `Directory.GetCurrentDirectory()`** —— 它取决于"Unity 进程是从哪启动的"：
+        /// 从 Hub 启动、从命令行启动、从快捷方式启动，cwd 都可能不同。
+        /// 一旦 cwd 不是工程根，Builds 会建到别处、StreamingAssets 会比对失败，
+        /// 而且**不会报错**，只是"包找不到了"。`Application.dataPath` 恒为 `<工程>/Assets`，
+        /// 取它的父目录才是唯一可靠的工程根。
+        /// </summary>
+        private static string ProjectRoot
+        {
+            get
+            {
+                return System.IO.Path.GetDirectoryName(
+                    Application.dataPath.TrimEnd('/', '\\'));
+            }
+        }
+
         /// <summary>产物名。沿用首包的 `School-pro.exe`，便于和 `Docs/打包/` 里的旧包对照。</summary>
         private const string ExeName = "School-pro.exe";
 
@@ -64,22 +81,70 @@ namespace SchoolTwin.EditorTools
         ///
         /// 每条都标注了"谁在用"，因为下一任维护者一定会问"这个能删吗"——
         /// 删掉任意一条的后果都是**不报错、只是 exe 里某块画面没了**。
+        ///
+        /// ══════════════════════════════════════════════════════════════
+        /// 【2026-11-05 23:45 收窄：8 条 → 5 条，两个原因】
+        ///
+        /// 1. **删掉 `Hidden/Internal-Colored`（这次出包崩溃的元凶）**
+        ///    登记后它被序列化成 `{fileID: 69, guid: ...e000..., type: 0}` ——
+        ///    `e000` 系列是 **`Library/unity default resources`**，一个带
+        ///    `HideFlags.DontSave` 的引擎内部资产，不是 `f000` 系列的
+        ///    `unity_builtin_extra` 正规资源包。把它塞进构建后，Unity 写
+        ///    `unity_builtin_extra` 时锁计数没归零，直接 Assertion failed 崩掉：
+        ///    `Failed to write file .../Resources/unity_builtin_extra`
+        ///    `Assertion failed on expression: 'm_LockCount == 0'`
+        ///    连崩两次（23:30、23:37），耗时 21.3s / 4.8s，**都不是磁盘或杀软问题**
+        ///（磁盘 154GB 空闲、写入实测 2.4GB/s、管家已退出）。
+        ///    它是 `Hidden/` 前缀的内部着色器，引擎本来就自带，
+        ///    项目**不需要也不应该**去登记它。
+        ///
+        /// 2. **删掉两个"兜底链"条目（`Legacy Shaders/Particles/Alpha Blended`、
+        ///    `Sprites/Default`）**
+        ///    它们是 `AcAirflowFeedback.cs` 里"取不到 Unlit 时的退路"。
+        ///    本次收窄的原则是**只登日志实测真的缺的东西**：
+        ///    旧包 `Player.log` / `Player-prev.log` 两份日志里，实际报缺的只有
+        ///    4 个（见下方 ★），这两个从未报过缺 —— 登记它们属于为假想问题付出
+        ///    真实风险（每多一条内置 shader 就多一次 builtin_extra 重写）。
+        ///
+        /// ★ 旧包两份 Player.log 的实测缺失清单（这是本清单的唯一依据）：
+        ///    Player.log:125/129  `SchoolTwin/ScreenComposite`  机房视频
+        ///    Player.log:116/120  `SchoolTwin/ScreenOnModel`    幕布视频
+        ///    Player.log:117/121  `Legacy Shaders/Particles/Additive` 投影光柱
+        ///    Player.log:45       `Skybox/Procedural`           昼夜天空
         /// </summary>
         private static readonly string[] RequiredShaders =
         {
             // ── 项目自有（本次 F22 的正面当事人）────────────────────────
-            "SchoolTwin/ScreenComposite",   // PcScreenPlayer.cs:223（机房视频）、PcSlideShow.cs:113（PPT 幕布）
-            "SchoolTwin/ScreenOnModel",     // TwinDevicePresenter.cs:4434（投影幕布/光柱成像）
+            "SchoolTwin/ScreenComposite",   // PcScreenPlayer.cs:223（机房视频）、PcSlideShow.cs:113（PPT 幕布）★
+            "SchoolTwin/ScreenOnModel",     // TwinDevicePresenter.cs:4434（投影幕布成像）★
 
-            // ── 引擎内置（同样是 Shader.Find 取的，同样会被剥）──────────
-            "Legacy Shaders/Particles/Additive",   // TwinDevicePresenter.cs:4547 投影光柱（Player.log 原话点名）
-            "Particles/Standard Unlit",            // AcAirflowFeedback.cs:701 空调气流粒子
-            "Skybox/Procedural",                   // EnvironmentState.cs:577 昼夜天空
-            "Hidden/Internal-Colored",             // TwinPicker.cs:216 框选矩形
+            // ── 引擎内置（同样被 Shader.Find 取、同样会被剥）────────────
+            "Legacy Shaders/Particles/Additive",   // TwinDevicePresenter.cs:4547 投影光柱 ★
+            "Skybox/Procedural",                   // EnvironmentState.cs:577 昼夜天空 ★
+            "Particles/Standard Unlit",            // AcAirflowFeedback.cs:701 空调气流
+        };
 
-            // ── 兜底链上的两个（不是主路径，但同一条 fallback 链上）──────
-            "Legacy Shaders/Particles/Alpha Blended",  // AcAirflowFeedback.cs:705 取不到 Unlit 时的退路
-            "Sprites/Default",                          // AcAirflowFeedback.cs:708 / ProceduralAssets.cs:587 最后退路
+        /// <summary>
+        /// **禁止登记**的着色器。每次执行都会把它们从表里剔除（不是"不添加"，是主动删除）。
+        ///
+        /// 【为什么需要这个"黑名单"而不是"不在白名单里就别加"】
+        /// `ApplyAlwaysIncluded` 是幂等**新增**，它不会撤销上一次已经写进去的东西。
+        /// 而 23:30 那次崩溃已经把 `Hidden/Internal-Colored` 写进表里了；
+        /// 现在编辑器还开着、GraphicsSettings 在内存里仍是 13 条的旧状态，
+        /// 光靠"手改磁盘上的 .asset"未必能让运行中的 Unity 认账
+        /// （ProjectSettings 不是 AssetDatabase 的普通资产，`AssetDatabase.Refresh()`
+        /// 刷不动它）。重启编辑器能解决，但会丢掉当前的授权会话 —— 不值得。
+        /// 所以让脚本自己去删：它读到的是内存里那份，删得掉就是真的删掉了。
+        ///
+        /// 【为什么 Hidden/Internal-Colored 不能登记】
+        /// 它被序列化成 `guid: ...e000...` = `Library/unity default resources`，
+        /// 一个 `HideFlags.DontSave` 的引擎内部资产。进构建后写
+        /// `unity_builtin_extra` 时锁计数不归零 → `Assertion failed: 'm_LockCount == 0'`
+        /// → 出包失败。连崩两次（23:30 / 23:37），删除缓存、退掉管家都无效。
+        /// </summary>
+        private static readonly string[] ForbiddenShaders =
+        {
+            "Hidden/Internal-Colored",
         };
 
         // ================================================================ ① 着色器登记
@@ -121,6 +186,29 @@ namespace SchoolTwin.EditorTools
             int added = 0;
             var missing = new StringBuilder();
 
+            // ①-a 先剔除黑名单（见 ForbiddenShaders 的说明）。倒序遍历，删除不跳位。
+            //
+            // 比对用**名字**不用对象引用：`Shader.Find` 回来的实例与表里存的那条
+            // 未必是同一个 C# 包装对象（引擎内部各自 new 出来的 wrapper），
+            // 引用比对有可能漏判 —— 而"漏判"在这里等于"白删"。
+            int removed = 0;
+            var forbidNames = new HashSet<string>(ForbiddenShaders);
+
+            for (int i = list.arraySize - 1; i >= 0; i--)
+            {
+                UnityEngine.Object o = list.GetArrayElementAtIndex(i).objectReferenceValue;
+                Shader os = o as Shader;
+                if (os == null || !forbidNames.Contains(os.name)) continue;
+
+                // 对象引用数组的删除要两步：先置空、再删。只调一次 DeleteArrayElementAtIndex
+                // 在引用型数组上只会"清空引用"留下一个空槽（Unity 的老行为），
+                // 结果是表里多一条 {fileID: 0} 的垃圾项，比不删更糟。
+                list.GetArrayElementAtIndex(i).objectReferenceValue = null;
+                list.DeleteArrayElementAtIndex(i);
+                removed++;
+                Debug.Log("[P31] 已剔除禁止登记的着色器：" + os.name);
+            }
+
             foreach (string name in RequiredShaders)
             {
                 Shader sh = Shader.Find(name);
@@ -147,7 +235,8 @@ namespace SchoolTwin.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
             AssetDatabase.SaveAssets();
 
-            Debug.Log("[P31] 着色器登记完成：新增 " + added + " 条，当前共 " + list.arraySize + " 条。");
+            Debug.Log("[P31] 着色器登记完成：新增 " + added + " 条、剔除 " + removed
+                      + " 条，当前共 " + list.arraySize + " 条。");
             if (missing.Length > 0)
                 Debug.LogError("[P31] 以下着色器没登记成功：" + missing);
         }
@@ -175,7 +264,7 @@ namespace SchoolTwin.EditorTools
         public static void BuildWindows()
         {
             bool batch = Application.isBatchMode;
-            string root = System.IO.Directory.GetCurrentDirectory();
+            string root = ProjectRoot;
 
             try
             {
@@ -268,8 +357,7 @@ namespace SchoolTwin.EditorTools
                 System.IO.Path.GetFileNameWithoutExtension(exePath) + "_Data",
                 "StreamingAssets", "PC");
 
-            string srcDir = System.IO.Path.Combine(
-                System.IO.Directory.GetCurrentDirectory(), "Assets", "StreamingAssets", "PC");
+            string srcDir = System.IO.Path.Combine(ProjectRoot, "Assets", "StreamingAssets", "PC");
 
             if (!System.IO.Directory.Exists(dataDir))
             {

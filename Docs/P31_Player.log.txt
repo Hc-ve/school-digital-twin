@@ -1,0 +1,230 @@
+Mono path[0] = 'E:/Unity Projects/School-pro/Builds/School-pro_Data/Managed'
+Mono config path = 'E:/Unity Projects/School-pro/Builds/MonoBleedingEdge/etc'
+Input System module state changed to: Initialized.
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+Initialize engine version: 2022.3.62f3c1 (1623fc0bbb97)
+[Subsystems] Discovering subsystems at path E:/Unity Projects/School-pro/Builds/School-pro_Data/UnitySubsystems
+GfxDevice: creating device client; threaded=1; jobified=1
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: Intel(R) Iris(R) Xe Graphics (ID=0x46a6)
+    Vendor:   Intel
+    VRAM:     12134 MB
+    Driver:   32.0.101.6972
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  0.152 seconds
+- Finished resetting the current domain, in  0.001 seconds
+<RI> Initializing input.
+<RI> Input initialized.
+<RI> Initialized touch support.
+Couldn't create a Convex Mesh from source mesh "Kozel2Leather" within the maximum polygons limit (256). The partial hull will be used. Consider simplifying your mesh.
+Couldn't create a Convex Mesh from source mesh "KozelLeather" within the maximum polygons limit (256). The partial hull will be used. Consider simplifying your mesh.
+[PhysX] Initialized MultithreadedTaskDispatcher with 16 workers.
+UnloadTime: 1.377300 ms
+[TwinMarker] 「TwinMarker_ClassTeachers_Light_Main_01」已有真实设备（TwinLamp_ClassTeachers_1），不再显示标记牌；选中请用 G 总控面板或 T 点位清单
+[TwinUI] 界面字体：Microsoft YaHei UI
+[TwinCtl] 控制区节点已就绪（父节点：DetailCard）
+[TwinMarker] 「TwinMarker_ClassComputer_Light_Main_01」已有真实设备（TwinLamp_ClassComputer_1），不再显示标记牌；选中请用 G 总控面板或 T 点位清单
+[TwinPlayer] 接线检查：CharacterController=True  Animator=Model  Controller=TwinPlayer  Avatar=Y BotAvatar  参数里有 Speed=True
+[TwinCam] 模式：角色（第三人称）
+[Twin] MQTT 本地报文模拟器已启动：127.0.0.1:1883 前缀=school/ 2Hz
+[Twin] TwinStatusColor 找不到 TwinAnchor：LightLum01_01 (28)（着色不会生效）
+[TwinMarker] 「TwinMarker_ClassDirector_Light_Main_01」已有真实设备（TwinLamp_ClassDirector_1），不再显示标记牌；选中请用 G 总控面板或 T 点位清单
+[Twin] Mock 数据源启动：71 个点位 / 149 个指标 / 10Hz
+[Twin] 其中 33 个是开关量指标（量程 0~1）：不发正弦波、不加噪声，固定为量程上限。它们的状态由设备代理在收到命令后改变，否则会出现「门一会儿已开一会儿已关」。
+[TwinBell] 课表 14 个时间点：08:00 08:45 08:55 09:40 10:00 10:45 10:55 11:40 14:00 14:45 14:55 15:40 16:00 16:45
+[TwinModel] 点位 71 个：资产内填了模型 0 个，运行时派生 71 个；其中有动作（可命令）66 个；控制白名单开放 38 个
+[TwinUI] 趋势线挂载：FSpark  CanvasRenderer=有  canvas=有（组件链路正常，后面看『已生成网格』那行）
+[P28] 总控抽屉已挂载（右缘触发钮 / Esc 逐层退）
+[P27] 统一交互菜单已挂载（TwinInteractMenu）
+[TwinInteract] 门/灯交互驱动器已挂载（统一菜单渲染）
+[TwinMap] 场景里没有 TwinMinimap，已自动补一个（左上角圆形小地图）
+[P27] 已自动挂载主脑交互驱动器（TwinPcMenuDriver）
+[TwinPerf] 性能采样器已挂上 —— 按 F6 开始 / 再按 F6 停止，结果写 PerfLogs/twin-perf.csv（每次最多采 60 秒）。
+[TwinUI] 主画布缩放已切到 Expand（[TwinUI]，参考 1000×720）—— 画布逻辑高度不再随窗口宽高比缩水
+[P28][脚印诊断 #1/3]
+    snowAmount   = 0.000   （< 0.15 → depth 归零，一整段都不留印）
+    depth        = 0.000   ← **闸门①未过：雪量太小**
+    snowGroundMat= ok
+    playerRoot   = TwinPlayer   pos=(-16.00, 3.90, 31.00)
+    grounded     = False   cc=有
+    printUsed    = 0/128   hasLast=False   已推材质 _PrintCount=0
+    足迹带       = 46.1m（128 槽 × 0.36m）  寿命 90s
+[P13] ==== 天气系统已自举 ====
+  EnvironmentState → 「[Environment]」（DontDestroyOnLoad）
+  WeatherDirector  → 同物体，auto=false（不自动跳天气）
+  初始状态：白天 · 晴（刻意默认值，不会一进场景就下雨）
+  数据侧已对齐视觉侧（TwinClimate 原默认是 Cloudy，不改它会让两边矛盾）
+  要看到雨雪：点抽屉工具行「时间天气」→「雨天 / 雪天」
+[TwinBell] 现在 00:13，下一次打铃 08:00（还有 467 分钟）。想立刻听一遍：选中走廊的「校园广播打铃器」，点卡片上的「打铃」。
+[TwinUI] 布局自检  Screen=1920×1080  scaleFactor=1.92  画布rect=(x:-500.00, y:-281.25, width:1000.00, height:562.50)  画布世界右缘=1920  缩放=0.889  边距=28.4(左移14.2/下移24.9)  卡片 rect=(x:-417.78, y:-409.89, width:417.78, height:409.89)  卡片世界右缘=1838.1 上缘=977.6  越界=右-81.9/上-102.4
+[TwinPresent] 显示器快照：19 块（材质名 Monitor04* / TwinScreen_*）
+[TwinPresent] 座位点位扫描：18 个
+[TwinPresent] 灯已接管：Class1-2/Light/Main_01（6 盏灯 / 发光 6 盏，点光源=每盏一个共 6 个，range=3.0m）
+[TwinPresent] 灯 开：Class1-2/Light/Main_01（6 盏，写了 6 份自发光，点光源=6 个 × 2.0）
+[TwinPresent] 灯已接管：Class1-3/Light/Main_01（6 盏灯 / 发光 6 盏，点光源=每盏一个共 6 个，range=3.0m）
+[TwinPresent] 灯 开：Class1-3/Light/Main_01（6 盏，写了 6 份自发光，点光源=6 个 × 2.0）
+[TwinPresent] 灯已接管：Class1-4/Light/Main_01（6 盏灯 / 发光 6 盏，点光源=每盏一个共 6 个，range=3.0m）
+[TwinPresent] 灯 开：Class1-4/Light/Main_01（6 盏，写了 6 份自发光，点光源=6 个 × 2.0）
+[TwinPresent] 灯已接管：Class2-1/Light/Main_01（8 盏灯 / 发光 8 盏，点光源=每盏一个共 8 个，range=3.0m）
+[TwinPresent] 灯 开：Class2-1/Light/Main_01（8 盏，写了 8 份自发光，点光源=8 个 × 2.0）
+[TwinPresent] 灯已接管：Class2-2/Light/Main_01（6 盏灯 / 发光 6 盏，点光源=每盏一个共 6 个，range=3.0m）
+[TwinPresent] 灯 开：Class2-2/Light/Main_01（6 盏，写了 6 份自发光，点光源=6 个 × 2.0）
+[TwinPresent] 灯已接管：ClassComputer/Light/Main_01（8 盏灯 / 发光 8 盏，点光源=每盏一个共 8 个，range=3.0m）
+[TwinPresent] 灯 开：ClassComputer/Light/Main_01（8 盏，写了 8 份自发光，点光源=8 个 × 2.0）
+[TwinPresent] 灯已接管：ClassDirector/Light/Main_01（2 盏灯 / 发光 2 盏，点光源=每盏一个共 2 个，range=3.0m）
+[TwinPresent] 灯 开：ClassDirector/Light/Main_01（2 盏，写了 2 份自发光，点光源=2 个 × 2.0）
+[TwinPresent] 灯已接管：ClassTeachers/Light/Main_01（6 盏灯 / 发光 6 盏，点光源=每盏一个共 6 个，range=3.0m）
+[TwinPresent] 灯 开：ClassTeachers/Light/Main_01（6 盏，写了 6 份自发光，点光源=6 个 × 2.0）
+[TwinPresent] 灯已接管：Corridor1/Light/Main_01（15 盏灯 / 发光 15 盏，点光源=每盏一个共 15 个，range=3.0m）
+[TwinPresent] 灯 开：Corridor1/Light/Main_01（15 盏，写了 15 份自发光，点光源=15 个 × 2.0）
+[TwinPresent] 灯已接管：Corridor2/Light/Main_01（15 盏灯 / 发光 15 盏，点光源=每盏一个共 15 个，range=3.0m）
+[TwinPresent] 灯 开：Corridor2/Light/Main_01（15 盏，写了 15 份自发光，点光源=15 个 × 2.0）
+[TwinPresent] 门已接管：Class2-1/Door/Entrance_01（Door07a (7)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（门边落点只有 -X 侧还在这段墙的跨度内） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：ClassComputer/Door/Entrance_01（Door07a (6)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（门边落点只有 -X 侧还在这段墙的跨度内） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：Class1-2/Door/Entrance_01（Door07a (5)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（门边落点只有 -X 侧还在这段墙的跨度内） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：Class1-3/Door/Entrance_01（Door07a (4)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（门边落点只有 -X 侧还在这段墙的跨度内） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：Class1-4/Door/Entrance_01（Door07a (3)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（两侧都在跨度内，取朝向房间中心的一侧） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：Class2-2/Door/Entrance_01（Door07a (8)） 墙向=X 关门方向=-(1.00, 0.00, 0.00)（两侧都在跨度内，取朝向房间中心的一侧） 关门角=115.6° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 灯已接管：Kitchen/Light/Main_01（20 盏灯 / 发光 20 盏，点光源=每盏一个共 20 个，range=3.0m）
+[TwinPresent] 灯 开：Kitchen/Light/Main_01（20 盏，写了 20 份自发光，点光源=20 个 × 2.0）
+[TwinPresent] 灯已接管：SportRoom1/Light/Main_01（2 盏灯 / 发光 2 盏，点光源=每盏一个共 2 个，range=3.0m）
+[TwinPresent] 灯 开：SportRoom1/Light/Main_01（2 盏，写了 2 份自发光，点光源=2 个 × 2.0）
+[TwinPresent] 灯已接管：ActZal/Light/Main_01（12 盏灯 / 发光 12 盏，点光源=每盏一个共 12 个，range=3.0m）
+[TwinPresent] 灯 开：ActZal/Light/Main_01（12 盏，写了 12 份自发光，点光源=12 个 × 2.0）
+[TwinPresent] 灯已接管：SportHall/Light/Main_01（12 盏灯 / 发光 12 盏，点光源=每盏一个共 12 个，range=3.0m）
+[TwinPresent] 灯 开：SportHall/Light/Main_01（12 盏，写了 12 份自发光，点光源=12 个 × 2.0）
+[TwinPresent] 灯已接管：SportRoom2/Light/Main_01（2 盏灯 / 发光 2 盏，点光源=每盏一个共 2 个，range=3.0m）
+[TwinPresent] 灯 开：SportRoom2/Light/Main_01（2 盏，写了 2 份自发光，点光源=2 个 × 2.0）
+[TwinPresent] 灯已接管：SportRoom3/Light/Main_01（2 盏灯 / 发光 2 盏，点光源=每盏一个共 2 个，range=3.0m）
+[TwinPresent] 灯 开：SportRoom3/Light/Main_01（2 盏，写了 2 份自发光，点光源=2 个 × 2.0）
+[TwinPresent] 门叶「DoorDouble」门扇=(-0.844,0.000,-0.536) 长=0.821m（1 个网格） 关门角=-57.6°（往门框中心关（门框 (-43.096,3.594,30.708)）） → 参与动画
+[TwinPresent] 门叶「DoorDouble0」门扇=(0.069,0.000,-0.998) 长=0.842m（1 个网格） 关门角=4.0°（贴墙较近的那一侧（没找到门框）） → 已贴平墙面，冻结（不参与动画）
+[TwinPresent] 双开门「DoorDouble02」铰链检查开始：片数=2 门洞中点=(-42.744,0.000,31.342) 铰链朝=门洞中间
+[TwinPresent] 门叶「DoorDouble」原点偏移=0.411m 边e0=(-42.385,3.594,31.977) 边e1=(-43.078,3.594,31.537) → 铰链取 e1 = (-43.078,3.594,31.537)
+[TwinPresent] 门叶「DoorDouble_HingePivot」已补铰链枢轴 (-43.078,3.594,31.537)（原点偏移 0.411m，移动 0.821m）；开=模型原样(0°) 关门角=122.4° 铰链=e1（朝门洞中间）
+[TwinPresent] 门叶「DoorDouble0」已贴平墙面（固定扇），不补枢轴
+[TwinPresent] 门已接管：ActZal/Door/Entrance_01（DoorDouble02） 墙向=Z 双开门 2 片门叶（根节点不转，逐片转；详见上面的门叶日志）
+[TwinPresent] 门已接管：SportRoom1/Door/Entrance_01（Door07a） 墙向=Z 关门方向=-(0.00, 0.00, 1.00)（两侧都在跨度内，取朝向房间中心的一侧） 关门角=117.0° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：SportRoom2/Door/Entrance_01（Door07a (1)） 墙向=Z 关门方向=-(0.00, 0.00, 1.00)（两侧都在跨度内，取朝向房间中心的一侧） 关门角=122.0° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门已接管：SportRoom3/Door/Entrance_01（Door07a (2)） 墙向=Z 关门方向=-(0.00, 0.00, 1.00)（两侧都在跨度内，取朝向房间中心的一侧） 关门角=122.0° 开门角=0.0°（角度相对模型当前姿态，0° = 原样）
+[TwinPresent] 门叶「DoorAnchor」门扇=(-0.394,0.000,0.919) 长=0.831m（2 个网格） 关门角=113.2°（往门框中心关（门框 (21.971,0.002,15.901)）） → 参与动画
+[TwinPresent] 门已接管：SportGate/Door/Entrance_01（Door02Wood1） 墙向=X 双开门 1 片门叶（根节点不转，逐片转；详见上面的门叶日志）
+[TwinPresent] 门叶「DoorAnchor」门扇=(0.994,0.000,0.112) 长=0.831m（2 个网格） 关门角=96.4°（往门框中心关（门框 (-43.096,0.003,30.708)）） → 参与动画
+[TwinPresent] 门已接管：Kitchen/Door/Entrance_01（Door02Wood1） 墙向=Z 双开门 1 片门叶（根节点不转，逐片转；详见上面的门叶日志）
+[TwinPresent] 幕布改用**模型本体**作载体：ProjectorScreen01（原材质槽 2 个 → 全部替换）
+   屏幕平面 3.11×2.12m（比例 1.472）
+   中心 (-11.54, 2.06, 38.01)
+   法线 (-1.00, 0.00, 0.00)
+[TwinPresent] 找到 2 个音箱（ClassComputer），音源放在 (-11.56, 2.10, 38.01)
+[P30] ClassComputer_Projector_Main_01 已请求准备（不是就绪）← E:/Unity Projects/School-pro/Builds/School-pro_Data/StreamingAssets/PC/master/boot.mp4　【本次Play】Prepare=1
+[TwinPresent] 「ClassComputer/Projector/Main_01」接管幕布：ProjectorScreen01（房间节点 ClassComputer，聚光灯=有，光柱=有）
+[P26] 投影仪 ClassComputer/Projector/Main_01 Power=243 → on=True（视频=有，聚光灯=有，光柱=有）
+[P26] SetOn(True) → on=True playing=False prepared=False frame=-1 retry=0/2 prep=Pending still=- rt=已创建 1024² blit=0 _MainTex=PcScreenRT_ClassComputer_Projector_Main_01 emissionColor=0.95,0.98,1.05
+[TwinPresent] 幕布改用**模型本体**作载体：ProjectorScreen01（原材质槽 2 个 → 全部替换）
+   屏幕平面 3.11×2.12m（比例 1.472）
+   中心 (2.81, 5.38, 33.68)
+   法线 (0.00, 0.00, 1.00)
+[P30] ClassTeachers_Projector_Main_01 已请求准备（不是就绪）← E:/Unity Projects/School-pro/Builds/School-pro_Data/StreamingAssets/PC/master/boot.mp4　【本次Play】Prepare=2
+[TwinPresent] 「ClassTeachers/Projector/Main_01」接管幕布：ProjectorScreen01（房间节点 ClassTeachers，聚光灯=有，光柱=有）
+[P26] 投影仪 ClassTeachers/Projector/Main_01 Power=385 → on=True（视频=有，聚光灯=有，光柱=有）
+[P26] SetOn(True) → on=True playing=False prepared=False frame=-1 retry=0/2 prep=Pending still=- rt=已创建 1024² blit=0 _MainTex=PcScreenRT_ClassTeachers_Projector_Main_01 emissionColor=0.95,0.98,1.05
+[TwinPresent] 找到 2 个音箱（ClassComputer），音源放在 (-11.56, 2.10, 38.01)
+[P30] ClassComputer_PC_Master_01 已请求准备（不是就绪）← E:/Unity Projects/School-pro/Builds/School-pro_Data/StreamingAssets/PC/master/boot.mp4　【本次Play】Prepare=3
+[TwinPresent] 「ClassComputer/PC/Master_01」接管了 1 台显示器（分区 ClassComputer，屏幕视频=开）
+[P26] SetOn(True) → on=True playing=False prepared=False frame=-1 retry=0/2 prep=Pending still=- rt=已创建 2048² blit=0 _EmissionMap=PcScreenRT_ClassComputer_PC_Master_01 emissionColor=0.85,0.95,1.10
+[TwinPresent] 「Corridor1/Bell/Speaker_01」打铃器就位（1 个渲染器）
+[TwinPresent] 打铃：「Corridor1/Bell/Speaker_01」播放铃声（1.8 秒）
+[P30] RoomScreen 已请求准备（不是就绪）← E:/Unity Projects/School-pro/Builds/School-pro_Data/StreamingAssets/PC/master/boot.mp4　【本次Play】Prepare=4
+[P26] SetOn(True) → on=True playing=False prepared=False frame=-1 retry=0/2 prep=Pending still=- rt=已创建 512² blit=0 _EmissionMap=PcScreenRT_RoomScreen emissionColor=0.85,0.95,1.10
+[P26] RoomScreen 显示待机图：master/desktop.jpg
+[P3] 机房播放器已创建（独立于主脑）：master/boot.mp4，已贴桌面图
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_11 → Monitor04 (4)  (id=16020, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_11 Power=174.9 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_11 on=True 延迟=0.70s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_10 → Monitor04 (4)  (id=16606, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_10 Power=167.6 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_10 on=True 延迟=0.63s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_18 → Monitor04 (5)  (id=16758, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_18 Power=51.1 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_18 on=True 延迟=1.19s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_14 → Monitor04 (8)  (id=16086, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_14 Power=300.9 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_14 on=True 延迟=0.91s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_08 → Monitor04 (4)  (id=16822, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_08 Power=204.5 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_08 on=True 延迟=0.49s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_05 → Monitor04 (1)  (id=16946, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_05 Power=227.0 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_05 on=True 延迟=0.28s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_17 → Monitor04 (7)  (id=16972, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_17 Power=113.2 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_17 on=True 延迟=1.12s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_02 → Monitor04 (2)  (id=17368, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_02 Power=236.0 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_02 on=True 延迟=0.07s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_09 → Monitor04 (4)  (id=17928, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_09 Power=32.7 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_09 on=True 延迟=0.56s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_03 → Monitor04 (3)  (id=17488, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_03 Power=295.9 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_03 on=True 延迟=0.14s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_07 → Monitor04 (4)  (id=18448, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_07 Power=125.1 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_07 on=True 延迟=0.42s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_04 → Monitor04  (id=16582, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_04 Power=96.9 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_04 on=True 延迟=0.21s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_12 → Monitor04 (4)  (id=19248, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_12 Power=31.1 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_12 on=True 延迟=0.77s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_06 → Monitor04 (4)  (id=16816, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_06 Power=49.7 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_06 on=True 延迟=0.35s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_15 → Monitor04 (9)  (id=19450, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_15 Power=34.7 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_15 on=True 延迟=0.98s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_13 → Monitor04 (4)  (id=19462, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_13 Power=190.2 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_13 on=True 延迟=0.84s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_16 → Monitor04 (6)  (id=19600, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_16 Power=213.8 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_16 on=True 延迟=1.05s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinPresent] Seat 屏幕绑定：ClassComputer/PC/Seat_01 → Monitor04 (4)  (id=16022, 距锚点 0.00m, 来源=锚点自身)
+[TwinPresent] Seat 判定 ClassComputer/PC/Seat_01 Power=63.4 有电=True → on=True
+[TwinPresent] Seat 开关 ClassComputer/PC/Seat_01 on=True 延迟=0.00s 时长=0.25s 贴图=PcScreenRT_RoomScreen
+[TwinHistory] 采样槽已建立：146 条（设备 70 台）
+[TwinPower] 停发样本的设备：0 台（共 70 台）
+[P13][雪面几何] 重铺完成 #1   顶点=3249   相邻间距=1.61m
+    竖直面（高差>1.6m）= 0 处   横向无陡面，横线应已消失
+    局部 y∈[0.28, 0.48]  跨度=0.20m   正常
+[TwinDoor] ActZal/Door/Entrance_01 片0 到位 角=0.0° 门扇方向=(-0.844,0.000,-0.536) 关门目标方向=(0.000,0.000,1.000) 与目标夹角=122.4°
+[TwinDoor] SportGate/Door/Entrance_01 片0 到位 角=0.0° 门扇方向=(-0.394,0.000,0.919) 关门目标方向=(1.000,0.000,0.000) 与目标夹角=113.2°
+[TwinDoor] Kitchen/Door/Entrance_01 片0 到位 角=0.0° 门扇方向=(0.994,0.000,0.112) 关门目标方向=(0.000,0.000,-1.000) 与目标夹角=96.4°
+Unexpected timestamp values detected. This can occur in H.264 videos not encoded with the baseline profile. Timestamps will be skewed to correct the playback for E:\Unity Projects\School-pro\Builds\School-pro_Data\StreamingAssets\PC\master\boot.mp4
+[P26] 视频 1920×1200（比例 1.60），屏幕矩形比例 1.47 → _Fit=1.087（裁左右）
+[P26] ClassComputer_Projector_Main_01 就绪后补播 → frame=-1
+[P26] 视频 1920×1200（比例 1.60），屏幕矩形比例 1.47 → _Fit=1.087（裁左右）
+[P26] ClassTeachers_Projector_Main_01 就绪后补播 → frame=-1
+[P26] 视频 1920×1200（比例 1.60），屏幕矩形比例 1.63 → _Fit=0.982（裁上下）
+[P26] ClassComputer_PC_Master_01 就绪后补播 → frame=-1
+[P26] 视频 1920×1200（比例 1.60），屏幕矩形比例 1.63 → _Fit=0.982（裁上下）
+[P26] RoomScreen 就绪后补播 → frame=-1
+[P28][脚印诊断 #2/3]
+    snowAmount   = 0.000   （< 0.15 → depth 归零，一整段都不留印）
+    depth        = 0.000   ← **闸门①未过：雪量太小**
+    snowGroundMat= ok
+    playerRoot   = TwinPlayer   pos=(-16.00, 3.59, 31.00)
+    grounded     = True   cc=有
+    printUsed    = 0/128   hasLast=False   已推材质 _PrintCount=0
+    足迹带       = 46.1m（128 槽 × 0.36m）  寿命 90s
+[P28][脚印诊断 #3/3]
+    snowAmount   = 0.000   （< 0.15 → depth 归零，一整段都不留印）
+    depth        = 0.000   ← **闸门①未过：雪量太小**
+    snowGroundMat= ok
+    playerRoot   = TwinPlayer   pos=(-16.00, 3.59, 31.00)
+    grounded     = True   cc=有
+    printUsed    = 0/128   hasLast=False   已推材质 _PrintCount=0
+    足迹带       = 46.1m（128 槽 × 0.36m）  寿命 90s
+[TwinHistory] 采样 22 次 / 指标 146 项 / 内存约 351 KB / 单次 0.3987 ms / 折算 1.9936 ms/s
+[TwinHistory] 采样 257 次 / 指标 146 项 / 内存约 351 KB / 单次 0.1613 ms / 折算 0.8066 ms/s
