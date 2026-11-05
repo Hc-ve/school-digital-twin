@@ -654,7 +654,7 @@ namespace SchoolTwin.UI
                 return;
             }
 
-            // 设备管理 / 电力管理 / 数据统计 / 天气（预留）
+            // 设备管理 / 电力管理 / 数据统计 / 天气（P13-D10 已点亮，不再是预留）
             showOnline = true;
             showAlarm = true;
             showScope = true;
@@ -847,6 +847,30 @@ namespace SchoolTwin.UI
         private void OnTimeCardClosed()
         {
             _timeCard = null;
+        }
+
+        /// <summary>
+        /// 【P13-D10】供 L1 首页入口（窄态 / 全屏）调用的静态入口。
+        ///
+        /// ── 为什么要开这个口子，而不是让入口各自 new 一张卡 ──────────────
+        /// 同一件事只能有一个出口（本项目反复踩过的教训：数据源切换曾出现
+        /// "抽屉说 Mock、浮卡说 MQTT"的三方不一致）。卡片实例由本类独占管理
+        /// （`_timeCard` 字段 + 关闭回调），若首页入口另建一张，就会出现
+        /// 两张卡同时存在、互相不知道对方、Esc 只关掉一张的经典状态机事故。
+        ///
+        /// ── 为什么做成静态方法 + 懒自举 ────────────────────────────────
+        /// 首页入口可能在抽屉还没构建完时就存在（页面构建顺序），
+        /// 直接持有实例引用会拿到 null。这里用 TryBuild() 兜一次底：
+        /// 抽屉没建就先建，保证点击一定有反应，而不是静默失败。
+        /// </summary>
+        public static void ShowTimeWeatherCardStatic()
+        {
+            if (!TryBuild() || _instance == null)
+            {
+                Debug.LogWarning("[P13] 抽屉尚未就绪，无法打开时间天气卡。");
+                return;
+            }
+            _instance.ShowTimeWeatherCard();
         }
 
         // ================================================================ 工具行 · 数据源

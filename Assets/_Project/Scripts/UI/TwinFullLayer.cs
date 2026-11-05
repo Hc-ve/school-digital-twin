@@ -259,7 +259,12 @@ namespace SchoolTwin.UI
             // 功能入口
             SectionTitle(Pad, 392f, "功能入口");
             BuildEntry("管", "校园管理系统", "5 个模块", Pad, 406f, true);
-            BuildEntry("天", "天气系统", "预留", Pad + 84f, 406f, false);
+            // 【P13-D10】天气入口点亮（裁决 C-54）。原来传 on=false，配色走 CardTop 灰底 +
+            // TextMuted 灰字 + 副标写「预留」，视觉上就是死按钮。
+            // 现在：on=true 走 Accent 高亮配色、副标改「时间·天气」、
+            // 点击行为与工具行第三项**完全一致**（都调 TwinDrawer 那张同一个卡）。
+            BuildEntry("天", "天气系统", "时间·天气", Pad + 84f, 406f, true,
+                () => TwinDrawer.ShowTimeWeatherCardStatic());
 
             // 实时动态 3 行 ×44
             SectionTitle(Pad, 510f, "实时动态");
@@ -305,13 +310,32 @@ namespace SchoolTwin.UI
             t.raycastTarget = false;
         }
 
-        private void BuildEntry(string glyph, string name, string note, float x, float y, bool on)
+        /// <param name="on">true = 点亮（Accent 高亮配色）；false = 灰色占位。</param>
+        /// <param name="onClick">
+        /// 【P13-D10】点击行为。原来本方法**不建 Button**，两张卡都是纯装饰，
+        /// 点了没有任何反应 —— 这也是"死按钮"的一种（看起来能点，实际不可点）。
+        /// 现在按需挂 Button，行为与窄态首页入口、工具行第三项完全一致。
+        /// </param>
+        private void BuildEntry(string glyph, string name, string note, float x, float y, bool on,
+                                Action onClick = null)
         {
             TwinRoundedRect card = TwinUIFactory.Rounded(_homeGroup, "Entry_" + name, TwinTheme.R12,
                 on ? TwinTheme.AccentDim : TwinTheme.CardTop,
                 on ? TwinTheme.AccentDim : TwinTheme.CardBottom,
                 on ? TwinTheme.AccentLine : TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
             TwinUIFactory.Place(card.rectTransform, x, y, 76f, 88f);
+
+            // 【P13-D10】点击：Button 挂在 card 本身（它已有 Graphic，是现成的 raycast 目标）。
+            // transition=None 沿用项目统一约定（按钮状态由 SetSelected/配色显式驱动，
+            // 不用 Unity 自带的 Tint，否则会和自绘配色打架）。
+            // 注意不要另外加 Hit 垫片：card 自己就是可点区域，再叠一层会挡住内部元素。
+            if (onClick != null)
+            {
+                Button btn = card.gameObject.AddComponent<Button>();
+                btn.targetGraphic = card;
+                btn.transition = Selectable.Transition.None;
+                btn.onClick.AddListener(() => onClick());
+            }
 
             TwinRoundedRect icon = TwinUIFactory.Rounded(card.rectTransform, "Icon", TwinTheme.R8,
                 TwinTheme.EntryIconFill, TwinTheme.EntryIconFill, Color.clear, 0f, false);

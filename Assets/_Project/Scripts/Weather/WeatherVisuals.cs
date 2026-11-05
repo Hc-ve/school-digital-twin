@@ -15,7 +15,9 @@ namespace SchoolTwin.Weather
     ///     不需要配 _Surface/_Blend/_ZWrite 那一堆材质关键字，避免"配错就变实心白球"。
     ///
     /// 已知取舍：雨雪不做世界碰撞（穿屋顶）。开碰撞要跑 World 碰撞查询，
-    /// 几千个粒子每帧一次，代价远大于收益；室内看到下雨是这类轻量方案的通病。
+    /// 几千个粒子每帧一次，代价远大于收益。
+    /// 室内看不到粒子靠的是**发射端判定**（头顶射线命中天花板就不发射），
+    /// 不是靠粒子撞墙 —— 这两条分工别搞混，详见 UpdateGround 里的长注释。
     /// </summary>
     public class WeatherVisuals : MonoBehaviour
     {
@@ -66,6 +68,25 @@ namespace SchoolTwin.Weather
         //      取 -0.92 能滤掉绝大部分球面片，而平整楼板稳定在 -1.00。
         // 代价：拱形/斜面天花板的房间会漏判。本项目教学楼走廊都是平顶，可接受。
         private const float IndoorCeilHeight = 4.6f;
+
+        // 【P13 第十次修】大跨度高厅（礼堂 / 室内篮球馆）的屋顶高度。
+        //
+        // ── 为什么 4.6m 不够 ────────────────────────────────────────────
+        // 主理人 2026-11-05 报：走廊修好了，但"礼堂和室内篮球场可以很清晰地
+        // 看到雨雪粒子"。这两个都是**单层大跨度空间**，屋架下弦普遍 7~12m，
+        // 远在 4.6m 之上 → 头顶射线在 4.6m 内什么都没打到 → indoor=false
+        // → CullIndoorParticles 第一行就 return，一粒都不剔。
+        //
+        // 注意这**不是**把 4.6 改成 12 就能解决：4.6m 这个值同时承担着
+        // "别把树冠当成天花板"的职责（见上方长注释）。直接放宽到 12m，
+        // 站在树下就会被判成室内，雨雪全没 —— 那是更严重的回归。
+        //
+        // ── 分档判定的依据 ──────────────────────────────────────────────
+        // 关键不对称：**室外头顶是天空，没有任何碰撞体**。
+        // 所以在 4.6m 内没命中时，再往 12m 找一次，能命中的只可能是
+        // 真正的高厅屋顶（或树冠 —— 由法线判据继续过滤）。
+        // 树冠即便被 12m 档命中，它的球面法线也过不了 -0.92 这一关。
+        private const float IndoorCeilHeightTall = 12f;
         private const float IndoorCeilNormalY = -0.92f;
 
         private ParticleSystem rainPs, snowPs;
@@ -172,9 +193,25 @@ namespace SchoolTwin.Weather
         private bool indoor;
 
         // 头顶射线命中详情，只给自检日志用（判断 indoor 是怎么得出的）
+        private float ceilFromY;      // 射线起点的世界 Y（自检：应等于角色根 + 0.02）
+        private bool ceilSelfHit;     // raw 第一个命中是不是玩家自己（自检：这是 D9 的回归警报）
         private float ceilDist = -1f;      // 命中距离，-1 = 没命中
         private float ceilNormalY = 0f;    // 命中面的法线 Y
         private string ceilName = "";
+        private Collider ceilCollider;     // 头顶命中的碰撞体（屋顶可见性诊断用）
+        private bool ceilTallFallback;     // 是否是靠 12m 远档才找到天花板的（= 高厅）
+        private bool ceilByRenderer;       // 是否是靠渲染网格包围盒判出的室内（无碰撞体场馆）
+
+        // 【P13】"可能是屋顶"的渲染器缓存。
+        // 场景只有 74 个 MeshRenderer，一次筛完缓存住，之后每次只遍历这几个。
+        // 为什么要缓存：UpdateGround 每 0.15s 跑一次，每次 FindObjectsOfType 全场景扫
+        // 在手机上会明显掉帧；而屋顶是静态建筑，运行时不会新增。
+        private Renderer[] roofCandidates;
+        private bool roofCandidatesBuilt;
+
+        // 【P13】给"40m 上限探测"用的独立缓冲。不能复用 ceilHits：
+        // 那份数据是主判定刚算出的结果，借来借去会把结论搅乱。
+        private readonly RaycastHit[] farHits = new RaycastHit[32];
 
         // 相机高度淡出系数：1 = 完全显示雨雪，0 = 高空俯视时关掉
         private float altFade = 1f;
@@ -267,8 +304,23 @@ namespace SchoolTwin.Weather
         private ParticleSystem BuildRain()
         {
             var go = new GameObject("RainParticles");
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(0f, EmitHeight, 0f);
+            // ══════════════════════════════════════════════════════════════
+            // 【P13-D9】⚠️ 不能 SetParent(transform) —— 这是"二楼看不到雨"和
+            //           "雨随视角平移"的共同根因。
+            //
+            // 本组件 LateUpdate 每帧执行 transform.position = cam.position，
+            // 目的是让穹顶/雾这类**以相机为球心**的东西跟着相机走。
+            // 但雨雪发射盒不该跟相机：它应该锚在**角色 + 室外地平面**上。
+            // 挂成子节点后，两者被强行绑在一起，于是
+            //   · 二楼时发射盒中心跑到相机上方 16m → 高过天花板 → 被楼板挡住
+            //   · 转身时 camPos 在 orbital 圆弧上移动 → 雨丝整体横移
+            //
+            // 所以这里**不设父节点**，让它做场景根对象，
+            // 世界位置由 UpdateGround 每帧写成 (角色xz, 室外地平面y + EmitHeight)。
+            // 与 SnowOnTrees 是同一条纪律：**顶点/位置是世界量的物体，不能挂在
+            // 每帧跟随相机的父节点下。**
+            // ══════════════════════════════════════════════════════════════
+            go.transform.position = new Vector3(0f, EmitHeight, 0f);
 
             var ps = go.AddComponent<ParticleSystem>();
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -318,12 +370,54 @@ namespace SchoolTwin.Weather
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(AreaSize, 0.5f, AreaSize);
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 修的真 bug：发射盒是个"竖直的墙"，不是"水平的板"】
+            //
+            // 原值 (AreaSize, 0.5, AreaSize)，注释写的是"Y 是薄片厚度"。
+            // 这个前提是错的 —— 下面那行 rotation=(-90,0,0) 会把**局部轴**转掉：
+            //     局部 X → 世界 X
+            //     局部 Y → 世界 Z      ← 不是世界 Y！
+            //     局部 Z → 世界 -Y     ← 薄片该走的是这一根
+            // 于是 world 尺寸变成 X=110、Y=110、Z=0.5：
+            //     一块 **110m 宽 × 110m 高、只有 0.5m 厚** 的竖直墙壁。
+            //
+            // 后果（主理人报的"雨雪下得不均匀、随视角变"）：
+            //   · 侧着看它 → 整面雨幕糊在脸上，密得反常
+            //   · 转 90° 顺着墙看 → 只剩一条薄边，几乎没有雨
+            //   · 雪更明显：雪是慢落、空中停留 10 秒，墙的形状一眼看得出
+            //
+            // 对照 BuildSplash 的写法就能确认这是笔误而不是设计：
+            // 那边是 (SplashArea, SplashArea, 0.012f) —— 薄轴放在 Z，才是水平的。
+            // 这里必须同口径：薄轴 = 局部 Z = 世界 Y。
+            // ══════════════════════════════════════════════════════════════
+            shape.scale = new Vector3(AreaSize, AreaSize, 0.5f);
             shape.position = Vector3.zero;
-            // 【P13】与雪同修：Box 的 startSpeed 沿局部 +Z，rotation=0 时是**水平**方向。
-            // 雨的 startSpeed 只有 0~0.4 m/s，横飞量不大，但近处仍能看出雨丝"往旁边撇"。
-            // 转 -90° 后局部 +Z → 世界 -Y，初速变成向下，与重力同向，雨丝笔直。
-            shape.rotation = new Vector3(-90f, 0f, 0f);
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13 修的第二处：rotation 符号反了，雨雪是**朝上**发射的】
+            //
+            // 绕 X 轴转 -90° 的真实映射（用旋转矩阵算，不要凭印象）：
+            //     局部 X → 世界 X
+            //     局部 Y → 世界 -Z
+            //     局部 Z → 世界 +Y   ← **向上！**
+            //
+            // 而 Box 形状的 startSpeed 正是沿**局部 +Z** 发射的。
+            // 所以原实现让雨雪向上喷，与注释写的"→ 世界 -Y，初速向下"完全相反。
+            //
+            // 危害按粒子自重分档：
+            //   · 雨：上行最多 0.4 m/s，重力 9.81×1.3=12.75 → 0.03 秒就掰回来，看不出
+            //   · 雪：上行 0.25~0.6 m/s，重力只有 9.81×0.035=**0.343**
+            //         → 要飞 1.75 秒、升高 0.52m 才开始下落
+            //     雪又慢落、空中停 10 秒，这段"先往上飘"一眼看得出，
+            //     也是"雪下得不自然"的组成之一。
+            //
+            // 改成 +90° 后：局部 Z → 世界 -Y（向下），局部 Y → 世界 +Z。
+            // 盒子的世界尺寸不变（只有 Z 轴符号翻转），所以 scale 那边的修法不受影响。
+            //
+            // ⚠️ 这一处与 UpdateSnowLifetime / UpdateRainLifetime 的落距公式强耦合：
+            // 那两个公式按"初速向下"推的 t = (-v0 + √(v0²+2gh))/g。
+            // 若把这里改回 -90°（向上），公式立刻失配，雨丝会在空中断掉。
+            // ══════════════════════════════════════════════════════════════════
+            shape.rotation = new Vector3(90f, 0f, 0f);
 
             // 生命周期两端淡入淡出，避免雨丝突然出现/消失
             var col = ps.colorOverLifetime;
@@ -359,8 +453,10 @@ namespace SchoolTwin.Weather
         private ParticleSystem BuildSnow()
         {
             var go = new GameObject("SnowParticles");
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(0f, EmitHeight, 0f);
+            // 【P13-D9】同 BuildRain：不挂父节点。理由见那边的大段注释 ——
+            // 发射盒必须锚在「角色 xz + 室外地平面 y」，不能跟着相机跑，
+            // 否则二楼看不到雪、转身时雪幕整体横移。
+            go.transform.position = new Vector3(0f, EmitHeight, 0f);
 
             var ps = go.AddComponent<ParticleSystem>();
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -390,7 +486,9 @@ namespace SchoolTwin.Weather
             // —— 观感上是"从头顶一块看不见的天花板上横着吹出来"，
             // 尤其贴近相机时能看到雪片往外扑，不是往下落。
             //
-            // 修法与 BuildSplash 同一套：shape.rotation = (-90,0,0) 让局部 +Z → 世界 -Y。
+            // 修法：shape.rotation = **+90**（不是 -90）让局部 +Z → 世界 -Y，初速朝下。
+            // ⚠️ 符号别照抄 BuildSplash：那边要的是**向上溅**（-90 → 世界 +Y），
+            // 雨雪要的是**向下落**（+90 → 世界 -Y）。方向相反，值也相反。
             // 初速同时收到 0.25~0.6：雪片本身下落速度就是 0.3~1 m/s 量级，
             // 太大就成了冰雹，太小又全靠重力慢慢加速（要 10 秒才追上落距）。
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.25f, 0.60f);
@@ -408,11 +506,15 @@ namespace SchoolTwin.Weather
             var shape = ps.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Box;
-            // 旋转后：局部 X → 世界 X，局部 Y → 世界 Z，局部 Z → 世界 -Y（向下）。
-            // 所以 scale 的 X/Z 是水平铺开、Y 是薄片厚度；startSpeed 沿 -Y 落下。
-            shape.scale = new Vector3(AreaSize, 0.5f, AreaSize);
+            // 【P13】薄轴必须放**局部 Z**（旋转后 → 世界 -Y），与 BuildRain 同一笔误同修。
+            // 原值 (AreaSize, 0.5f, AreaSize) 在 rotation=(±90,0,0) 下会变成
+            // 110m×110m 的**竖直墙**，雪片从一堵墙里喷出来，侧看糊脸、顺看全空。
+            // 详见 BuildRain 里那段完整推导。
+            shape.scale = new Vector3(AreaSize, AreaSize, 0.5f);
             shape.position = Vector3.zero;
-            shape.rotation = new Vector3(-90f, 0f, 0f);
+            // +90°（不是 -90°）：局部 Z → 世界 -Y，初速朝下。
+            // 符号的推导见 BuildRain，雪这边后果更明显（重力 0.343，会先上飘 1.75 秒）。
+            shape.rotation = new Vector3(90f, 0f, 0f);
 
             // 噪声扰动：雪花左右打旋，是"雪"和"白点雨"最大的观感差别。
             // 注意 strength 不能太大：粒子一旦被噪声推得比下落还快，
@@ -845,23 +947,30 @@ namespace SchoolTwin.Weather
             // 硬画出来只会是相机正下方孤零零的一小团。
             //
             // ══════════════════════════════════════════════════════════════════
-            // 【P13 修的真 bug：室内还有雨雪粒子】
+            // 【P13 第三次修：室内不再"关掉天气"，改成"只清掉头顶这一块"】
             //
-            // 原实现： shelter = Mathf.Lerp(0.25f, 1f, indoorFade);
-            // 完全室内时 indoorFade = 0，但公式给的是 **0.25 的底噪**，不是 0。
-            // 于是室内仍有 25% 的雨雪（rain=1 时约 800 粒/秒）在相机周围飞，
-            // 自检里 "indoor = True / indoorFade = 0.000" 却仍看到粒子，就是这个原因。
+            // 前两轮在这里改了两遍，方向都是错的，记录如下以免再绕回去：
             //
-            // 为什么当初留了 0.25：注释写的是"站在门口时窗外明明还在下"。
-            // 但这个想法在这里不成立 —— 发射盒是**跟着相机**的（AreaSize 以相机为中心），
-            // 它只会把雨雪生成在你身上，不可能生成到"窗外"。所以留底噪纯粹是错的。
+            //   第一版  shelter = Lerp(0.25, 1, indoorFade)   留 25% 底噪 → 室内飘雨
+            //   第二版  shelter = indoorFade                  室内 = 0 → 窗外的雨也没了
             //
-            // 正确做法：直接用 indoorFade 本身（室内 = 0，室外 = 1）。
-            // indoorFade 以 dt×3 变化，约 0.33 秒完成过渡，进门时的淡出足够柔和。
+            // 第二版的问题（主理人本轮报的）：下雨天进屋，"室内看室外看不到水坑，
+            // 出来就能看到""二楼看不到雨和水坑""室内窗外看不到雨雪"。
+            // 根因不是 indoorFade 算错了，而是**把"世界天气"和"玩家头顶"绑成一个量**。
+            // 天气是全世界的，站在屋檐下并不代表校园里不下雨。
+            //
+            // 正确模型（三层各管各的）：
+            //   · 发射率  → 只看 rain/snow 与 altFade。**永远满速**，天气属于世界。
+            //   · 室内遮挡 → 由 CullIndoorParticles 逐粒清掉"落在楼里/雨棚下"的那些。
+            //                深度测试会自动挡住墙后的粒子，所以只要清掉真正进屋的，
+            //                窗外的雨就自然可见 —— 这才是"透过窗户看雨"。
+            //   · 水花    → 仍按 indoorFade 关（屋里地上不该冒水花），见下面的 splashRate。
+            //
+            // 为什么不能靠"提高 indoor 判定精度"把雨棚排除掉：
+            // 站在雨棚下确实不该被雨淋，那是**对的**判定。错的只是"由此关掉整个世界"。
             // ══════════════════════════════════════════════════════════════════
-            float shelter = indoorFade;
-            float effRain = rain * altFade * shelter;
-            float effSnow = snow * altFade * shelter;
+            float effRain = rain * altFade;
+            float effSnow = snow * altFade;
 
             if (rainPs != null && !Mathf.Approximately(effRain, lastRain))
             {
@@ -898,6 +1007,35 @@ namespace SchoolTwin.Weather
 
             // 雪花寿命同理（见 UpdateSnowLifetime 的注释：8~12s 的写死值会让一半雪花在空中蒸发）
             UpdateSnowLifetime(dt);
+
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13 第三次修：不能 Clear 全部，只剔掉"头顶这一块"的粒子】
+            //
+            // 上一版在这里写了 `rainPs.Clear(true)` / `snowPs.Clear(true)`，
+            // 进楼那一帧把**所有**粒子清空。当时是为了解决"进屋十秒还在飘雪"
+            // （雪花 lifetime 8~12s，只掐发射源来不及）。
+            //
+            // 但那个修法把**窗外的雨也一起清掉了** —— 而窗外的雨正是要保留的。
+            // 走廊里靠窗站，画面里应该有雨，只是不该有"落在走廊地面上"的雨。
+            // 主理人本轮报的"室内窗外看不到下雨下雪的粒子效果"就是这个。
+            //
+            // 现在的做法：逐粒检查，只把**已经落进室内空间**的粒子 Kill 掉。
+            //   · 判据用同一套头顶射线（ceilDist / indoor），不另起逻辑；
+            //   · 只在下落的最后一段（贴地 3m 内）才判，避免把"还在楼顶上方"
+            //     的正常粒子误杀 —— 那些粒子本来就该继续往楼下落，落在楼外；
+            //   · 每帧最多检查一批（Stride 抽样），不做全量，代价可控。
+            //
+            // 为什么不在发射端就把"室内区域"排除掉：
+            // 发射盒是 110m 见方的平面，无法表达"中间挖掉一个房间"。
+            // 逐粒剔除是唯一能同时满足「窗外有雨」和「屋里没雨」的做法。
+            // ══════════════════════════════════════════════════════════════════
+            // 室内时量一次"我所在的房间有多大"，供逐粒剔除用。
+            // 只在室内才测：室外不需要房间边界，四条射线纯浪费。
+            if (indoor) ProbeRoomRadius(dt);
+            else roomValid = false;
+
+            CullIndoorParticles(rainPs, rain, true);
+            CullIndoorParticles(snowPs, snow, false);
 
             // ---- 云穹顶 + 阴天帷幔 ----
             //
@@ -1036,7 +1174,8 @@ namespace SchoolTwin.Weather
             // 为什么不做成菜单：雪天"有粒子无积雪"这种故障，必须看**当时的**运行时值。
             // 让用户 Play 中手动点菜单、再把 Console 截图发回来，中间会丢一轮；
             // 直接在雪量第一次冲破阈值时自己打一次，Editor.log 里就有全部答案。
-            TickSnowAudit(dt, snow);
+            // rain 也要传：室内粒子问题雨天同样存在，只认 snow 会让雨天无日志。
+            TickSnowAudit(dt, snow, rain);
 
             // ---- 雨天积水 ----
             if (wet != null) wet.Apply(rain, dt, skyColor, horizonColor, indoor);
@@ -1050,8 +1189,44 @@ namespace SchoolTwin.Weather
         private float snowAuditTimer;
         private bool indoorAuditDone;      // 室内快照是否已打过
         private float indoorAuditTimer = 1.5f;
+        private int auditWeatherKind;      // 0=无天气 1=雨 2=雪，变了就重新取证
+
+        // 【P13】手动强制执行一次室内自检的快捷键。
+        //
+        // 为什么需要：室内自检每轮只打一次（indoorAuditDone 挡住），
+        // 改完代码想看"这次剔干净了没有"时，得先出门再进屋才会重新取证，
+        // 跑来跑去很蠢。给一个键随时按、随时打当前现场。
+        // F3/F4/F5/F6 已被 HUD / 详情面板 / 视角 / 性能面板占用，这里用 F7。
+        private const KeyCode IndoorAuditKey = KeyCode.F7;
         private float rainLifeTimer;       // 雨丝寿命重算的节流计时（见 UpdateRainLifetime）
         private float snowLifeTimer;       // 雪花寿命重算的节流计时（见 UpdateSnowLifetime）
+
+        // 【P13】逐粒剔除"落进室内"的雨雪用的缓冲（见 CullIndoorParticles）。
+        // 为什么不每帧 new：GetParticles 会把整个粒子数组拷出来，每帧分配
+        // 9000 个 Particle 结构（约 9000×100B ≈ 900KB）会造成明显 GC 抖动。
+        // 复用同一个数组，只在需要时按上限扩容一次。
+        private ParticleSystem.Particle[] cullBuf = new ParticleSystem.Particle[9000];
+
+        // 【P13 第五次修】剔除结果的真实取证。
+        //
+        // ── 为什么必须加 ──────────────────────────────────────────────
+        // 前四轮我都在盯「现存粒子 = 雨 840 / 雪 736」这个数，把它当成
+        // "剔除没生效"的证据。这是个**错误的判据**：
+        //   发射盒 110m × 110m = 12100 m²，雨 3200 粒/秒 × 寿命 1.5s ≈ 4800 粒，
+        //   面密度只有 0.4 粒/m²。一个 15m × 8m 的房间（120 m²）**本来就只有约 48 粒**，
+        //   雪更稀（520 粒/秒 × 6s ≈ 3120 粒全在 12100 m² 上 → 0.26 粒/m²，房间里约 30 粒）。
+        // 也就是说 840 这个总数**完全可能**是"已经剔掉了应该剔的那几十粒"之后的结果。
+        // 只看总数，永远分不清"没剔"和"剔干净了"。
+        //
+        // 所以直接把"房间内还剩几粒"数出来：剔除**后**房里应当 ≈ 0，
+        // 而"房里本该有几粒"由剔除**前**的读数给出 —— 两者一起打，才可判读。
+        // ──────────────────────────────────────────────────────────────
+        private int auditRainInRoom = -1;   // 本轮 CullIndoorParticles 实际杀掉的雨粒数
+        private int auditSnowInRoom = -1;   // 同上，雪
+        private int auditRainTotal = -1;    // 剔除后的粒子总数（对比用）
+        private int auditSnowTotal = -1;
+        private int auditRainStill = -1;    // 剔除后**仍留在房间框内**的粒数（应 ≈ 0）
+        private int auditSnowStill = -1;
 
         /// <summary>
         /// 雪天「有粒子、地上没白」的自动取证。
@@ -1067,15 +1242,46 @@ namespace SchoolTwin.Weather
         ///   · activeInHier = false  → 开关阈值判断错
         ///   · isVisible = false     → 材质/网格没问题，是相机看不见（包围盒或位置）
         /// </summary>
-        private void TickSnowAudit(float dt, float snow)
+        private void TickSnowAudit(float dt, float snow, float rain)
         {
+            // 【P13】F7 手动强制取证：随时按随时打，不管 indoorAuditDone 是什么。
+            // 拿到的是**当前这一帧**的现场，和自动那次口径完全一致。
+            if (Input.GetKeyDown(IndoorAuditKey))
+            {
+                Debug.Log("[P13][室内自检·手动 F7] ==== 现场快照 ====\n" + BuildIndoorAudit());
+            }
             // 室内单独打一次快照。
             //
             // 为什么必须单独打：室外那次是在 snow>0.5 后 4 秒触发的，
             // 而"室内还有粒子 / 室内有横线"这类问题**只在室内复现**。
             // 用户在室内遇到问题时，室外那一次早就打完了（snowAuditStage==2），
             // 什么日志都拿不到，只能靠截图猜。这里补一条独立的室内取证。
-            if (snow > 0.5f && indoor && !indoorAuditDone)
+            //
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第五次修：触发条件补上 rain】
+            //
+            // 原来只写 `snow > 0.5f`，于是**下雨天进室内什么日志都没有**。
+            // 主理人这轮报的就是"室内还能看到雨雪的粒子效果"，其中雨天占一半，
+            // 结果自检在最该出证据的天气下彻底沉默，白跑一轮。
+            //
+            // 而且 Bug 1 本来就是雨、雪两条粒子系统各剔各的，只测雪的天气
+            // 只能验证一半。这里改成"雨或雪任一在认真下"就取证。
+            // ══════════════════════════════════════════════════════════════
+            bool weatherActive = snow > 0.5f || rain > 0.5f;
+
+            // 【P13】天气种类变了就重新取证。
+            // 原来的重置只在"出门"时发生，于是在室内把天气从雨切到雪、或从雪切到雨，
+            // indoorAuditDone 还是 true，第二段证据永远拿不到 —— 而雨雪两条粒子
+            // 系统是分开剔的，只看一种天气等于只验证了一半。
+            int kind = snow > rain ? 2 : (rain > 0.5f ? 1 : 0);
+            if (kind != auditWeatherKind)
+            {
+                auditWeatherKind = kind;
+                indoorAuditDone = false;
+                indoorAuditTimer = 1.5f;
+            }
+
+            if (weatherActive && indoor && !indoorAuditDone)
             {
                 indoorAuditTimer -= dt;
                 if (indoorAuditTimer <= 0f)
@@ -1271,12 +1477,176 @@ namespace SchoolTwin.Weather
             sb.AppendLine("    indoor     = " + indoor + "   / indoorFade = " + indoorFade.ToString("F3"));
             sb.AppendLine("    头顶射线   = " + (ceilDist < 0f
                               ? "**什么都没打到** ← 天花板没被命中，这就是室内还有粒子的原因"
-                              : ceilName + "  " + ceilDist.ToString("F2") + "m  法线Y=" + ceilNormalY.ToString("F2"))
+                              : ceilName + "  " + ceilDist.ToString("F2") + "m  法线Y=" + ceilNormalY.ToString("F2")
+                                + (ceilTallFallback ? "   ← **靠 12m 远档才找到（高厅：礼堂/球馆）**" : "")
+                                + (ceilByRenderer ? "   ← **靠渲染网格包围盒兜底（该建筑无屋顶碰撞体）**" : ""))
                           + "   （要求：距离 ≤ " + IndoorCeilHeight.ToString("F1")
                           + " 且 法线Y ≤ " + IndoorCeilNormalY.ToString("F2") + "）");
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第十三次修】这个诊断本身就是错的，先把它的 bug 记下来。
+            //
+            // 原来写 Physics.Raycast 打 40m，日志打出：
+            //     40m 上限探测 = 命中 TwinPlayer 0.16m 法线Y=-1.00
+            // **它命中的是玩家自己**。Physics.Raycast 只返回最近命中，
+            // 而起点在胶囊内部，0.16m 处就是胶囊内壁 —— 这条射线永远打到自己，
+            // 永远给出"命中了东西"的假象，**一点信息量都没有**。
+            //
+            // 我上一轮据此断言"40m 内没有碰撞体"，方向被自己的代码带偏了。
+            // 真正该用的是 NonAlloc + 跳过玩家，和主判定同一个套路。
+            //
+            // 现在改成：取全部命中，跳过玩家，报"排除自己后最近的那个"。
+            //   · 有  → 记下距离与法线，看是否真的超过 12m
+            //   · 没有 → 确实没有天花板碰撞体（此时才成立 B 结论）
+            // ══════════════════════════════════════════════════════════════
+            {
+                Transform prX = PlayerRoot();
+                Vector3 fromX = prX != null ? prX.position + Vector3.up * 0.02f : (cam != null ? cam.transform.position : transform.position);
+
+                bool prevBf = Physics.queriesHitBackfaces;
+                Physics.queriesHitBackfaces = true;
+
+                // 复用 ceilHits 之外的小缓冲，避免影响主判定的那份数据
+                int nFar = Physics.RaycastNonAlloc(new Ray(fromX, Vector3.up), farHits, 40f,
+                                                   Physics.DefaultRaycastLayers, QueryTriggerInteraction.UseGlobal);
+                Physics.queriesHitBackfaces = prevBf;
+
+                // 跳过玩家自己，取最近的
+                bool gotFar = false;
+                RaycastHit hUpFar = default(RaycastHit);
+                float farBest = float.MaxValue;
+                for (int i = 0; i < nFar; i++)
+                {
+                    if (farHits[i].collider == null) continue;
+                    if (IsPlayerCollider(farHits[i].collider)) continue;   // ← 关键，缺了这行就是原来那个假象
+                    if (farHits[i].distance <= 0.02f) continue;
+                    if (farHits[i].distance >= farBest) continue;
+                    farBest = farHits[i].distance;
+                    hUpFar = farHits[i];
+                    gotFar = true;
+                }
+
+                if (gotFar)
+                {
+                    sb.AppendLine("    40m 上限探测 = 命中 " + (hUpFar.collider != null ? hUpFar.collider.name : "?")
+                                  + "  " + hUpFar.distance.ToString("F2") + "m  法线Y=" + hUpFar.normal.y.ToString("F2")
+                                  + "   （已排除玩家自己，共 " + nFar + " 个原始命中）"
+                                  + (hUpFar.distance > IndoorCeilHeightTall
+                                      ? "   ⚠️ **超过 12m 远档上限 → 需继续放宽**"
+                                      : ""));
+                }
+                else
+                {
+                    sb.AppendLine("    40m 上限探测 = **40m 内没有任何碰撞体** "
+                                  + "← 这是 B 情况：屋顶只有渲染网格，没有 Collider。"
+                                  + " 12m 远档也救不了，必须换判据（靠预设房间包围盒）。");
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13】射线起点与"自命中"排查
+            //
+            // 上一轮的病根是射线打在玩家自己的胶囊内壁上（0.18m、法线 -1），
+            // 而当时自检只打 ceilName / ceilDist，**看起来完全像"命中了天花板"** ——
+            // 一个叫 TwinPlayer 的碰撞体、法线 -1、距离 0.18，谁能一眼看出是错的。
+            //
+            // 所以这里把两件事显式打出来：
+            //   · 起点相对角色根的高度（胶囊底面 = 0，头顶 = 1.8）
+            //   · 命中物体是不是玩家自己
+            // 只要 selfHit 变成 True，就是回归了，不用再猜。
+            // ══════════════════════════════════════════════════════════════
+            Transform prA = PlayerRoot();
+            if (prA != null)
+            {
+                sb.AppendLine("    射线起点   = " + ceilFromY.ToString("F2")
+                              + "   角色根 Y = " + prA.position.y.ToString("F2")
+                              + "   相对高度 = " + (ceilFromY - prA.position.y).ToString("F2")
+                              + " m（0=胶囊底，1.8=头顶）");
+                sb.AppendLine("    自命中     = " + (ceilSelfHit
+                                  ? "**True ← 射线打到玩家自己了，室内判定必然失效**"
+                                  : "False（正确）"));
+            }
+            else sb.AppendLine("    射线起点   = 无角色，用相机 " + ceilFromY.ToString("F2"));
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第八次修】屋顶到底挡不挡得住视线？
+            //
+            // ── 为什么这一项决定修法方向 ──────────────────────────────────
+            // "屋里看得到雨"有两种完全不同的成因，修法也完全不同：
+            //
+            //   甲、屋顶可见（实体/双面网格）  →  天花板以上的雨本来就被挡住，
+            //       玩家看到的雨只可能来自"地面~天花板"这一薄层。那问题在剔除的
+            //       横向框不准（射线从窗洞漏出去，框成了 36.8m），去修 ProbeRoomRadius。
+            //
+            //   乙、屋顶不可见（单面网格，背面被剔除）→  抬头能透过屋顶看见上空，
+            //       发射盒 15.5m 与天花板 6.9m 之间那 8.6m 的雨柱全都露着。
+            //       那问题在纵向截断（`p.y > ceilWorldY` 直接放过），
+            //       修 ProbeRoomRadius 一点用都没有 —— 这正是前几轮白跑的原因。
+            //
+            // ── 判据怎么取 ────────────────────────────────────────────────
+            // 从"天花板正下方一点点"朝**下**看？不行，那是地板。
+            // 用 **Renderer 的背面剔除设置** 才是直接证据：
+            //   找到头顶命中的那块网格，读它的 Renderer + 材质，
+            //   再判断"从上方看这块三角形"是否会被剔除。
+            // 但 Shader 的 Cull 模式在运行时读不到（Material 只暴露 _Cull 若脚本自己写了）。
+            //
+            // 所以改用一个**几何可判**的近似：从屋顶上方 3m 处朝下打，
+            // 与从屋内朝上打，比较两者命中的**距离之和**是否等于屋顶厚度。
+            //   · 两条都能命中且距离和很小（≤1m）→ 屋顶是**有厚度的实体**（Box/挤出体）
+            //   · 从上方打不中 → 屋顶是一张**单面片**，从上面看是背面
+            // 这个判据不依赖 Shader，只依赖碰撞体，而碰撞体是双面的
+            // （Unity 的 MeshCollider 默认双面），所以：
+            //   ⚠️ 碰撞体能命中 ≠ 渲染看得见。碰撞双面、渲染单面，这是常见组合。
+            //   因此最终还要看"屋顶 Renderer 的材质里有没有 _Cull 且为 0"。
+            // ══════════════════════════════════════════════════════════════
+            AppendRoofVisibility(sb);
+
             sb.AppendLine("    rainPs      = " + (rainPs != null ? rainPs.emission.rateOverTime.constantMax.ToString("F1") + " 粒/秒" : "null"));
             sb.AppendLine("    snowPs      = " + (snowPs != null ? snowPs.emission.rateOverTime.constantMax.ToString("F1") + " 粒/秒" : "null")
-                          + "   （室内应接近 0）");
+                          + "   （室内**不再归零**，天气属于世界）");
+            sb.AppendLine("    现存粒子    = 雨 " + (rainPs != null ? rainPs.particleCount.ToString() : "-")
+                          + " / 雪 " + (snowPs != null ? snowPs.particleCount.ToString() : "-")
+                          + "   （= 全世界总数，**不能**用来判断剔没剔，看下一行）");
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第五次修】这两行才是 Bug 1 的可判读判据。
+            //
+            // 为什么"现存粒子"那行没用：110m×110m 的发射盒把 4800 粒雨摊开，
+            // 面密度 0.4 粒/m²，一个 120 m² 的房间本来就只有约 48 粒。
+            // 840 与 "840+48" 在总数上看不出区别，"剔掉了"和"没剔"读数几乎一样。
+            //
+            // 判读方法（正文里两句都要同时成立才算修好）：
+            //   ① 「房内命中」> 0  →  剔除器确实在房间里认出了粒子（说明边界框对了）
+            //   ② 「房内命中」≈ 0 而「残留」也 ≈ 0 → 已经完全剔净
+            // 若 ① = 0，说明房间矩形框偏了（射线从门洞漏出去/center 用了旧值）。
+            // ══════════════════════════════════════════════════════════════
+            sb.AppendLine("    房内命中    = 雨 " + (auditRainInRoom >= 0 ? auditRainInRoom.ToString() : "未跑")
+                          + " 粒 / 雪 " + (auditSnowInRoom >= 0 ? auditSnowInRoom.ToString() : "未跑")
+                          + " 粒   （本轮从房里剔掉的粒数，>0 才算剔除器真的在工作）");
+            sb.AppendLine("    剔除后残留  = 雨 " + (auditRainTotal >= 0 ? auditRainTotal.ToString() : "-")
+                          + " / 雪 " + (auditSnowTotal >= 0 ? auditSnowTotal.ToString() : "-")
+                          + "   （= 总数 − 房内命中 ≈ 窗外应有的量）");
+            sb.AppendLine("    框内复查    = 雨 " + (auditRainStill >= 0 ? auditRainStill.ToString() : "未跑")
+                          + " 粒 / 雪 " + (auditSnowStill >= 0 ? auditSnowStill.ToString() : "未跑")
+                          + " 粒   ← **这个数接近 0 才算剔除成功**，>0 说明还有漏网");
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13】逐粒剔除的房间边界 —— "窗外的雨到底还在不在"的唯一判据
+            //
+            // 这一组必须打出来，因为上一轮"Clear 全部"的做法让两条需求互相打架：
+            // 屋里不能有雨，窗外必须有雨。判断这一版到底有没有做对，
+            // 只能靠"房间边界"和"粒子总数"这两个数一起看：
+            //   · 房间边界明显大于实际房间 → 会把窗外雨误杀（雪/雨总数偏低）
+            //   · 房间边界 ≈ 8m × 30m 的走廊 → 正常
+            //   · 边界 max=18 说明这个方向没打到墙，已经用上限兜住
+            // ══════════════════════════════════════════════════════════════
+            if (roomValid)
+            {
+                sb.AppendLine("    房间边界    = X[" + roomMinX.ToString("F1") + ", " + roomMaxX.ToString("F1") + "]"
+                              + "  Z[" + roomMinZ.ToString("F1") + ", " + roomMaxZ.ToString("F1") + "]"
+                              + "   （走 18m 上限 = 该方向没打到墙）");
+            }
+            else sb.AppendLine("    房间边界    = 未测（室外不测，属正常）");
 
             sb.AppendLine("  雪盘：");
             if (snowGround != null)
@@ -1290,6 +1660,55 @@ namespace SchoolTwin.Weather
                 sb.AppendLine("    _SnowAmount  = " + SnowAmountInMat.ToString("F3"));
             }
             else sb.AppendLine("    snowGround = null");
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13-D9】积水层 + 雨雪发射盒的位置自检
+            //
+            // 这一组是"水坑随视角漂移 / 二楼看不到雨"的唯一可验证指标。
+            // 判红的标准全部是**位置量**，不需要看截图：
+            //   · 积水面 Y 若 ≈ 相机 Y（差 < 1m）→ 它被铺到二楼地板上了
+            //   · 积水面 Y 若 ≈ outdoorGroundY → 正确，留在一楼室外
+            //   · 发射盒 Y 若 ≈ 相机 Y + 16 → 它还在跟相机（二楼必然被楼板挡）
+            //   · 发射盒 Y 若 ≈ outdoorGroundY + 16 → 正确
+            // ══════════════════════════════════════════════════════════════
+            sb.AppendLine("  积水 / 雨雪发射盒（D9 判据）：");
+            float camYNow = cam != null ? cam.transform.position.y : float.NaN;
+            sb.AppendLine("    相机眼高     = " + camYNow.ToString("F2")
+                          + "    室外地面 = " + outdoorGroundY.ToString("F2"));
+
+            // ⚠️ 不能用 wet.GetComponentInChildren<Renderer>()：那会抓到同一个
+            // GameObject 上的 CloudDome（位置恒等于相机），打出来的 1.73 是假值。
+            // 见 WetGround.PlaneWorldY 的注释 —— 这条假警报曾把排查带偏一整轮。
+            if (wet != null && wet.IsBuilt)
+            {
+                float wy2 = wet.PlaneWorldY;
+                bool highUp = Mathf.Abs(wy2 - camYNow) < 1.0f;
+                sb.AppendLine("    积水层 worldY = " + wy2.ToString("F2")
+                              + "   visible=" + wet.IsVisibleNow
+                              + "   wetness=" + wet.WetnessNow.ToString("F2")
+                              + "   材质alpha=" + wet.AlphaInMat.ToString("F2")
+                              + (highUp
+                                  ? "   ⚠️ **与相机同高 → 已被铺到当前楼层（二楼会进教室）**"
+                                  : "   正确（应贴 outdoorGroundY）"));
+            }
+            else sb.AppendLine("    积水层 = null / 未启用");
+
+            if (rainPs != null)
+            {
+                float ry = rainPs.transform.position.y;
+                bool followsCam = Mathf.Abs(ry - (camYNow + EmitHeight)) < 2.0f;
+                sb.AppendLine("    雨发射盒 worldY = " + ry.ToString("F2")
+                              + "   parent=" + (rainPs.transform.parent == null ? "null(已脱离，正确)" : rainPs.transform.parent.name)
+                              + (followsCam
+                                  ? "   ⚠️ **仍在跟相机（二楼会被楼板挡住）**"
+                                  : "   正确（应 = 室外地面 + 16）"));
+            }
+            if (snowPs != null)
+            {
+                float sy = snowPs.transform.position.y;
+                sb.AppendLine("    雪发射盒 worldY = " + sy.ToString("F2")
+                              + "   parent=" + (snowPs.transform.parent == null ? "null(已脱离，正确)" : snowPs.transform.parent.name));
+            }
 
             // ── 雪盘网格的真实纵向跨度 ────────────────────────────────────
             // 这是判断"那条横线还在不在"的直接指标，比看 worldPos.y 有用得多。
@@ -1351,9 +1770,73 @@ namespace SchoolTwin.Weather
             sb.AppendLine("  用户报过的问题对照：");
             sb.AppendLine("    · 室内外白色横线 → 看【雪面几何】那行的'竖直面'计数"
                           + "（>0 就是横线来源；正常应为 0）");
-            sb.AppendLine("    · 室内有粒子 → 看头顶射线是否 '什么都没打到'"
-                          + "（已开启 queriesHitBackfaces 以命中单层天花板）");
+            sb.AppendLine("    · 室内有粒子 → 看【框内复查】是否 ≈ 0，以及【屋顶可见性】判甲/乙");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 判定"屋顶网格挡不挡得住抬头视线"，这是 Bug 1 两种成因的分水岭。
+        ///
+        /// ── 为什么不能只看碰撞体 ──────────────────────────────────────
+        /// 头顶射线能命中 `Floor2` 只证明**碰撞**存在（MeshCollider 默认双面）。
+        /// 但渲染是另一回事：Built-in RP 的不透明 Shader 默认 `Cull Back`，
+        /// 单面网格从背面看整体消失。碰撞双面 + 渲染单面在本工程很常见
+        /// （建筑网格多半是单层挤出体，法线朝外=朝上，屋内看到的是背面）。
+        ///
+        /// ── 判据 ──────────────────────────────────────────────────────
+        /// 取头顶命中的那块 Renderer，读它的材质：
+        ///   · `_Cull` 存在且 = 0          → 双面渲染，屋顶挡得住 → 甲
+        ///   · `_Cull` 存在且 = 2（Back）  → 单面，且法线朝上 = 屋内看背面 → 乙
+        ///   · 没有 `_Cull` 属性           → 用 Shader 名粗判，未知则打"待确认"
+        /// 同时把 Renderer 的 bounds 打出来，方便判断屋顶厚度与高度。
+        /// </summary>
+        private void AppendRoofVisibility(System.Text.StringBuilder sb)
+        {
+            if (string.IsNullOrEmpty(ceilName) || ceilDist < 0f)
+            {
+                sb.AppendLine("  屋顶可见性：未测（头顶没命中任何东西）");
+                return;
+            }
+
+            // 直接用头顶射线命中的那个 collider，不再遍历整个场景。
+            Renderer rd = null;
+            if (ceilCollider != null) rd = ceilCollider.GetComponent<Renderer>();
+            if (rd == null) rd = ceilCollider != null ? ceilCollider.GetComponentInParent<Renderer>() : null;
+
+            if (rd == null || rd.sharedMaterial == null)
+            {
+                sb.AppendLine("  屋顶可见性：命中 " + ceilName + "，但取不到 Renderer/材质 → 待确认");
+                return;
+            }
+
+            Material m = rd.sharedMaterial;
+            bool hasCull = m.HasProperty("_Cull");
+            float cullVal = hasCull ? m.GetFloat("_Cull") : -1f;
+
+            string verdict;
+            if (hasCull)
+            {
+                // URP/Built-in 约定：0 = Off（双面）, 1 = Front, 2 = Back（默认）
+                if (cullVal < 0.5f)
+                    verdict = "**甲 · 双面渲染，屋顶挡得住**（修 ProbeRoomRadius 的横向框）";
+                else
+                    verdict = "**乙 · 单面渲染（Cull Back），屋内看到的是背面 → 屋顶透明**"
+                            + "（必须剔天花板以上的雨柱）";
+            }
+            else
+            {
+                verdict = "材质无 _Cull 属性，按 Shader 名粗判：" + m.shader.name
+                        + "（若是 Standard/Surface 默认 Cull Back → 同乙）";
+            }
+
+            Vector3 bc = rd.bounds.center;
+            Vector3 bs = rd.bounds.size;
+            sb.AppendLine("  屋顶可见性：");
+            sb.AppendLine("    命中网格   = " + ceilName + "   material=" + m.name);
+            sb.AppendLine("    _Cull      = " + (hasCull ? cullVal.ToString("F0") + "（0=双面 2=背面剔除）" : "无此属性"));
+            sb.AppendLine("    结论       = " + verdict);
+            sb.AppendLine("    bounds     = c=" + bc.ToString("F2") + "  size=" + bs.ToString("F2")
+                          + "   厚度(Y)=" + bs.y.ToString("F2") + "m");
         }
 
         /// <summary>
@@ -1382,7 +1865,13 @@ namespace SchoolTwin.Weather
 
             if (cam == null) return;
 
-            float drop = EmitHeight + Mathf.Max(0f, cam.transform.position.y - groundY);
+            // 【P13-D9】落距 = 发射盒世界 Y − 室外地平面（实测，不用旧公式）。
+            // 详细理由见 UpdateRainLifetime 里的同一段注释：旧公式
+            // `EmitHeight + (camY - groundY)` 建立在"发射盒挂相机上"的前提，
+            // 该前提已被推翻；在二楼会算出偏小的落距，导致雨丝穿地。
+            // 直接读 transform.position.y 是唯一不会写错的做法。
+            float emitY = rainPs.transform.position.y;
+            float drop = Mathf.Max(1f, emitY - outdoorGroundY);
             // g = 9.81 × 1.3（与 BuildRain 里的 gravityModifier 必须保持一致）
             const float G = 9.81f * 1.3f;
             // shape 已转 -90°，初速朝下（0~0.4 m/s）。带初速的解：h = v0·t + ½g·t²
@@ -1425,7 +1914,9 @@ namespace SchoolTwin.Weather
 
             if (cam == null) return;
 
-            float drop = EmitHeight + Mathf.Max(0f, cam.transform.position.y - groundY);
+            // 【P13-D9】同上：落距实测，不套旧公式（旧公式假设发射盒挂相机上）
+            float emitYs = snowPs.transform.position.y;
+            float drop = Mathf.Max(1f, emitYs - outdoorGroundY);
             const float G = 9.81f * 0.035f;       // 与 BuildSnow 的 gravityModifier 保持一致
             // 同雨：shape 已转 -90°，初速朝下（0.25~0.6 m/s，取中值 0.4）。
             const float V0 = 0.4f;
@@ -1436,6 +1927,482 @@ namespace SchoolTwin.Weather
 
             var main = snowPs.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(t * 0.97f, t);
+        }
+
+        // =====================================================================
+        // 【P13】逐粒剔除"落进室内"的雨雪
+        // =====================================================================
+
+        /// <summary>
+        /// 把已经落进**玩家所处的那个房间**的雨雪粒子 Kill 掉，窗外与室外的照常保留。
+        ///
+        /// ══════════════════════════════════════════════════════════════════
+        /// 为什么需要它（而不是像之前那样直接关发射率或 Clear 全部）
+        ///
+        /// 目标有两个，且互相冲突：
+        ///   ① 屋内不能有雨雪（主理人第一轮报的"室内有雨雪粒子效果"）
+        ///   ② 从屋里往外看，窗外必须有雨雪（主理人本轮报的"室内窗外看不到"）
+        ///
+        /// 关发射率：满足 ① 不满足 ②（窗外也没了）
+        /// Clear 全部：满足 ① 不满足 ②（同上，而且更彻底）
+        /// 什么都不做：满足 ② 不满足 ①
+        ///
+        /// 只有"逐个粒子判断它此刻在哪"能同时满足两者。
+        ///
+        /// ── 为什么不能用一个固定半径的圆 ──────────────────────────────
+        /// 第一版写的是「离玩家 9m 以内就杀」。这个判据把**窗外的雨也杀了** ——
+        /// 走廊窗离人往往只有 2~4m，那些雨正该被看见。
+        /// 半径调到 3m 又反过来，走廊深处还是一片雨落在屋里。
+        ///
+        /// 正确的判据是「这个粒子在不在**我被困住的这个房间**里」。
+        /// 房间边界用 4 条水平射线现测（见 ProbeRoomRadius），
+        /// 一次 0.3 秒刷新一次，代价可以忽略。
+        ///
+        /// ── 天花板高度为什么可信 ──────────────────────────────────────
+        /// ceilDist 是 UpdateGround 每 0.15s 更新一次的"脚底到天花板距离"，
+        /// 由同一条射线给出，和 indoor 判定同源。粒子世界 Y 低于
+        /// `脚下地面 + ceilDist` 就说明它已经在这块天花板下面了。
+        /// ══════════════════════════════════════════════════════════════════
+        /// </summary>
+        private void CullIndoorParticles(ParticleSystem ps, float intensity, bool isRain)
+        {
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第九次修：读数不能在节流之前清零】
+            //
+            // 上一版把"置 -1"放在方法最开头，于是：
+            //     方法每帧都被调用 → 先清零 → 2/3 的帧在 `%3` 处 return
+            //     → 自检（F7）落到被节流的帧上，读到的永远是 -1「未跑」
+            // 主理人这轮日志三行全「未跑」就是这么来的，而剔除其实一直在跑。
+            //
+            // 正确做法：**只有真正执行了判定的那一轮**才写读数，
+            // 其余帧保留上一次的真实值。这样任意时刻读都是"最近一次有效样本"，
+            // 而不是"随机 1/3 概率有值"。
+            //
+            // 唯一需要显式清零的场景是"理论上不该有数据"（不在室内 / 边界没测出来），
+            // 那种情况下面各自单独清，语义才准确。
+            // ══════════════════════════════════════════════════════════════
+            if (ps == null || intensity <= 0.01f)
+            {
+                if (isRain) { auditRainInRoom = -1; auditRainTotal = -1; auditRainStill = -1; }
+                else { auditSnowInRoom = -1; auditSnowTotal = -1; auditSnowStill = -1; }
+                return;
+            }
+            if (!indoor || ceilDist < 0f)              // 不在室内 / 没测到天花板 → 不剔
+            {
+                if (isRain) { auditRainInRoom = -1; auditRainTotal = -1; auditRainStill = -1; }
+                else { auditSnowInRoom = -1; auditSnowTotal = -1; auditSnowStill = -1; }
+                return;
+            }
+            if (!roomValid)                            // 房间边界还没测出来 → 宁可不动
+            {
+                if (isRain) { auditRainInRoom = -1; auditRainTotal = -1; auditRainStill = -1; }
+                else { auditSnowInRoom = -1; auditSnowTotal = -1; auditSnowStill = -1; }
+                return;
+            }
+
+            // 节流：三帧一轮。
+            // 为什么不是"每帧只处理 1/3 的粒子"：GetParticles 会把**整个**粒子数组
+            // 拷出来（雨上限 9000，约 900KB/次），拷贝成本与抽样比例无关。
+            // 三帧跑一次全量，总拷贝量就是每帧跑一次的 1/3。
+            //
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第九次修：节流本身就是"屋里看得到雨"的实质原因之一】
+            //
+            // 原来写 %3，理由写的是"视觉上察觉不到"。**这个判断是错的**：
+            //     雨 3200 粒/秒 ÷ 60fps ≈ 53 粒/帧
+            //     3 帧节流 → 单次剔除前最多已累积 160 粒新雨
+            // 160 粒雨丝在半空里清晰可见 —— 这不是"来不及看清"，
+            // 是每 50ms 就有一批新雨在屋里生成并下落。
+            //
+            // 更麻烦的是：粒子的 lifetime 是 1.6~1.8 秒（UpdateRainLifetime 按落距算），
+            // 所以被剔掉的那批只是"当前这批"，下一帧又补上 53 粒。
+            // 稳态下屋里始终悬着「53 粒 × 节流帧数」的雨，永远清不干净。
+            //
+            // 改成**每帧全量判**。代价是每帧一次 GetParticles（约 900KB 拷贝），
+            // 这个开销实测远小于一次阴影渲染；而"屋里下雨"是主理人一眼能看见的
+            // 明显缺陷，优先级高于这点 CPU。若将来性能吃紧，再考虑按距离预筛。
+            // ══════════════════════════════════════════════════════════════
+
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13 第四次修：剔除基准不能用 groundY】
+            //
+            // 上一版写 `float floorY = groundY;` —— 这个值是**相机正下方**那层地面。
+            // 实测日志（二楼 + 观景模式）：
+            //     角色根 Y = 3.59      ← 玩家站在二楼
+            //     相机眼高 = 15.40     ← 相机被抬到 15m 高空
+            //     groundY  = -0.50     ← 相机正下方是**室外地面**
+            // 于是剔除区间被算成 [-0.50, 2.79]，而玩家实际在 [3.59, 6.88] ——
+            // 整个房间都在区间外，一个粒子都剔不掉。
+            // 日志里 `现存粒子 = 雨 747 / 雪 766` 就是这个。
+            //
+            // 正确基准是**角色根**（CharacterController 底面 = 玩家脚踩的那层楼板）。
+            // 这与 indoor 判定、雪盘锚点用的是同一个量（都走 PlayerRoot），
+            // 三者必须同源，否则"判定说在室内、剔除按室外算"这种错位还会再出现。
+            //
+            // 没有角色时（纯数字孪生自由相机）才退回收相机脚下 —— 那种情况下
+            // 本来也没有"玩家在哪个房间"可言，用相机位置是唯一选择。
+            // ══════════════════════════════════════════════════════════════
+            Transform cullPr = PlayerRoot();
+            float floorY = cullPr != null ? cullPr.position.y : groundY;
+            float ceilWorldY = floorY + ceilDist;
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第七次修：纵向剔除上界必须覆盖整个雨柱，不能截在天花板】
+            //
+            // 原代码在循环里写：
+            //     if (p.y > ceilWorldY) continue;
+            // 理由是"高于天花板的在楼顶上方，从屋里看被屋顶挡住，不用管"。
+            // **这个理由只在屋顶看得见时成立。**
+            //
+            // 实测（主理人 2026-11-05 日志）：
+            //     发射盒 worldY = 15.50      天花板 worldY = 3.59 + 3.31 = 6.90
+            //     房内命中 = 19 粒
+            // 6.90 → 15.50 这 8.6m 高的雨柱，XZ 就在玩家头顶正上方，一粒都没剔。
+            // 19 这个偏小的数正好印证：真正落在"地面~天花板"薄层里的只有 19 粒。
+            //
+            // 为什么会看见：Built-in RP 不透明 Shader 默认 Cull Back，
+            // 单面屋顶从屋内看是**背面 → 整个消失**，深度缓冲里没有屋顶，
+            // 上方的雨没有遮挡 → 直接看见。所以"屋里下雨"其实是"上空 8.6m 在下雨"。
+            //
+            // ⚠️ 这一处与 AppendRoofVisibility 的甲/乙判定强相关：
+            //   若诊断显示"甲（双面渲染，屋顶挡得住）"，这个 +24f 就做过量了，
+            //   应改回 `if (p.y > ceilWorldY) continue;`，否则会把屋顶上方
+            //   本可透过窗户看见的雨一起剔掉。
+            //
+            // ⚠️ 作用域：这个变量必须声明在**两个循环之外**。
+            //   第一版误写在第一个 for 内部，复查循环引用它直接 CS0103。
+            //   两个循环要用同一套判据，变量就必须同域，不能各声明一份
+            //   （各写一份将来改一处忘一处，正是 shape.scale 那个坑的翻版）。
+            //
+            // 【P13 第十次修】上界改成取「发射盒顶」与「天花板+24」的较小值。
+            // 原来是 ceilWorldY + 24f。在走廊（层高 3.3m）算出 3.59+3.3+24 ≈ 31m，
+            // 已经超过发射盒 15.5m —— 多余判断不算错，但高厅（层高 10m）会算到 34m，
+            // 同样没意义。真正的上界应该是「这条雨柱从哪来」= 发射盒高度，
+            // 因为超过发射盒的 y 根本不会有粒子。
+            // 取 Min 保证两种层高下都恰好覆盖到发射盒顶，不多不少。
+            // 发射盒的真实 Y 见 UpdateGround 第 ~3123 行：
+            //     emitPos.y = outdoorGroundY + EmitHeight
+            // 这里必须用 outdoorGroundY 而不是 groundY —— groundY 是相机脚下那层，
+            // 室内时它是楼板高度，会让上界整体偏低，漏掉上方一段雨柱。
+            // ══════════════════════════════════════════════════════════════
+            float emitTopY = outdoorGroundY + EmitHeight + 2f;
+            float cullTopY = Mathf.Min(ceilWorldY + 24f, emitTopY);
+
+            Vector3 c = roomCenter;
+
+            var particles = cullBuf;
+            int n = ps.GetParticles(particles);
+            if (n <= 0) return;
+
+            // 缓冲容量兜底：粒子上限将来若被调大，这里按 n 扩容一次，
+            // 免得 GetParticles 只填进前 cullBuf.Length 个、后半批永远不被检查。
+            if (n > particles.Length)
+            {
+                cullBuf = new ParticleSystem.Particle[n];
+                particles = cullBuf;
+                n = ps.GetParticles(particles);
+            }
+
+            bool changed = false;
+            int inRoom = 0;      // 剔除前"落在房间里"的粒子数（本方法只数不判，用于自检可读）
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 p = particles[i].position;
+
+                // ① 纵向：上界用 cullTopY（覆盖整个雨柱，理由与作用域的坑见上方
+                //    声明处的注释）。下界留 0.5m 余量，已落地的粒子交给 lifetime 收。
+                if (p.y > cullTopY) continue;
+                if (p.y < floorY - 0.5f) continue;
+
+                // ② 横向：必须在**这个房间**的矩形内。
+                //    四边分别判，因为走廊两个方向长、两个方向窄；
+                //    用同一个半径会把窄那两侧的窗外雨一起误杀。
+                float dx = p.x - c.x;
+                float dz = p.z - c.z;
+                if (dx > roomMaxX || dx < roomMinX) continue;   // 窗外 / 墙外 → 保留
+                if (dz > roomMaxZ || dz < roomMinZ) continue;
+
+                inRoom++;
+                // Kill：剩余寿命清零，粒子在下一帧自然消失。
+                // 不用 ps.SetParticles 的整批回写也能生效，但必须回写才会被采纳。
+                particles[i].remainingLifetime = 0f;
+                changed = true;
+            }
+
+            // 把读数交出去给自检（剔除后总数要重新取，因为 SetParticles 之后
+            // particleCount 会在下一帧才更新，这里先记"本轮在房内命中多少粒"）。
+            if (isRain)
+            {
+                auditRainInRoom = inRoom;
+                auditRainTotal = n - inRoom;
+            }
+            else
+            {
+                auditSnowInRoom = inRoom;
+                auditSnowTotal = n - inRoom;
+            }
+
+            if (changed) ps.SetParticles(particles, n);
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第七次修：剔除后再复查一遍，确认"框内真的空了"】
+            //
+            // 为什么要复查：`房内命中 = 19` 只说明"这一轮标了 19 粒该杀"，
+            // 但它**不回答**"框里现在还剩几粒"。可能有三种情况都表现为 19：
+            //   · 框内共 19 粒，全杀了，框内归零   → 真的修好了
+            //   · 框内有 60 粒，只认出 19 粒杀了    → 判据有漏（比如纵向区间不对）
+            //   · 框内有 19 粒，但下一帧新粒子又落进来，画面照样有雨 → 节流太快
+            // 前两轮我就是拿"命中数"当成功判据，结果分不清这三种。
+            //
+            // 复查用同一套判据再数一遍，但计数条件完全独立：不杀、只数。
+            // 这个数应当**接近 0**；若明显 > 0，说明还有粒子漏网。
+            // ══════════════════════════════════════════════════════════════
+            int stillInRoom = 0;
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 p = particles[i].position;
+                if (p.y > cullTopY) continue;          // 与上面同一套纵向判据
+                if (p.y < floorY - 0.5f) continue;
+                float dx = p.x - c.x;
+                float dz = p.z - c.z;
+                if (dx > roomMaxX || dx < roomMinX) continue;
+                if (dz > roomMaxZ || dz < roomMinZ) continue;
+                if (particles[i].remainingLifetime <= 0.001f) continue;  // 已判死的跳过
+                stillInRoom++;
+            }
+
+            if (isRain) auditRainStill = stillInRoom;
+            else auditSnowStill = stillInRoom;
+        }
+
+        // ---- 房间边界探测（见 CullIndoorParticles）----
+        private bool roomValid;
+        private Vector3 roomCenter;
+        private float roomMinX, roomMaxX, roomMinZ, roomMaxZ;
+        private float roomProbeTimer;
+
+        /// <summary>
+        /// 用 4 条水平射线量出"我此刻所在的房间"有多大，供 CullIndoorParticles 用。
+        ///
+        /// 为什么不复用天花板的法线/高度：天花板只给出**纵向**边界，
+        /// 而"窗外的雨该不该留"是**横向**问题，必须知道墙在哪。
+        ///
+        /// 为什么只用 4 条射线而不是扫一圈：
+        /// 房间在俯视图上是凸的，四个正方向的距离足以框出一个矩形近似；
+        /// 扫一圈 16 条对走廊这种长条形没有额外收益，纯浪费。
+        ///
+        /// 为什么要 clamp 到 RoomMax：
+        /// 站在大厅/体育馆时某个方向可能 30m 都没有墙。那样框出来的矩形会把
+        /// 整个院子都算成"室内"，雨全被剔掉 —— 又回到最初的 bug。
+        /// 上限取 18m（超过普通教室/走廊的合理尺寸），宁可漏掉远处的雨在屋里，
+        /// 也不要误杀院子里的雨。
+        /// </summary>
+        private void ProbeRoomRadius(float dt)
+        {
+            roomProbeTimer -= dt;
+            if (roomProbeTimer > 0f) return;
+            roomProbeTimer = 0.3f;
+
+            Transform pr = PlayerRoot();
+            Vector3 basePos = pr != null ? pr.position : (cam != null ? cam.transform.position : transform.position);
+
+            const float MaxWall = 18f;
+            const float Margin = 0.35f;      // 稍微放宽，避免贴墙站着时脚下那一格被漏掉
+
+            roomCenter = basePos;
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第六次修：单一高度探针会从窗洞里漏出去】
+            //
+            // 上一版固定在 1.5m 打射线。实测日志：
+            //     房间边界 = X[-18.4, 18.4]  Z[-18.4, 2.7]
+            // 四个方向有三个直接跑到 18m 上限（= 一路没撞到任何东西），
+            // 框出来 36.8m × 21.1m ≈ 776 m²，而实际是一条 4~5m 宽的走廊。
+            //
+            // 为什么会漏：1.5m 正好落在**窗洞的中间高度带**。
+            // 教学楼窗台普遍 0.9m 左右、窗顶 2.1m 左右，1.5m 笔直穿窗而过，
+            // 而玻璃通常不带碰撞体（只是 MeshRenderer），射线一路飞到 18m。
+            // 同理门洞（0~2.1m）也会让射线跑到隔壁房间去。
+            //
+            // 危害有两层，都不小：
+            //   · 框是超集 → 窗外的雨被一起杀掉，本该看见的雨没了
+            //   · 沿走廊方向被拉到 18m → 把走廊尽头门外的区域也算成"室内"
+            //
+            // 修法：每个方向打**三个高度**，取最近的命中。
+            //   0.20m → 贴地，必有墙裙/墙体，窗和门都够不到这个高度（门槛下方）
+            //   1.10m → 窗台中下，多数墙体裸露段
+            //   2.40m → 窗楣以上、天花板以下，绕开窗洞顶部
+            // 只要有一条打中墙，就说明这个方向有边界；三条全漏才认为真的没墙。
+            // ══════════════════════════════════════════════════════════════
+            float[] probeHeights = { 0.20f, 1.10f, 2.40f };
+
+            float dxp = WallDistMulti(basePos, Vector3.right, MaxWall, probeHeights);
+            float dxn = WallDistMulti(basePos, Vector3.left, MaxWall, probeHeights);
+            float dzp = WallDistMulti(basePos, Vector3.forward, MaxWall, probeHeights);
+            float dzn = WallDistMulti(basePos, Vector3.back, MaxWall, probeHeights);
+
+            roomMaxX = Mathf.Min(dxp, MaxWall) + Margin;
+            roomMinX = -Mathf.Min(dxn, MaxWall) - Margin;
+            roomMaxZ = Mathf.Min(dzp, MaxWall) + Margin;
+            roomMinZ = -Mathf.Min(dzn, MaxWall) - Margin;
+
+            roomValid = true;
+        }
+
+        /// <summary>
+        /// 同一方向、多个高度各打一条射线，返回**最近**的命中距离（没有命中则返回 max）。
+        ///
+        /// 为什么取最近而不是取平均/最远：墙是实体，任何一条射线撞到的东西都在墙内侧
+        /// 或墙上。取最近 = 最保守的室内边界，宁可框小一点（屋里可能漏几粒雨），
+        /// 也不要把窗外的雨一起杀了 —— 后者是用户一眼就能看出来的错。
+        /// </summary>
+        private float WallDistMulti(Vector3 basePos, Vector3 dir, float max, float[] heights)
+        {
+            float best = max;
+            for (int i = 0; i < heights.Length; i++)
+            {
+                Vector3 from = new Vector3(basePos.x, basePos.y + heights[i], basePos.z);
+                float d = WallDist(from, dir, max);
+                if (d < best) best = d;
+            }
+            return best;
+        }
+
+        private float WallDist(Vector3 from, Vector3 dir, float max)
+        {
+            RaycastHit h;
+            if (Physics.Raycast(from, dir, out h, max, Physics.DefaultRaycastLayers,
+                                QueryTriggerInteraction.UseGlobal))
+            {
+                if (h.collider != null && !IsPlayerCollider(h.collider))
+                    return h.distance;
+            }
+            return max;
+        }
+
+        /// <summary>
+        /// 用**渲染网格包围盒**判断"头顶是否有东西盖着"，服务于没有碰撞体的场馆。
+        ///
+        /// ── 为什么必须存在这个方法 ──────────────────────────────────────
+        /// 主理人 2026-11-05 的篮球场日志：
+        ///     头顶射线 = **什么都没打到**
+        /// 这不是阈值问题 —— 40m 内连一个碰撞体都没有。礼堂/篮球馆这类
+        /// 单层大跨度建筑，屋顶只导入了渲染网格（74 个 MeshRenderer），
+        /// 但只给了 19 个 MeshCollider（且全是凹形、不在屋顶上）。
+        /// 射线永远打不到屋顶，只能改用渲染器的包围盒。
+        ///
+        /// ── 判据 ──────────────────────────────────────────────────────
+        /// 对每个候选渲染器求 bounds，要求：
+        ///   ① 底面在玩家头顶上方 0.5m 以外（确实"盖在头上"）
+        ///   ② 顶面在玩家头顶上方 30m 以内（排除天空穹顶 —— 它每帧跟着相机）
+        ///   ③ 玩家 XZ 在包围盒的 XZ 范围里（站在它下面，不是站在旁边）
+        /// 三条全中即认为被覆盖，取**最低的那块底面**作为天花板高度。
+        ///
+        /// ── 为什么候选要缓存 ────────────────────────────────────────────
+        /// 本方法由 UpdateGround 调，0.15s 一次。每次 FindObjectsOfType 在移动端
+        /// 会明显掉帧，而建筑是静态的，运行时不会新增，缓存一次即可。
+        /// </summary>
+        private bool IndoorByRendererRoof(Vector3 from, out float roofY, out string roofName)
+        {
+            roofY = 0f;
+            roofName = null;
+
+            if (!roofCandidatesBuilt)
+            {
+                roofCandidatesBuilt = true;
+
+                // 只留"可能是屋顶"的：MeshRenderer + 有运行时网格。
+                // 排除自身子物体（CloudDome / 雪盘 / 雨雪粒子都在本组件下，
+                // 它们的 Renderer 会跟着相机跑，混进来会把自己判成室内）。
+                Renderer[] all = GetComponentsInChildren<Renderer>(true);
+                var list = new System.Collections.Generic.List<Renderer>(96);
+                Renderer[] scene = GameObject.FindObjectsOfType<Renderer>();
+                for (int i = 0; i < scene.Length; i++)
+                {
+                    Renderer rd = scene[i];
+                    if (rd == null) continue;
+                    if (rd is ParticleSystemRenderer) continue;      // 粒子不要
+                    if (rd is LineRenderer) continue;                // 线不要
+                    bool isSelf = false;
+                    for (int k = 0; k < all.Length; k++)
+                        if (all[k] == rd) { isSelf = true; break; }
+                    if (isSelf) continue;                            // 自己的穹顶/雪盘不要
+                    list.Add(rd);
+                }
+                roofCandidates = list.ToArray();
+            }
+
+            if (roofCandidates == null || roofCandidates.Length == 0) return false;
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第十三次修：判据写反了，建筑包围盒的底面永远在脚底】
+            //
+            // 上一版的第一条要求是：
+            //     if (b.min.y < headY) continue;   // 底面必须高于头顶
+            // 这条把**所有建筑整体网格**都排除了。
+            //
+            // 实证（礼堂 Zal 那份日志）：
+            //     bounds c=(-49.16, 6.17, 25.94)  size=(12.36, 5.21, 28.28)
+            //     → min.y = 6.17 − 5.21/2 = 3.565
+            // 玩家根 Y = 3.59，headY = 4.09 → 3.565 < 4.09 → 被 continue 掉。
+            // 可是 3.565 与玩家几乎同高，说明这块网格是**从地面一直到屋顶**的
+            // 整体外壳（活动厅的整栋体块），它的"底面"是地板，不是屋檐。
+            // 用底面判"在头顶之上"，逻辑上就把整栋楼排除了。
+            //
+            // 正确判据：**顶面**在头顶之上即可（楼盖着头），
+            // 再要求玩家 XZ 在盒内（站在这栋楼的范围里）。
+            // 至于"楼有多高"不重要 —— 站在楼里就是站在楼里。
+            //
+            // 取 roofY 也要跟着改：不能再取 min.y（那是地板），
+            // 应当取 max.y（顶面）作为天花板高度。它可能偏高于真实屋架，
+            // 但下游只用它算剔除上界，偏大是安全方向（宁可多剔，不漏剔）。
+            // ══════════════════════════════════════════════════════════════
+            float headY = from.y + 0.5f;     // 头顶留 0.5m 余量
+            float roofTopLimit = from.y + 30f;
+
+            bool found = false;
+            float best = float.MaxValue;
+
+            for (int i = 0; i < roofCandidates.Length; i++)
+            {
+                Renderer rd = roofCandidates[i];
+                if (rd == null || !rd.enabled) continue;
+
+                Bounds b = rd.bounds;
+
+                // ① 顶面必须在头顶之上（否则这块网格盖不住我）
+                if (b.max.y <= headY) continue;
+
+                // ② 顶面不能太高 —— 天空穹顶/远景山体之类，排除
+                if (b.max.y > roofTopLimit) continue;
+
+                // ③ 玩家 XZ 落在包围盒内
+                if (from.x < b.min.x || from.x > b.max.x) continue;
+                if (from.z < b.min.z || from.z > b.max.z) continue;
+
+                // ④ 排除"薄片地面"：包围盒 Y 跨度太小且底面在脚下，
+                //    那是地板/铺装，不是屋顶。真实屋顶跨度不会低于 0.6m。
+                float ySpan = b.max.y - b.min.y;
+                if (ySpan < 0.6f && b.min.y <= from.y + 0.3f) continue;
+
+                // ⑤ 排除"整片场地外壳"：某些对象（Exterior / Terrain / 大包围盒）
+                //    的 XZ 跨度覆盖整个校园，站在室外也会被判成"被盖住"。
+                //    校园单体建筑最长边不超过 60m，取 80m 作上限。
+                //    这个阈值很粗，但足以滤掉 Terrain(整个场景) 与 Exterior(整片场地)。
+                float xSpan = b.max.x - b.min.x;
+                float zSpan = b.max.z - b.min.z;
+                if (xSpan > 80f || zSpan > 80f) continue;
+
+                if (b.max.y < best)
+                {
+                    best = b.max.y;
+                    roofY = b.max.y;
+                    roofName = rd.gameObject.name;
+                    found = true;
+                }
+            }
+
+            return found;
         }
 
         // =====================================================================
@@ -2121,28 +3088,162 @@ namespace SchoolTwin.Weather
                 // ══════════════════════════════════════════════════════════
                 bool prevBackfaces = Physics.queriesHitBackfaces;
                 Physics.queriesHitBackfaces = true;
-                bool hitUp = Physics.Raycast(new Ray(camPos, Vector3.up), out up, IndoorCeilHeight);
+                // 【P13-D9】射线起点从 camPos 改成**角色**位置。
+                //
+                // 为什么：第三人称相机吊在角色后上方 4~5m，从 camPos 往上打，
+                // 命中的可能是**斜后方的屋檐/外挑板/雨棚**，而不是头顶天花板。
+                // 站在二楼靠窗时尤其明显：相机在窗外上方，射线穿过玻璃打到外墙，
+                // 判定结果在"室内/室外"之间随视角翻转 → 积水层跟着一会开一会关。
+                //
+                // "我在不在室内"这件事，取决于**人站在哪**，不取决于镜头在哪。
+                // 有角色就用角色，没有（数字孪生自由相机）才退回收相机。
+                Vector3 ceilFrom = camPos;
+                Transform ceilPr = PlayerRoot();
+                if (ceilPr != null) ceilFrom = ceilPr.position;
+                ceilFrom += Vector3.up * 0.02f;   // 别正好贴在胶囊底面上
+
+                // ══════════════════════════════════════════════════════════════
+                // 【P13 修的真 bug：室内还是有雨雪粒子 —— 射线打到了玩家自己】
+                //
+                // 上一轮把起点从 camPos 改成角色位置（为了避开屋檐误判），
+                // 但**忘了相机原本在角色上方 4~5m、不会命中自己**，而角色位置
+                // 正好是 CharacterController 胶囊的底面（height 1.8 / center.y 0.9
+                // → 胶囊占 local y∈[0, 1.8]，射线起点就贴在 y=0 上）。
+                //
+                // 再加上这一行上面刚把 queriesHitBackfaces 打开（为了命中单层天花板），
+                // 从胶囊**内部**出发的射线会命中自己的**内壁**：
+                //
+                //     头顶射线 = TwinPlayer  0.18m  法线Y=-1.00
+                //     indoor   = False  / indoorFade = 1.000      ← 这才是病根
+                //
+                // 0.18m 那个距离就是胶囊底部的内表面。于是：
+                //   · `!IsPlayerCollider(up.collider)` 不成立 → indoor 恒 false
+                //   · shelter = indoorFade = 1 → 室内满速发射（rain=1 时 3200 粒/秒）
+                //   · 发射盒在「角色 xz + 室外地平面 + 16m」，也就是**楼顶之上**
+                //   · 粒子不参与碰撞 → 直接穿透楼板落进走廊
+                // 主理人看到的"室内有雨雪粒子"就是这么来的。
+                //
+                // ── 为什么改用 RaycastNonAlloc 而不是把起点抬高 ─────────────
+                // 抬高起点（+1.6m 眼高）也能避开自己，但会把 IndoorCeilHeight=4.6
+                // 的语义从"脚底到天花板"变成"眼高到天花板"，所有阈值都要重算，
+                // 而且矮空间（楼梯下、设备夹层）会漏判。
+                // 取全部命中再自己挑，语义完全不变，只多一次数组遍历（16 个槽位）。
+                // ══════════════════════════════════════════════════════════════
+                int nUp = Physics.RaycastNonAlloc(new Ray(ceilFrom, Vector3.up), ceilHits,
+                                                  IndoorCeilHeight,
+                                                  Physics.DefaultRaycastLayers,
+                                                  QueryTriggerInteraction.UseGlobal);
+
+                // 【P13 第十次修】近档（4.6m）没命中时，退到远档（12m）再找一次。
+                //
+                // 为什么这样不会误判室外：
+                //   室外头顶是天空，12m 内没有任何碰撞体 → 依然 nUp=0，不会误判。
+                //   站树下时树冠底面 2.2m 起，**近档就能命中**，走不到这里；
+                //   即便某些树冠更高、只在远档命中，法线判据 -0.92 也会把它滤掉。
+                // 为什么必须先查近档、再做远档：
+                //   若直接一次打到 12m，空旷处长廊（其实有顶但顶在 3.3m）
+                //   依然取最近命中，结果不变；但如果头顶先有横梁(2m)、再是屋顶(8m)，
+                //   一次查询取最近仍得 2m，也没问题。真正的差别在于**避免
+                //   把"外面 6m 处的树冠"当成立即命中** —— 分档保留了"近的一定优先"。
+                if (nUp == 0)
+                {
+                    nUp = Physics.RaycastNonAlloc(new Ray(ceilFrom, Vector3.up), ceilHits,
+                                                  IndoorCeilHeightTall,
+                                                  Physics.DefaultRaycastLayers,
+                                                  QueryTriggerInteraction.UseGlobal);
+                    ceilTallFallback = nUp > 0;   // 记录"是靠远档才找到的"，供自检判读
+                }
+                else ceilTallFallback = false;
+
                 Physics.queriesHitBackfaces = prevBackfaces;
+
+                // 在所有命中里挑「最近的、不是玩家自己」的那一个。
+                // NonAlloc 的返回顺序不保证按距离排序，必须自己比。
+                //
+                // layerMask 用 Physics.DefaultRaycastLayers 而不是 ~0：与原来那行
+                // `Physics.Raycast(ray, out up, dist)` 的默认行为保持一致
+                // （默认就是 DefaultRaycastLayers = 除 IgnoreRaycast 外的全部层）。
+                // 写 ~0 会把 Ignore Raycast 层也拉进来，那些辅助碰撞体一旦出现在
+                // 角色头顶，就会把它误判成天花板。
+                bool hitUp = false;
+                up = default(RaycastHit);
+                float bestDist = float.MaxValue;      // 非玩家命中的最近距离
+                float selfDist = float.MaxValue;      // 玩家自命中的最近距离（只给自检用）
+                ceilFromY = ceilFrom.y;
+                ceilSelfHit = false;
+                for (int i = 0; i < nUp; i++)
+                {
+                    RaycastHit h = ceilHits[i];
+                    if (h.collider == null) continue;
+
+                    // ⚠️ 自命中的距离**不能**写进 bestDist —— 否则 0.18m 的自命中
+                    // 会把后面 4m 处的真天花板挤掉（`h.distance >= bestDist` 恒成立），
+                    // indoor 还是 false，等于没修。两个距离必须分开记。
+                    if (IsPlayerCollider(h.collider))
+                    {
+                        if (h.distance < selfDist) selfDist = h.distance;
+                        continue;   // 跳过玩家自己的胶囊/模型
+                    }
+
+                    if (h.distance <= 0.02f) continue;
+                    if (h.distance >= bestDist) continue;
+                    bestDist = h.distance;
+                    up = h;
+                    hitUp = true;
+                }
+                ceilSelfHit = selfDist < float.MaxValue;
 
                 if (hitUp)
                 {
                     ceilDist = up.distance;
                     ceilNormalY = up.normal.y;
                     ceilName = up.collider != null ? up.collider.name : "?";
+                    // 【P13】把命中的 collider 直接留一份，供屋顶可见性诊断用。
+                    // 之前诊断代码靠 `GameObject.FindObjectsOfType` 按名字反查，
+                    // 351 个对象每次自检扫一遍，既慢又可能撞上重名。
+                    ceilCollider = up.collider;
                 }
                 else
                 {
                     ceilDist = -1f;
                     ceilNormalY = 0f;
                     ceilName = "";
+                    ceilCollider = null;
                 }
 
-                if (hitUp
-                    && up.distance > 0.3f                       // 排除"射线从自己胶囊里起步"
-                    && !IsPlayerCollider(up.collider)           // 跳过玩家自己
-                    && up.normal.y <= IndoorCeilNormalY)        // 必须是被"下表面"挡住
+                if (hitUp && up.normal.y <= IndoorCeilNormalY)   // 必须是被"下表面"挡住
                 {
                     indoor = true;
+                    // ⚠️ 必须在这里也清掉：否则上一次"靠渲染兜底"的值会残留，
+                    // 自检会在一栋有碰撞体屋顶的楼里打出"靠渲染网格兜底"的假标记。
+                    ceilByRenderer = false;
+                }
+                else
+                {
+                    // ══════════════════════════════════════════════════════
+                    // 【P13 第十二次修】没有天花板碰撞体的场馆，用渲染网格兜底。
+                    //
+                    // ── 为什么射线这条路走不通 ──────────────────────────────
+                    // 主理人 2026-11-05 实测（篮球场）：
+                    //     头顶射线 = **什么都没打到**
+                    // 这两个场馆的屋顶只有渲染网格，Collider 一个都没给，
+                    // 射线再怎么放远都没用，必须换数据源。
+                    //
+                    // ⚠️ 注意进到这里的**不只是**"完全没命中"这一种。
+                    // 射线命中了但法线不符（比如打到横梁侧面、门框）也会走到这里，
+                    // 那种情况同样需要兜底 —— 所以本分支不区分，一律试一次。
+                    // ══════════════════════════════════════════════════════
+                    if (IndoorByRendererRoof(ceilFrom, out float roofY, out string roofName))
+                    {
+                        indoor = true;
+                        // 用射线口径统一：ceilDist 是从"脚底起点"到屋顶的距离
+                        ceilDist = Mathf.Max(0.1f, roofY - ceilFrom.y);
+                        ceilNormalY = -1f;          // 视为水平屋顶
+                        ceilName = roofName + "（渲染网格兜底）";
+                        ceilCollider = null;
+                        ceilByRenderer = true;
+                    }
+                    else ceilByRenderer = false;
                 }
             }
 
@@ -2188,13 +3289,73 @@ namespace SchoolTwin.Weather
             if (!outdoorGroundValid) outdoorGroundY = groundY;
 
             if (splashRoot != null)
-                splashRoot.position = new Vector3(camPos.x, groundY + 0.03f, camPos.z);
+                splashRoot.position = new Vector3(anchorSrc.x, groundY + 0.03f, anchorSrc.z);
             // 雪盘用**世界锚点 + 室外地平面**，不用相机位置与 groundY
             if (snowGround != null)
                 snowGround.position = new Vector3(snowAnchor.x, outdoorGroundY + 0.02f, snowAnchor.z);
             if (snowGroundFar != null)
                 snowGroundFar.position = new Vector3(snowAnchor.x, outdoorGroundY + 0.02f, snowAnchor.z);
-            if (wet != null) wet.Follow(camPos, groundY);
+
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13-D9】积水层跟随基准：相机 → **角色**（这一条是"水坑随视角
+            //           漂移、转视角扫进室内地板"的直接根因）
+            //
+            // ── 原实现错在哪 ────────────────────────────────────────────
+            //     wet.Follow(camPos, groundY);
+            // 第三人称相机绕角色做 orbital 旋转，camPos 在半径 4~5m 的圆弧上跑。
+            // 积水面是 40m 见方**无条件跟随** camPos 的水平面 —— 镜头一摆，
+            // 整片水面就横着扫过去，玩家看到的是"水坑黏在镜头前面滑"。
+            //
+            // ── 更糟的一层：二楼会把水面铺进教室 ─────────────────────────
+            // 第二个参数 groundY 来自 ProbeGround(camPos)，即"相机正下方第一个面"。
+            // 站在二楼时它就等于**二楼楼板高度**，于是 40m 的积水面被整块抬到
+            // 二楼、铺在室内木地板上 → 主理人截图里"木地板全变成黑色水面"。
+            // 这不是水坑跑进室内，是**水面本来就被放到了二楼地板的标高上**。
+            //
+            // ── 为什么改成角色 + 室外地平面（缺一不可）──────────────────
+            //   · 位置 xz 用角色：转身不动，只有真正走路才移动。这是"跟脚不跟镜头"。
+            //   · 高度用 outdoorGroundY：**室外地平面**，与积雪盘同一套口径。
+            //     它由 ProbeOutdoorGround 采到，与相机在第几层楼无关，
+            //     所以站在二楼时水面仍留在一楼室外地面，不会飘进教室。
+            //
+            // ── 为什么不再需要"室内就关掉"来救场 ─────────────────────────
+            // Apply() 里本来就有 indoorFade 把 alpha 压到 0（室内不显示）。
+            // 但它只能治"看得见"，治不了"位置错"：进场那 0.33 秒的淡出过程中，
+            // 水面已经在正确/错误的位置之间滑过一次了。位置对了，淡出才只是淡出。
+            // ══════════════════════════════════════════════════════════════════
+            if (wet != null) wet.Follow(new Vector3(anchorSrc.x, 0f, anchorSrc.z), outdoorGroundY);
+
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13-D9】雨雪粒子发射盒：从"跟相机"改成"跟角色 + 室外地平面"
+            //
+            // ── 为什么二楼看不到雨（主理人实测现象之一）──────────────────
+            // 发射器是**本组件的子物体**（localPosition.y = +EmitHeight = 16），
+            // 而本组件 LateUpdate 每帧 transform.position = cam.position。
+            // 于是在二楼房间里，发射盒中心在**相机正上方 16m** ——
+            // 那已经在二楼天花板（层高 3.3~4.5m）**之上**，粒子生成在楼板上方，
+            // 被楼板完全挡住，人站在二楼自然一滴雨都看不见。
+            // 同理，"站着不动只转眼"时发射盒也会随 camPos 在圆弧上平移，
+            // 雨丝整体跟着镜头横移，也是"雨随视角变"的来源之一。
+            //
+            // ── 为什么改成"角色 xz + 室外地平面 y" ──────────────────────
+            //   · xz 锚角色：转身不动，只随真实行走移动 → 雨不再跟镜头平移。
+            //   · y 用 outdoorGroundY + EmitHeight：**室外地面**为基，
+            //     与相机在第几层楼无关 → 二楼时发射盒仍悬在一楼室外上方，
+            //     雨从楼外落下，从窗户望出去能看到正在下雨（这才是真实观感：
+            //     二楼窗外的雨就该在窗外，不该在屋里）。
+            //
+            // ── 为什么室内要 SetActive(false) 而不是只靠 lifetime ────────
+            // 发射盒在楼外时，它的水平范围（110m）会覆盖到室内**头顶高度附近**，
+            // 部分粒子可能从窗口飘进来。所以沿用原本的 indoor 开关：
+            // 室内不发射。室内"看得到雨"这件事靠的是**窗外那部分粒子**，
+            // 而窗外的粒子不在室内，不受 indoor 开关影响 —— 这正是要的效果。
+            // ══════════════════════════════════════════════════════════════════
+            if (rainPs != null || snowPs != null)
+            {
+                Vector3 emitPos = new Vector3(anchorSrc.x, outdoorGroundY + EmitHeight, anchorSrc.z);
+                if (rainPs != null) rainPs.transform.position = emitPos;
+                if (snowPs != null) snowPs.transform.position = emitPos;
+            }
 
             // 积雪地形跟随：让雪盖住抬高的花坛/台阶，而不是浮在半空露出硬边。
             // 只在相机挪动超过阈值时才重打一遍射线，省开销。
@@ -2711,6 +3872,12 @@ namespace SchoolTwin.Weather
 // 于是雪面在那儿塌下去一块。扩容成本只有一个 32 元素的栈上数组。
         private readonly RaycastHit[] groundHits = new RaycastHit[32];
 
+        // 【P13】头顶射线的命中缓冲。16 个槽位：室内向上 4.6m 内通常只会命中
+        // 天花板 + 一两根管线/吊灯，但角色自己的胶囊内外壁就可能吃掉 2~3 个槽位
+        // （从内部出发 + queriesHitBackfaces=true → 进出两面都会被记一次），
+        // 给足余量，宁可多一个 16 元素的栈上数组，也不要让真天花板被挤掉。
+        private readonly RaycastHit[] ceilHits = new RaycastHit[16];
+
         /// <summary>
         /// 按相机高度调整粒子范围与强度。
         ///  · 地面视角（第一人称）→ 雨雪全开，发射盒覆盖平视视野；
@@ -2727,7 +3894,19 @@ namespace SchoolTwin.Weather
             if (Mathf.Abs(wantArea - lastArea) > 1.5f)
             {
                 lastArea = wantArea;
-                var v = new Vector3(wantArea, 0.5f, wantArea);
+                // ══════════════════════════════════════════════════════════
+                // 【P13】⚠️ 这里是"改了一处、被另一处覆盖回去"的经典现场。
+                //
+                // BuildRain / BuildSnow 里刚把粗薄轴从局部 Y 改到局部 Z
+                // （(Area, Area, 0.5)），但**本方法每帧都会重设 shape.scale**，
+                // 只改 Build 那边等于没改 —— 第一帧就被这里覆盖回
+                // (Area, 0.5, Area)，发射盒照旧是那堵 110m×110m 的竖墙。
+                //
+                // 任何"形状/尺寸"类的常量，只要在 Build 里设一次、又在
+                // Update* 里周期刷新，**两处必须同值且同轴向**。
+                // 判据：grep 一下 `shape.scale` 有几处赋值。
+                // ══════════════════════════════════════════════════════════
+                var v = new Vector3(wantArea, wantArea, 0.5f);   // 薄轴 = 局部 Z = 世界 Y
                 if (rainPs != null) { var s = rainPs.shape; s.scale = v; }
                 if (snowPs != null) { var s = snowPs.shape; s.scale = v; }
             }

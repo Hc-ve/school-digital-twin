@@ -15,7 +15,7 @@ namespace SchoolTwin.UI
     /// ```
     ///  y=104  [设备总数 153][在线 151][告警 2]      分区 B 概览 88 高
     ///  y=214  功能入口 ─────────────────────────
-    ///  y=232  [校园管理系统][天气 预留]              分区 C 主内容 104 高
+    ///  y=232  [校园管理系统][天气 时间·天气]              分区 C 主内容 104 高
     ///  y=372  实时动态            近 1 小时 N 条
     ///  y=392  ● 命令/告警 4 行 × 52                 分区 D 明细流
     /// ```
@@ -172,12 +172,44 @@ namespace SchoolTwin.UI
             _mainEntry = BuildEntry(root, "Entry_System", x0, true, "管", "校园管理系统", "5 个模块",
                 () => { Action a = OnOpenSystem; if (a != null) a(); });
 
-            _subEntry = BuildEntry(root, "Entry_Weather", x0 + EntryW + EntryGap, false, "天", "天气系统", "预留",
-                () => TwinToast.Show("天气系统要和「时间系统」一起做，本轮只留入口"));
+            // ══════════════════════════════════════════════════════════════════
+            // 【P13-D10】天气入口从「灰色预留」点亮（裁决 C-54）
+            //
+            // 改了三处，缺一不可：
+            //   ① primary: false → true —— 决定配色。false 走 Hover 灰底 + TextMuted 灰字，
+            //      视觉上就是"点不动的死按钮"；true 走 EntryFill + Accent 高亮。
+            //   ② sub: "预留" → "时间·天气" —— 禁止项明确要求不留任何「预留」字样。
+            //      换成实际功能描述，让用户知道点进去能干什么。
+            //   ③ onClick: 过时 toast → 真正的 ShowTimeWeatherCard()
+            //
+            // 为什么行为要与工具行**完全一致**：同一件事只能有一个出口（本项目
+            // 反复踩过的教训）。入口只负责"打开那张卡"，不自己建卡、不自己管状态，
+            // 否则就会出现两张卡互相不知道对方存在。
+            //
+            // ⚠️ 这里只保留 primary=true 的**点亮**语义，不套用整屏唯一的发光焦点
+            //    （双层描边 + 角括号）—— 那一份是"校园管理系统"独占的视觉层级，
+            //    两个入口都发光就没有焦点了。所以下面 BuildEntry 里 primary 同时
+            //    承担"点亮"和"发光焦点"两件事，这里需要一个额外开关来区分。
+            // ══════════════════════════════════════════════════════════════════
+            _subEntry = BuildEntry(root, "Entry_Weather", x0 + EntryW + EntryGap, true, "天", "天气系统", "时间·天气",
+                () => TwinDrawer.ShowTimeWeatherCardStatic(), litOnly: true);
         }
 
+        /// <param name="onClick">点击行为。为 null 时不绑定（保持可点但无反应，用于占位）。</param>
+        /// <param name="litOnly">
+        /// 【P13-D10】true = 只点亮配色，**不**套用整屏唯一的发光焦点
+        /// （双层描边 + 角括号）。
+        ///
+        /// 为什么需要这个参数：本方法里 `primary` 原来同时承担两件事 ——
+        /// ① 配色（EntryFill 高亮 vs Hover 灰）
+        /// ② 发光焦点（DoubleStroke + CornerBrackets，全屏唯一）
+        /// 点亮天气入口时只需要 ①，不需要 ②：两个入口都发光，就没有"焦点"了，
+        /// 那份视觉层级是「校园管理系统」独占的（规格 §7 一屏一焦点）。
+        /// 直接传 primary=true 会连带把角括号和双描边一起画出来，故拆出本参数。
+        /// </param>
         private EntryTile BuildEntry(RectTransform parent, string name, float x, bool primary,
-                                     string glyph, string title, string sub, Action onClick)
+                                     string glyph, string title, string sub, Action onClick,
+                                     bool litOnly = false)
         {
             GameObject go = TwinUIFactory.Node(name, parent);
             RectTransform rt = (RectTransform)go.transform;
@@ -222,23 +254,28 @@ namespace SchoolTwin.UI
 
             if (primary)
             {
-                // 双层描边（外 3px@Δ5.6 + 内 1px@Δ75.8）—— 这是全屏唯一的发光焦点，见 ApplyFocus()
-                TwinPaint.DoubleStroke(rt, TwinTheme.R12, TwinTheme.GlowOuter, 3f, TwinTheme.GlowInner);
-
-                // 左上角括号：CornerBrackets 会画四角，这里把另外三面关掉，只留 TL 记号
-                TwinPaint.CornerBrackets(rt, 10f, TwinTheme.GlowInner, 6f);
-                Transform brackets = rt.Find("_Brackets");
-                if (brackets != null)
+                // 【P13-D10】litOnly=true 时跳过整屏唯一的发光焦点（理由见参数注释）。
+                // 只有「校园管理系统」那个主入口才画双层描边 + 角括号。
+                if (!litOnly)
                 {
-                    for (int i = 0; i < brackets.childCount; i++)
-                    {
-                        Transform seg = brackets.GetChild(i);
-                        if (!seg.name.StartsWith("TL", StringComparison.Ordinal)) seg.gameObject.SetActive(false);
-                    }
-                }
+                    // 双层描边（外 3px@Δ5.6 + 内 1px@Δ75.8）—— 这是全屏唯一的发光焦点，见 ApplyFocus()
+                    TwinPaint.DoubleStroke(rt, TwinTheme.R12, TwinTheme.GlowOuter, 3f, TwinTheme.GlowInner);
 
-                tile.GlowOuter = rt.Find("_GlowOuter") != null ? rt.Find("_GlowOuter").gameObject : null;
-                tile.GlowInner = rt.Find("_GlowInner") != null ? rt.Find("_GlowInner").gameObject : null;
+                    // 左上角括号：CornerBrackets 会画四角，这里把另外三面关掉，只留 TL 记号
+                    TwinPaint.CornerBrackets(rt, 10f, TwinTheme.GlowInner, 6f);
+                    Transform brackets = rt.Find("_Brackets");
+                    if (brackets != null)
+                    {
+                        for (int i = 0; i < brackets.childCount; i++)
+                        {
+                            Transform seg = brackets.GetChild(i);
+                            if (!seg.name.StartsWith("TL", StringComparison.Ordinal)) seg.gameObject.SetActive(false);
+                        }
+                    }
+
+                    tile.GlowOuter = rt.Find("_GlowOuter") != null ? rt.Find("_GlowOuter").gameObject : null;
+                    tile.GlowInner = rt.Find("_GlowInner") != null ? rt.Find("_GlowInner").gameObject : null;
+                }
             }
 
             return tile;

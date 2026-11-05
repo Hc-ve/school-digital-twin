@@ -30,7 +30,6 @@ namespace SchoolTwin.Weather
         private bool built;
 
         private float wetness;      // 0~1，湿滑度累积量
-        private float indoorFade = 1f;
         private bool on;
 
         private static readonly int IdWetness = Shader.PropertyToID("_Wetness");
@@ -143,7 +142,29 @@ namespace SchoolTwin.Weather
             // 原点是 UV 的锚，它一动，图案就跟着平面滑走了。**
         }
 
+        // ══════════════════════════════════════════════════════════════════
+        // 【P13】只读诊断出口。
+        //
+        // 为什么必须加：诊断工具原来用 `GetComponentInChildren<Renderer>()` 反查
+        // 平面，但 WetGround 是挂在 WeatherVisuals 上的组件，
+        // 它的 GetComponentInChildren 会先扫到**同一个 GameObject 上的兄弟组件**
+        // 建出来的 CloudDome（云穹顶，位置恒等于相机位置）。
+        //
+        // 于是自检一直打「积水层 worldY = 1.73 ⚠️与相机同高 → 已铺到当前楼层」——
+        // 这个数字是云穹顶的，积水层其实好端端贴在室外地面 -0.485。
+        // 一条假警报把排查带偏了整整一轮，所以直接把真值暴露出来。
+        // ══════════════════════════════════════════════════════════════════
+        public bool IsBuilt { get { return plane != null && mat != null; } }
+        public bool IsVisibleNow { get { return on; } }
+        public float PlaneWorldY { get { return plane != null ? plane.position.y : float.NaN; } }
+        public float WetnessNow { get { return wetness; } }
+        public float AlphaInMat { get { return mat != null ? mat.GetFloat(IdWetness) : -1f; } }
+
         /// <summary>每帧由 WeatherVisuals 调用。</summary>
+        /// <param name="indoor">
+        /// 玩家此刻是否在遮挡下。**只用于水花以外的观感微调，不参与可见性开关** ——
+        /// 理由见下面那段长注释。保留这个参数是为了以后要调"室内看到的积水更暗一点"时有入口。
+        /// </param>
         public void Apply(float rain, float dt, Color sky, Color horizon, bool indoor)
         {
             if (mat == null || plane == null) return;
@@ -156,10 +177,35 @@ namespace SchoolTwin.Weather
             else
                 wetness = Mathf.MoveTowards(wetness, 0f, dt / DryInSeconds);
 
-            // ---- 室内外过渡 ----
-            indoorFade = Mathf.MoveTowards(indoorFade, indoor ? 0f : 1f, dt * 3f);
-
-            float a = wetness * indoorFade;
+            // ══════════════════════════════════════════════════════════════
+            // 【P13 第三次修：可见性不再跟室内状态走】
+            //
+            // 原实现：`float a = wetness * indoorFade;`（indoorFade 室内 → 0）
+            // 于是进屋 → 整片 40m 水面 alpha 归零 → **窗外的水坑也没了**。
+            // 主理人本轮报的"下雨天在室内看窗外看不到水坑的变化，出来室内就能看到"
+            // 就是这个，和地面雪当年那个 bug 一模一样。
+            //
+            // ── 关键前提（这才是敢直接去掉 indoorFade 的依据）────────────
+            // 平面位置由 WeatherVisuals 给的 **outdoorGroundY**（室外地平面）决定，
+            // 不是 groundY（相机脚下那层楼板）。实测：
+            //     室外地面 Y = -0.50     室内 1F 地板 groundY = 0.00
+            //     → 水面在 -0.485，比室内地板**低 48cm**
+            // 所以水面永远在室内地板以下，深度测试会自己把它挡住。
+            // 站二楼时更高，更不可能露出来。
+            //
+            // 换句话说：**室内看不见积水，本来就该由遮挡负责，不该由我们主动关。**
+            // 主动关的直接后果就是"从窗户望出去，外面也是干的" —— 那才是穿帮。
+            //
+            // ── 什么时候仍然需要关 ────────────────────────────────────────
+            // 只有"雨停了 + 水面干透"（wetness → 0）。那时 alpha 自然到 0，
+            // 由下面那行 `want = a > 0.01f` 收掉，不浪费一次 draw call。
+            //
+            // ── 历史教训别再犯 ────────────────────────────────────────────
+            // 早先确实出现过"木地板全变黑水面"，但根因是**位置**用错了 groundY
+            // （站二楼 → 水面被铺到二楼楼板标高），不是"没跟 indoorFade 关"。
+            // 位置对了以后，indoorFade 这层保险就成了纯副作用。
+            // ══════════════════════════════════════════════════════════════
+            float a = wetness;
             bool want = a > 0.01f;
             if (want != on)
             {
