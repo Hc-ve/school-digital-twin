@@ -620,3 +620,50 @@ P13-50 | 【同型病】抽屉兜底必须走 Ensure，不许自己 new（删掉
 P13-51 | 【同型病】WeatherPanel 同样不许自建 EnvironmentState | grep0:Assets/_Project/Scripts/Weather/WeatherPanel.cs:new GameObject\("EnvironmentState"\)
 P13-52 | 【同型病】数据侧默认 Cloudy、视觉侧默认 Clear，自举时必须对齐（否则天上大太阳、室温按多云算） | grep:1:Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs:TwinWeatherBridge\.ApplyWeather\(env\.weather\);
 P13-53 | 【禁令】不许用 Editor 菜单往场景挂天气组件（P13 任务包明令禁止手动摆物件） | grep0:Assets/_Project/Editor/TwinP13WeatherSetup.cs:AddComponent<EnvironmentState>
+P13-54 | 【Bug3】屋顶积雪壳必须逐三角形筛选（建筑整栋一个 mesh，屋顶和墙同 mesh，只能按面判朝向） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:Vector3\.Cross\(w1 - w0, w2 - w0\)
+P13-55 | 【Bug3】朝上判据必须用顶点法线平均（叉积方向由绕序决定，第三方模型绕序不一定统一） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:tr\.TransformDirection\(mn\[i0\]\)
+P13-56 | 【Bug3】屋顶雪壳必须钉世界原点并脱离跟随相机的父节点（白线 bug 同型病） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:transform\.SetParent\(null, true\);
+P13-57 | 【Bug3】挂载判存在必须全场景查找（脱离层级后 GetComponentInChildren 会漏判 → 重复创建） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:Object\.FindObjectOfType<SnowOnRoofs>\(true\)
+P13-58 | 【Bug3】必须跳过已用积雪着色器的几何（否则地面雪盘被收进雪壳 → 白度翻倍） | grep+:2:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:CampusUI/SnowGround"\)
+P13-59 | 【Bug3】雪壳必须设 _MaskOff=1（_SnowTex 是 Clamp 遮罩，世界 UV 超出后被钳到 alpha=0 边缘 → 整片 discard） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.SetFloat\(IdMaskOff, 1f\);
+P13-60 | 【Bug3】雪壳剔除模式必须跟原屋顶一致（Cull Off 会从室内天花板露白） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.SetFloat\(IdCullProp, 2f\);
+P13-61 | 【Shader】屋顶模式下覆盖率不采 _SnowTex alpha | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:float cov = roofMode \? 1\.0 : sn\.a;
+P13-62 | 【Shader】Cull 必须由属性驱动（默认 0=Off 保持地面雪盘原行为） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:Cull \[_Cull\]
+P13-63 | 【Shader】屋顶模式厚薄/微法线改从可平铺 _DetailTex 取（sn.r 被 Clamp 后是常数，梯度恒 0） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:float thickSrc = roofMode
+P13-64 | 【Bug3】雪壳顶点法线一律给 up（坡屋顶用原法线会偏灰） | grep+:3:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:norms\.Add\(Vector3\.up\);
+P13-65 | 【Bug3】索引必须 UInt32（顶点可超 65535） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMesh\.indexFormat = IndexFormat\.UInt32;
+P13-66 | 【Bug3】雪壳 renderQueue 2997（排在近场 2996 / 远场 2995 之上） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.renderQueue = 2997;
+P13-67 | 【事故】雪壳营锥不得被调用（注释行不算命中，2026-11-05 幕布发黑/浮空/脚印/无雪四路连带） | grep0:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:^\s*EnsureRoofSnow\(\);
+P13-68 | 【事故】SnowOnRoofs 必须有事故保险开关（即使被别处 AddComponent 也不 Build） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:DISABLED_BY_INCIDENT_20261105 = true;
+P13-69 | 【事故】事故保险必须在 Start 里生效并早退 | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:if \(DISABLED_BY_INCIDENT_20261105\)
+P13-70 | 【回归】摘雪壳后 Bug2 观景水坑必须仍在（不许顺手回滚） | grep+:2:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:IsFreeCamMode
+P13-71 | 【回归】摘雪壳后 Bug1 室内剔除必须仍在 | grep+:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:cullTopY
+P13-72 | 【Shader】_Cull 默认值必须是 0（否则地面雪盘/树根雪堆变单面） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:_Cull       \("Cull Mode", Float\) = 0
+P26-01 | 【泄漏】TwinDevicePresenter.OnDestroy 必须释放每个 ScreenVisual 的 Player（不释放则跨 Play 累积解码器，第 3 次起永久黑屏） | grep+:1:Assets/_Project/Scripts/Present/TwinDevicePresenter.cs:kv\.Value\.Player\.Destroy\(\);
+P26-02 | 【泄漏】机房独立播放器必须单独释放（它不在 _screens/_projectors 集合里，最容易漏） | grep:1:Assets/_Project/Scripts/Present/TwinDevicePresenter.cs:_roomPlayer\.Destroy\(\);
+P26-03 | 【泄漏】PcScreenPlayer.Destroy 必须先解绑 prepareCompleted（订阅持有委托会吊住实例） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.prepareCompleted -= OnPreparedPlay;
+P26-04 | 【泄漏】PcScreenPlayer.Destroy 必须销毁 _go（VideoPlayer/AudioSource 挂在上面，不销毁解码器不释放） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:if \(_go != null\)
+P26-05 | 【泄漏】PcScreenPlayer.Destroy 必须把 _player 置 null（非 MonoBehaviour 不会变成伪 null，后续判空会误通过） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player = null;
+P26-06 | 【刷屏】Prepare 重试必须有上限（无上限时失败会 3 秒一条无限刷，实测 255 条埋掉真错误） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_prepareRetries >= MaxPrepareRetries
+P26-07 | 【诊断】必须订阅 VideoPlayer.errorReceived（否则解码失败完全静默，三种原因表现一模一样） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.errorReceived \+= p\.OnVideoError;
+P26-08 | 【诊断】DebugState 必须暴露重试次数与放弃标志（否则分不清"没播"和"解码器死了"） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:retry=" \+ _prepareRetries
+P28-01 | 【容量】PrintMax 必须 ≥ 128（32 槽 ×0.36m 只有 11.5m，走 5 秒就覆盖最早的印子 → 走远回头看全没了） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:private const int PrintMax = 128;
+P28-02 | 【自洽】寿命与容量必须同量级（PrintLife 240s 配 32 槽是矛盾参数：寿命根本轮不到生效） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:private const float PrintLifeSec = 90f;
+P28-03 | 【同型病】C# 的 PrintMax 与 shader 的 PRINT_MAX 必须相等（不等则数组长度被静默截断或越界读取） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:#define PRINT_MAX 128
+P28-04 | 【禁令】不许为修'走远看不见'而搬动历史脚印（雪盘顶点也是世界坐标，搬了反而让脚印黏着角色滑） | grep0:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:ShiftPrints\(
+P28-05 | 【性能】FootprintAt 必须先做包围盒剔除再进循环（128 槽 × 全屏像素会掉帧） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:_PrintBounds\.x > _PrintBounds\.z
+P28-06 | 【回归】空盒判据只能判 min>max，不许把 min==max 当空盒（单脚印时包围盒恰好退化，会剔掉第一个印子） | grep0:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:_PrintBounds\.x == _PrintBounds\.z
+P28-07 | 【泄漏】EmitPrint 落印后必须重算包围盒（不重算则新脚印落在盒外被剔除 → 走一步不出现） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:UpdatePrintBounds\(\);
+P28-08 | 【幽灵足迹】ResetPrints 必须真的清空 prints[] 数组（只把 _PrintCount 置 0，旧坐标会在下次落印时整体复活） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:prints\[i\] = Vector4\.zero;
+P28-09 | 【回归】遮罩默认值必须留在 Properties（材质重建后靠它兜底，不能只靠 SetVector） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:_PrintBounds\("Footprint Bounds", Vector\)
+P28-10 | 【回归】脚印半径/寿命仍只在重新开雪时写一次（每帧写会覆盖材质实例，导致多份雪盘共享时互相踩） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:snowGroundMat\.SetFloat\(IdPrintLife, PrintLifeSec\);
+P30-01 | 【假日志】创建时的日志不许写「就绪」——它在 Prepare() 后立刻执行，此时一帧都没解出来；真就绪只可能在 OnPreparedPlay 里 | grep0:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:屏幕视频就绪
+P30-02 | 【假日志】必须改成「已请求准备（不是就绪）」，并带上会话累计（这行曾让我误判前9次Play正常） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:已请求准备（不是就绪）
+P30-03 | 【根因】超时后必须换 VideoPlayer 实例，不能原地再 Prepare（已死的解码会话不会回话，重试对象本身是坏的） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:if \(RebuildPlayer\(\)\) return;
+P30-04 | 【根因】RebuildPlayer 必须真的 DestroyImmediate 旧组件（延迟 Destroy 会导致同帧两个组件并存） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:DestroyImmediate\(_player\)
+P30-05 | 【根因】重建必须重建 AudioSource（旧的绑在旧音频轨上，留着会变成有画面没声音） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:DestroyImmediate\(_audioSrc\)
+P30-06 | 【根因】重建必须有次数上限（否则"重建→失败→重建"变成新的死循环） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:if \(_rebuildCount >= MaxRebuilds\) return false;
+P30-07 | 【诊断】会话累计必须存 EditorPrefs（域重载开着，static 变量每次 Play 清零，数不到跨 Play 累计） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:EditorPrefs\.SetInt\(PrefPrepare
+P30-08 | 【诊断】必须能一键清零累计（复验"从零开始能跑多久"） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:public static void ResetSessionCounters\(\)
+P30-09 | 【泄漏】Destroy 必须解绑 errorReceived（与 prepareCompleted 同理，订阅会吊住实例） | grep+:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.errorReceived -= OnVideoError;
+P30-10 | 【禁令】重建时只换组件、必须复用原来那张 videoRT（RT 已被材质与18台座位引用，换掉是另一场事故） | grep:1:Assets/_Project/Scripts/Present/PcScreenPlayer.cs:_player\.targetTexture = _videoRT;

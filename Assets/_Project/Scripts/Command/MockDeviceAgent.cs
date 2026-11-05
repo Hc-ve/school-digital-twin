@@ -187,6 +187,13 @@ namespace SchoolTwin.Command
             // 点开机后命令中心回读对不上，判 Failed（设备状态与期望不一致）。
             SeedSeatAnchors(ref seeded, ref unresolved);
 
+            // 【P28 2026-11-05】机房演示起始态：全部关闭。
+            //
+            // **必须在上面所有播种之后** —— 它是一次"覆盖"，不是"补充"。
+            // 放在前面会被 `SeedOne` 的 Light 分支（42W，灯亮着）重新点亮，
+            // 表现为"改了没生效"。这一条是我按顺序摆放时唯一需要小心的地方。
+            SeedDemoRoomOff(ref seeded);
+
             Debug.Log("[TwinCmd] 已给 " + seeded + " 台受控设备定下初始状态（白名单共 " +
                       ids.Count + " 个点位，另有 " + SeedOnlyIds.Length + " 个只定状态不开放控制）。" +
                       "状态由设备代理负责，模拟波形不再改它。");
@@ -377,6 +384,111 @@ namespace SchoolTwin.Command
                 if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
                 if (!a.TwinId.StartsWith("ClassComputer/PC/Seat_", StringComparison.Ordinal)) continue;
                 SeedOne(a.TwinId, ref seeded, ref unresolved);
+            }
+        }
+
+        // =====================================================================
+        // 【P28 2026-11-05】机房「演示起始态」= 全部关闭
+        // =====================================================================
+
+        /// <summary>机房整间的分区名。所有演示点位都以它开头。</summary>
+        private const string DemoRoomZone = "ClassComputer";
+
+        /// <summary>
+        /// 现场演示要求：**进 Play 后机房里所有设备都是关的**，
+        /// 让演示者能按「开灯 → 开主脑 → 联动开机 → 投影」的顺序一步步点。
+        ///
+        /// ── 为什么单靠 `SeedOne` 不够 ────────────────────────────────────
+        /// `SeedOne` 播的是「**每类设备的合理静止态**」，不是「演示需要的样子」：
+        ///   · `Light`  → 42W（机房档位），灯是**亮着**的
+        ///   · `AC`     → 1.2kW + 26°C，空调**开着**
+        ///   · `Door`   → `Open=1`，门是开的（模型本来就是半开姿态）
+        /// 这三类在出厂语义上都"对"，但对着演示脚本就是错的 ——
+        /// 演示第一步是"关灯"，可灯本来就关着，这一下点下去什么都不会发生。
+        ///
+        /// ── 为什么只动机房，不动全校 ──────────────────────────────────────
+        /// 主理人的原话是「机房所有设备」。其他房间保持各自的合理静止态
+        /// （教室灯亮着才像上课），只有机房要清成一片黑，形成对比。
+        ///
+        /// ── 为什么门不动 ──────────────────────────────────────────────────
+        /// 机房那扇门的**模型本来就是半开姿态**（`Door07a`），
+        /// 播「关」会让卡片写"关闭"而画面里门开着，是 P17 踩过的老坑
+        /// （见 `DoorsClosedByDefault` 的注释）。演示也不含开关门，保持原样。
+        ///
+        /// ── 覆盖范围（一个都不能漏）───────────────────────────────────────
+        ///   · 照明 `ClassComputer/Light/Main_01`          → Power=0, Brightness=0
+        ///   · 主脑 `ClassComputer/PC/Master_01`            → Power=0, OnCount=0, CPULoad=0
+        ///   · 机房聚合 `ClassComputer/PC/Room_01`          → 同上
+        ///   · 座位 `ClassComputer/PC/Seat_01..18`          → 同上（走 Seat 扫描）
+        ///   · 投影 `ClassComputer/Projector/Main_01`       → Power=0（LampHours 保留）
+        ///   · 空调 `ClassComputer/AC/Unit_01`（若存在）    → Power=0
+        ///
+        /// ⚠️ 座位必须重新扫一遍锚点，不能只按 `Seat_01..18` 硬编码循环 ——
+        ///    座位数量是场景决定的，硬编码会在增删座位后静默漏掉几台。
+        /// </summary>
+        private void SeedDemoRoomOff(ref int seeded)
+        {
+            // ① 白名单里的机房点位：照明 / 主脑 / 机房聚合 / 投影 / 空调。
+            IReadOnlyList<string> ids = TwinControlScope.All;
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string id = ids[i];
+                if (!id.StartsWith(DemoRoomZone + "/", StringComparison.Ordinal)) continue;
+                ForceOffForDemo(id, ref seeded);
+            }
+
+            // ② 座位（不在白名单里，必须扫场景）。
+            TwinAnchor[] anchors = FindObjectsOfType<TwinAnchor>(true);
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                TwinAnchor a = anchors[i];
+                if (a == null || string.IsNullOrEmpty(a.TwinId)) continue;
+                if (!a.TwinId.StartsWith(DemoRoomZone + "/", StringComparison.Ordinal)) continue;
+                ForceOffForDemo(a.TwinId, ref seeded);
+            }
+        }
+
+        /// <summary>
+        /// 把单个点位压成「关」。与 `ApplyState` 的 `SetPower` 分支**同一套写法**，
+        /// 保证"演示一开始的关"和"用户点一下关"在数据上完全无差别 ——
+        /// 否则会出现"进 Play 是关的，点一下关机反而数值变了"的怪事。
+        /// </summary>
+        private void ForceOffForDemo(string twinId, ref int seeded)
+        {
+            TwinDeviceModel model = ResolveModel(twinId);
+            if (model == null) return;      // 解析不出来就跳过（SeedOne 已经报过 warning 了）
+
+            switch (model.Type)
+            {
+                case "Light":
+                    SetState(twinId, "Power", 0f);
+                    // `Brightness` 是 `RunningOnlyMetrics`（开机才有意义），
+                    // 关灯必须一起归零，否则面板写"已关"旁边亮度还是 80%。
+                    SetState(twinId, "Brightness", 0f);
+                    seeded++;
+                    break;
+
+                case "PC":
+                    // 走统一出口：Power / OnCount / CPULoad 一起归零（见 PcDerivedMetrics）。
+                    SetPcRunning(twinId, false, 0f, 1f);
+                    seeded++;
+                    break;
+
+                case "Projector":
+                    SetState(twinId, "Power", 0f);
+                    // `LampHours` 是灯泡累计时长，与开关无关，**保留不归零**。
+                    seeded++;
+                    break;
+
+                case "AC":
+                    SetState(twinId, "Power", 0f);
+                    // `SetTemp` 是设定值，关机后仍然成立，**保留**。
+                    seeded++;
+                    break;
+
+                // 门 / 消防 / 传感器等：不参与机房演示脚本，保持 SeedOne 的结果。
+                default:
+                    break;
             }
         }
 

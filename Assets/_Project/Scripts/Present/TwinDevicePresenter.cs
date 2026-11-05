@@ -389,6 +389,51 @@ namespace SchoolTwin.Present
 
             // 【P19】运行时材质副本必须自己销毁 —— 它们不在任何资产的引用图里，
             // 不 Destroy 就会在每次进出 Play 时泄漏一份（材质 + 遮罩贴图）。
+            //
+            // ══════════════════════════════════════════════════════════════
+            // 【P26 2026-11-05 · 视频播放器泄漏】这一段原来**只销毁材质，一个播放器都没释放**。
+            //
+            // 后果（主理人实测「第二次之后开机永远黑屏」）：
+            //   · 每进一次 Play 就 new 出 4 个 PcScreenPlayer，
+            //     每个持有 1 个 VideoPlayer + 1 个 AudioSource + 3 张 RT
+            //     （主脑 2048² ≈16MB、两台幕布 1024² ≈4MB、机房 512² ≈1MB）。
+            //   · 它们的 GameObject 建在场景里（`parent` 是锚点/本组件），
+            //     **不走 DontDestroyOnLoad**，看起来"退出 Play 就没了"；
+            //     但 `PcScreenPlayer` 是**普通 C# 类**，不是 MonoBehaviour，
+            //     它的 `Destroy()` 方法全项目**从未被调用过**（grep 证实 0 处）。
+            //   · 于是 VideoPlayer 的解码器句柄随每次 Play 累积。
+            //     日志实证：第 1、2 次 Play 正常就绪，第 3 次起
+            //     `prepareCompleted` **一次都不再触发**（跨 3 次 Play 全失败）。
+            //
+            // 判据：`就绪后补播` 只出现在日志前 8086 行，之后 16 万行一次没有。
+            // 这就是"同一份素材、同一段代码、先成功后永久失败"的唯一解释。
+            //
+            // 修法：**把每一个 Player 都 Destroy 掉**，放在材质销毁之前
+            // （Player 的 `TargetMaterial` 指向这些材质，先释放播放器再销毁材质，
+            //   避免播放器在下一帧仍持有已销毁材质的引用）。
+            // ══════════════════════════════════════════════════════════════
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                if (kv.Value != null && kv.Value.Player != null)
+                {
+                    kv.Value.Player.Destroy();
+                    kv.Value.Player = null;
+                }
+            }
+
+            foreach (KeyValuePair<string, ProjectorVisual> kv in _projectors)
+            {
+                if (kv.Value != null && kv.Value.Player != null)
+                {
+                    kv.Value.Player.Destroy();
+                    kv.Value.Player = null;
+                }
+            }
+
+            // 机房独立播放器不在这两个集合里，单独释放（最容易漏的一个）
+            if (_roomPlayer != null) { _roomPlayer.Destroy(); _roomPlayer = null; }
+            if (_roomPlayerMat != null) { Destroy(_roomPlayerMat); _roomPlayerMat = null; }
+
             foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
             {
                 if (kv.Value != null && kv.Value.Material != null) Destroy(kv.Value.Material);
@@ -2671,26 +2716,64 @@ namespace SchoolTwin.Present
                         // 等于把同一段视频 `Prepare` 18 遍 —— 每一遍都打断上一遍，
                         // 结果画面永远出不来，看起来就是"没有开机动画"。
                         //
-                        // 现在按批量窗口区分：
-                        //   · 窗口内（联动）：只有**第一个**座位负责起播，其余只接 RT
-                        //   · 窗口外（单台）：自己起播，先把其他开着的座位摘成快照防串台
-                        bool bulk = Time.time < _bulkSeatUntil;
-
-                        if (bulk)
+                        // ══════════════════════════════════════════════════════
+                        // 【P29 2026-11-05】**这个坑第二次复发，所以这次改成"看状态"**
+                        //
+                        // 上一版靠 `_bulkSeatUntil` 批量窗口挡住重复起播，但那个窗口
+                        // 只有 `TwinPcMenuDriver.SendRoom` 会打开。而这次 18 个座位是
+                        // **场景一加载就是开的**（数据源给的 Power=180），根本没走菜单
+                        // → 窗口从未开启 → `bulk` 恒为 false → 走 else 分支
+                        // → 18 个座位各自 `DetachSeatScreens` + `PlayFile` 一遍
+                        // → 18 次连续 Prepare 互相打断 → 4 块屏同时 3 秒超时放弃。
+                        //
+                        // 教训：**不要靠"谁先开了窗口"这种外部约定来保证只起播一次。**
+                        // 改成直接看播放器自己的状态 —— 它已经在放/正在准备这段视频，
+                        // 就什么都不做。这样无论从哪个入口、什么顺序进来都安全，
+                        // 批量窗口退化成纯粹的"优化提示"，不再是正确性的前提。
+                        // ══════════════════════════════════════════════════════════════════
+                        // 【P29】起播决策：**先判断，再动手**，且"正在准备"时一律不碰。
+                        //
+                        // ── 旧逻辑错在哪（顺序反了）──────────────────────────
+                        // 旧代码不管三七二十一先 `DetachSeatScreens()`，
+                        // 里面会 `ShowStill(desktop)` → `_player.Stop()`。
+                        // 而 `Stop()` 会把机房屏正在飞的 `Prepare()` 作废。
+                        //
+                        // 于是 18 个座位开机时：
+                        //   座位1 → 起播，Prepare 开始飞
+                        //   座位2 → DetachSeatScreens → Stop() → Prepare 被作废
+                        //         → 再 PlayFile → 重新 Prepare
+                        //   座位3 → 又把座位2 的作废
+                        //   ...
+                        // 走完 18 个座位，没有一个 Prepare 活下来 → 3 秒超时 → 放弃。
+                        //
+                        // ── 现在的顺序 ────────────────────────────────────────
+                        //   ① 正在准备 → **什么都不做**，只接 RT，等它飞完
+                        //   ② 需要换片 → 起播
+                        //   ③ 已经在放对了 → 什么都不做
+                        // 只有"确实要起播"时才会走到 `DetachSeatScreens`，
+                        // 而那一步本身也加了"没有别的开着的座位就直接返回"。
+                        // ══════════════════════════════════════════════════════════════
+                        if (roomPlayer.IsPreparing)
                         {
-                            if (!_bulkBootStarted)
-                            {
-                                _bulkBootStarted = true;
-                                roomPlayer.PlayFile(_roomVideo);
-                            }
+                            // 解码器正在工作，任何 Stop/Prepare 都会把它打断。
+                            // 这一帧什么都不做，下一帧回调就绪后自然接上。
+                            map = roomPlayer.ScreenRT;
+                        }
+                        else if (roomPlayer.NeedsFile(_roomVideo))
+                        {
+                            // 确实需要换片。删掉旧注释里的 "bulk" 判断，理由见上：
+                            // `NeedsFile` 已经把"同一文件且已就绪/正在准备"排除掉了，
+                            // 无论从哪个入口、什么顺序进来都安全。
+                            DetachSeatScreens(v.TwinId);
+                            roomPlayer.PlayFile(_roomVideo);
+                            _bulkBootStarted = true;
+                            map = roomPlayer.ScreenRT;
                         }
                         else
                         {
-                            DetachSeatScreens(v.TwinId);
-                            roomPlayer.PlayFile(_roomVideo);
+                            // 已经在放这段视频（或已就绪）→ 只接 RT
+                            map = roomPlayer.ScreenRT;
                         }
-
-                        map = roomPlayer.ScreenRT;
                     }
 
                     if (map == null) map = BuildScreenMask();   // 播放器不可用时退回白屏
@@ -3297,19 +3380,34 @@ namespace SchoolTwin.Present
         }
 
         /// <summary>联动开机的"批量窗口"截止时间（`Time.time`）。</summary>
+        /// <remarks>
+        /// 【P29 2026-11-05】**已降级为纯提示，不再是正确性前提。**
+        ///
+        /// 它原来承担"18 台只起播一次"的正确性职责，但只有
+        /// `TwinPcMenuDriver.SendRoom` 会设置它 —— 而 18 个座位在场景
+        /// 初始态就是开的（数据源直接给 Power=180），根本不走菜单。
+        /// 于是窗口恒未开启，"只起播一次"的保证完全失效，
+        /// 4 块屏同时 3 秒超时放弃（17:38 那次事故）。
+        ///
+        /// 现在起播判据完全由 `PcScreenPlayer.NeedsFile` +
+        /// `PcScreenPlayer.IsPreparing` 自己回答，与"谁开了窗口"无关。
+        /// 字段保留只是为了不破坏 `BeginBulkSeats` 的对外签名。
+        /// </remarks>
         private float _bulkSeatUntil = -1f;
 
-        /// <summary>本次批量窗口内是否已经起播过开机动画（防止 18 台各播一遍）。</summary>
+        /// <summary>本次批量窗口内是否已经起播过开机动画。</summary>
+        /// <remarks>【P29】同上，降级为提示。真正的去重靠 `NeedsFile`。</remarks>
         private bool _bulkBootStarted;
 
         /// <summary>
         /// 标记"接下来一段时间是批量操作"。
         ///
         /// `TwinPcMenuDriver.SendRoom` 在逐个下发 18 条开机命令之前调它。
-        /// 窗口内只有**第一个**座位负责 `PlayFile(boot)`，其余 17 台只接 RT ——
-        /// 18 台共用一张 RT，一次起播就够，重复起播会互相打断。
         ///
-        /// 窗口外（面板单点一台）则自己起播，并先把其他开着的座位摘成快照。
+        /// ── 【P29】语义已弱化 ────────────────────────────────────────────
+        /// 原来它是"只起播一次"的**唯一**保证，现在不是了：18 个座位即使
+        /// 完全不走菜单（场景初始态），`NeedsFile` 也能挡住重复起播。
+        /// 保留这个 API 只为兼容既有调用点，不再承担正确性职责。
         /// </summary>
         public void BeginBulkSeats(float seconds = 1.5f)
         {
@@ -3717,14 +3815,51 @@ namespace SchoolTwin.Present
             // 不排除的话，点一台关机，其他开着的座位也跟着播关机视频。
             Texture tex = null;
 
+            // ══════════════════════════════════════════════════════════════
+            // 【P29 2026-11-05】**没有开着的座位就直接走人，一张图都不用读。**
+            //
+            // 这一条先于任何 IO。上一版无条件往下走，于是 18 个座位开机时
+            // 每个都进来读一遍 `desktop.jpg`（File.ReadAllBytes + LoadImage，
+            // 1920×1200 解码），18 次纯浪费 —— 而且每次都顺带 `Stop()` 机房屏，
+            // 把正在飞的 `Prepare()` 打断。这是"机房交互又坏"的第三个放大器。
+            //
+            // 判据：除了 `exceptTwinId` 之外，还有没有**开着**的座位。
+            // 没有就什么都不用摘 —— 这同时也是"单台开机时其他座位都关着"的
+            // 常见情形，能省掉整段开销。
+            // ══════════════════════════════════════════════════════════════
+            bool anyOpen = false;
+            foreach (KeyValuePair<string, ScreenVisual> kv in _screens)
+            {
+                if (!IsSeatPoint(kv.Key)) continue;
+                if (!string.IsNullOrEmpty(exceptTwinId) &&
+                    string.Equals(kv.Key, exceptTwinId, StringComparison.Ordinal)) continue;
+                ScreenVisual sv = kv.Value;
+                if (sv != null && sv.IsOn) { anyOpen = true; break; }
+            }
+            if (!anyOpen) return;
+
             // 用**机房自己的播放器**取快照，完全不碰主脑 ——
             // 主脑在放 PPT / 视频时也不会影响这张图。
             PcScreenPlayer roomPlayer = RoomScreenPlayer();
             if (roomPlayer != null)
             {
-                // 快照之前先固定成"桌面待机图"：直接拷当前 RT 可能拿到开机视频的中间帧
-                if (roomPlayer.IsOn && roomPlayer.HasVideo)
+                // ── 为什么要快照，而不是直接给白色遮罩 ──────────────────────
+                // 第一版给的是 `BuildScreenMask()`（纯白），结果 18 台在放 PPT / 视频
+                // 期间变成一片白 —— 状态是"开机"，画面却像关机前的一瞬间，
+                // 主理人 2026-11-02 反馈"其他电脑出现白色遮罩"。
+                //
+                // 正确做法：**把机房此刻的画面拷一张下来**给座位用。
+                // 那一刻机房播放器显示的是开机视频的末帧（Windows 桌面），
+                // 座位保持"桌面"看起来才是"电脑开着但没在放东西"。
+                //
+                // 【P29】快照之前先固定成"桌面待机图"：直接拷当前 RT 可能拿到
+                // 开机视频的中间帧。但 `ShowStill` 会读盘+解码，且有幂等早退，
+                // 所以要**先问它需不需要**——已在显示同一张图就别再读一遍。
+                if (roomPlayer.IsOn && roomPlayer.HasVideo &&
+                    roomPlayer.NeedsFile(PcMediaLibrary.Desktop))
+                {
                     roomPlayer.ShowStill(PcMediaLibrary.Desktop);
+                }
 
                 if (roomPlayer.ScreenRT != null)
                     tex = SnapshotScreen(roomPlayer.ScreenRT);
