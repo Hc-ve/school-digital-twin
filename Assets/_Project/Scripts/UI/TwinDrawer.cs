@@ -167,8 +167,16 @@ namespace SchoolTwin.UI
         ///
         /// 保留两项的顺序不能换：「数据源」在左，是四项时期就在的位置（x=34），
         /// 观众的记忆和截图对照都靠这个锚。换序会让"工具行变短了"看起来像"整行挪位了"。
+        ///
+        /// 【2026-11-05 P31】三项 → 四项，新增「退出」x=322（= 226 + 96）。
+        ///
+        /// 为什么必须加这一项：全项目 `Application.Quit` 调用点原本是 **0 处**。
+        /// 打包成 exe 后没有退出入口，答辩结束只能 Alt+F4 —— 而"关窗口"走的是
+        /// Unity 的默认关闭流程，任务管理器里偶尔会留残进程（评委看着不专业）。
+        /// 编辑器里这个问题永远暴露不出来（Unity 里直接停止 Play 就退出了），
+        /// 属于「编辑器通过 ≠ 交付物通过」的又一类，与 F22 同源。
         /// </summary>
-        private static readonly string[] _toolNames = { "数据源", "帮助", "时间天气" };
+        private static readonly string[] _toolNames = { "数据源", "帮助", "时间天气", "退出" };
 
         /// <summary>
         /// 各项的绝对 x（§4.1）。间距 96，从左边距 34 起排。
@@ -188,10 +196,17 @@ namespace SchoolTwin.UI
         /// `BuildToolRow` 建节点时用一次；两处必须同时加，否则建时按旧值摆、
         /// 每帧又被 ApplyToolXs 挪到新位置，第一帧会闪一下。
         /// </summary>
-        private static readonly float[] ToolXs = { 34f, 130f, 226f };
+        private static readonly float[] ToolXs = { 34f, 130f, 226f, 322f };
 
         /// <summary>「帮助」浮层。null = 没开。每次打开重建、点任意处或 Esc 即销毁。</summary>
         private RectTransform _helpOverlay;
+
+        /// <summary>
+        /// 「退出」确认框。null = 没开。**只由两个按钮关闭**（取消 / 关抽屉），
+        /// 点遮罩不关闭 —— 确认框不该被误点关掉，那会让用户以为"点了没反应"。
+        /// 挂 <see cref="_root"/> 下（和帮助浮层同一个父级），关抽屉时一并销毁。
+        /// </summary>
+        private RectTransform _quitOverlay;
 
         /// <summary>「时间天气」居中模态卡。null = 没开。同一时刻最多一张（图纸 §4）。</summary>
         private TwinTimeWeatherCard _timeCard;
@@ -793,9 +808,15 @@ namespace SchoolTwin.UI
         private void OnToolClicked(int index)
         {
             if (index < 0 || index >= _toolNames.Length) return;
-            SelectTool(index);
 
             string name = _toolNames[index];
+
+            // 【P31】「退出」是动作项，不是可选中项 —— 走选中/下划线会让「数据源」的
+            // 选中态被抢走，看起来像"用户切了个页签"。所以它在 SelectTool 之前分流。
+            if (name == "退出") { ShowQuitConfirm(); return; }
+
+            SelectTool(index);
+
             if (name == "数据源") { CycleDataSource(); return; }
             if (name == "帮助") { ShowHelpOverlay(); return; }
             if (name == "时间天气") { ShowTimeWeatherCard(); return; }
@@ -1043,6 +1064,7 @@ namespace SchoolTwin.UI
                 "",
                 "左侧五项：数据监测 · 设备管理 · 电力 · 告警 · 统计",
                 "底部「数据源」：Mock → MQTT → 回放 轮换",
+                "底部「退出」：二次确认后关闭程序",
                 "",
                 "窄态浮卡底部另有一条数据源横条，与本处联动",
             };
@@ -1063,6 +1085,126 @@ namespace SchoolTwin.UI
             hint.rectTransform.sizeDelta = new Vector2(160f, 16f);
             hint.rectTransform.anchoredPosition = new Vector2(-16f, 12f);
             hint.text = "点任意处或按 H 关闭";
+        }
+
+        // ================================================================ 工具行 · 退出
+
+        /// <summary>
+        /// 「退出」确认框（P31）。全项目唯一的 <c>Application.Quit()</c> 调用点。
+        ///
+        /// ── 为什么要确认框，而不是点了就退 ────────────────────────────
+        /// 工具行四项间距只有 96，第四项「退出」紧挨着第三项「时间天气」。
+        /// 答辩现场手一抖点到，直接黑屏 —— 没有确认框的话这个误触是不可撤销的。
+        ///
+        /// ── 为什么不做成「按 Esc 关框」──────────────────────────────
+        /// 任务包明令禁止新增全局快捷键消费方：Esc 已被 `TwinPicker.cs:60`（取消选中）
+        /// 与 `TwinTimeWeatherCard.cs:547`（关时间天气卡）占用。再加第三个消费方，
+        /// 就是 F 类耦合（同键多主）的第 N 次重演。所以本框只认两个按钮；
+        /// 按 Esc 会走抽屉原有的「收抽屉」路径，抽屉一关本框随之销毁（见 Close()）。
+        ///
+        /// ── 为什么点遮罩不关 ────────────────────────────────────────
+        /// 帮助浮层是"点任意处关闭"，那是查看类浮层；本框是**危险操作确认**，
+        /// 误点遮罩就取消会让用户以为"确认框卡住了"。所以遮罩只挡射线、不接点击。
+        /// </summary>
+        private void ShowQuitConfirm()
+        {
+            if (_root == null) return;
+            if (_quitOverlay != null) return;   // 已经开着就不叠第二层
+
+            const float w = 320f;
+            const float h = 168f;
+
+            Image dim = TwinUIFactory.Block(_root, "QuitOverlay", new Color(0f, 0f, 0f, 0.60f), true);
+            _quitOverlay = dim.rectTransform;
+            TwinUIFactory.Stretch(_quitOverlay);
+            _quitOverlay.SetAsLastSibling();    // 不靠建顺序侥幸置顶，与帮助浮层同口径
+
+            TwinRoundedRect panel = TwinUIFactory.Rounded(_quitOverlay, "Panel", 10f,
+                TwinTheme.PanelTop, TwinTheme.PanelBottom, TwinTheme.AccentLine, 1f, true);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = new Vector2(0.5f, 0.5f);
+            pr.anchorMax = new Vector2(0.5f, 0.5f);
+            pr.pivot = new Vector2(0.5f, 0.5f);
+            pr.sizeDelta = new Vector2(w, h);
+            pr.anchoredPosition = Vector2.zero;
+
+            // 标题：主色，不用告警橙 —— 退出是正常操作，不是异常（色只属告警）
+            Text title = TwinUIFactory.Label(pr, "Title", TwinTheme.FsSubtitle, TextAnchor.UpperLeft,
+                TwinTheme.Accent, FontStyle.Bold);
+            TwinUIFactory.Place(title.rectTransform, 20f, 18f, w - 40f, 24f);
+            title.text = "退出系统？";
+
+            Text body = TwinUIFactory.Label(pr, "Body", TwinTheme.FsBody, TextAnchor.UpperLeft,
+                TwinTheme.TextSecondary);
+            TwinUIFactory.Place(body.rectTransform, 20f, 50f, w - 40f, 40f);
+            body.text = "确认后将关闭程序。\n演示未结束时请选「取消」。";
+            body.lineSpacing = 1.3f;
+
+            // 按钮：取消在左、退出在右（Windows 惯例，右手默认落在"取消"这一侧更安全）
+            const float bw = 84f;
+            const float bh = 32f;
+            const float gap = 10f;
+
+            TwinRoundedRect cancelBg = TwinUIFactory.Rounded(pr, "BtnCancel", 6f,
+                TwinTheme.Track, TwinTheme.Track, TwinTheme.Divider, 1f, true);
+            TwinUIFactory.Place(cancelBg.rectTransform, w - 20f - bw * 2f - gap, h - 20f - bh, bw, bh);
+
+            // 确认键用主色实底：这是本框里唯一有副作用的按钮，必须和「取消」视觉可辨。
+            // 不用红色 —— 项目约束「告警橙只用于告警」，红色同理。
+            TwinRoundedRect quitBg = TwinUIFactory.Rounded(pr, "BtnQuit", 6f,
+                TwinTheme.AccentDeep, TwinTheme.AccentDeep, TwinTheme.AccentHi, 1f, true);
+            TwinUIFactory.Place(quitBg.rectTransform, w - 20f - bw, h - 20f - bh, bw, bh);
+
+            Button cancelBtn = cancelBg.gameObject.AddComponent<Button>();
+            cancelBtn.targetGraphic = cancelBg.GetComponent<Graphic>();
+            cancelBtn.transition = Selectable.Transition.None;
+            cancelBtn.onClick.AddListener(CloseQuitConfirm);
+
+            Button quitBtn = quitBg.gameObject.AddComponent<Button>();
+            quitBtn.targetGraphic = quitBg.GetComponent<Graphic>();
+            quitBtn.transition = Selectable.Transition.None;
+            quitBtn.onClick.AddListener(QuitNow);
+
+            Text cancelText = TwinUIFactory.Label(cancelBg.transform, "Text", TwinTheme.FsBody,
+                TextAnchor.MiddleCenter, TwinTheme.TextPrimary);
+            TwinUIFactory.Stretch(cancelText.rectTransform);
+            cancelText.raycastTarget = false;
+            cancelText.text = "取消";
+
+            Text quitText = TwinUIFactory.Label(quitBg.transform, "Text", TwinTheme.FsBody,
+                TextAnchor.MiddleCenter, TwinTheme.TextPrimary);
+            TwinUIFactory.Stretch(quitText.rectTransform);
+            quitText.raycastTarget = false;
+            quitText.text = "退出";
+
+            Debug.Log("[P31] 退出确认框已打开（取消 → 关框不退出；确认 → 真退出）");
+        }
+
+        /// <summary>关确认框。**不调 Quit** —— 这是「取消」路径的唯一实现，判据 P31-04 盯它。</summary>
+        private void CloseQuitConfirm()
+        {
+            if (_quitOverlay == null) return;
+            Destroy(_quitOverlay.gameObject);
+            _quitOverlay = null;
+            Debug.Log("[P31] 退出已取消（程序继续运行）");
+        }
+
+        /// <summary>
+        /// 真退出。全项目唯一调用点，判据 P31-03 要求 `Application.Quit` 全项目恰 1 处。
+        ///
+        /// 【为什么先打日志再退】exe 里 Console 看不见，Player.log 是唯一事后证据。
+        /// 不退这一行就查不出"到底是点了退出还是被系统杀了"。
+        /// </summary>
+        private void QuitNow()
+        {
+            Debug.Log("[P31] 用户确认退出（Application.Quit）");
+#if UNITY_EDITOR
+            // 编辑器里 Application.Quit 无效（Unity 明确说明只在播放器内生效），
+            // 所以编辑器走停止播放；否则点确认后 play 里毫无反应，容易被误判成"按钮坏了"。
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         private void SelectTool(int index)
@@ -1371,6 +1513,19 @@ namespace SchoolTwin.UI
             }
             // 收起全屏层并恢复窄态内容（否则下次打开是一块空白）
             ApplyFullMode();
+
+            // 【P31】关抽屉必须连退出确认框一起销毁。
+            // 不销毁的话，Esc 收抽屉时黑罩会留在屏幕上（它是 _root 的子节点，
+            // 抽屉只是滑出屏幕、节点并没有销毁，于是画面上挂着一层半透明黑罩、
+            // 下面什么都没有）。这条不需要新增 Esc 消费方 —— 走的是既有的 Close()
+            // 收口，属于"多建一个节点就要多一处释放"的常规收尾。
+            // 这里不走 CloseQuitConfirm()：那个方法会打「已取消」日志，
+            // 而关抽屉并不是用户在确认框里点了取消，日志会误导事后排查。
+            if (_quitOverlay != null)
+            {
+                Destroy(_quitOverlay.gameObject);
+                _quitOverlay = null;
+            }
 
             // 关抽屉 = 清栈回首页（下次打开从首页开始，不会停在上次的深层页）
             if (_stack != null)

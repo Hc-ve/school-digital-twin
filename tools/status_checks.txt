@@ -502,8 +502,8 @@ P12-04d | 告警历史浮层源文件与 meta 都不在 | hasnot:Assets/_Project
 P12-04e | 点位清单 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinPointListPanel.cs.meta
 P12-04f | 告警历史浮层 .meta 已删 | hasnot:Assets/_Project/Scripts/UI/TwinAlarmHistoryPanel.cs.meta
 P12-05 | ToggleLegacyPanel 已消失（含注释外的全部调用点） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:ToggleLegacyPanel
-P12-06 | 工具行无假按钮（P13 后为三项，每项都有实现；见 P13-25/27） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气" \};
-P12-07 | 工具行坐标长度与项数一致（三项，间距 96） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f \};
+P12-06 | 工具行无假按钮（P31 后为四项，每项都有实现；见 P13-25/27） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气", "退出" \};
+P12-07 | 工具行坐标长度与项数一致（P31 后为四项，间距 96） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f, 322f \};
 P12-08 | 假 Toast「P2 接入」已不再出现 | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:P2 接入
 P12-09 | 工具行命中区长度跟随项数（不再写死 4） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_toolHits = new RectTransform\[_toolNames\.Length\]
 P12-10 | 【反向】TwinDetailPanel 仍在——它是浮卡宿主，不许被误删 | grep:1:Assets/_Project/Scripts/UI/TwinDetailPanel.cs:public class TwinDetailPanel : MonoBehaviour
@@ -591,8 +591,8 @@ P13-21 | 【B11】拖动命中区必须最后建（图纸 §3 #15），单独成
 P13-22 | 【B11】命中区挂拖动代理（独立文件，文件名=类名） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:TwinDialDragArea drag = hit\.gameObject\.AddComponent<TwinDialDragArea>\(\);
 P13-23 | 【交互】单击也要提交（只有 OnDrag 会导致点一下没反应） | grep:1:Assets/_Project/Scripts/UI/TwinDialDragArea.cs:public void OnPointerClick\(PointerEventData e\) \{ Feed\(e, true\); \}
 P13-24 | 【交互】拖动中不从时钟反向同步（否则自我拉扯） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:if \(_dragging\) return;
-P13-25 | 【工具行】三项：数据源/帮助/时间天气 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气" \};
-P13-26 | 【工具行】x 顺延 226，与 ApplyToolXs 的 baseX+i*96 一致 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f \};
+P13-25 | 【工具行】四项：数据源/帮助/时间天气/退出（P31 加第四项，驱动为全项目原本 0 处 Application.Quit） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly string\[\] _toolNames = \{ "数据源", "帮助", "时间天气", "退出" \};
+P13-26 | 【工具行】x 顺延 322，与 ApplyToolXs 的 baseX+i*96 一致 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:private static readonly float\[\] ToolXs = \{ 34f, 130f, 226f, 322f \};
 P13-27 | 【工具行】第三项按名字分派（不靠 index 魔法数字） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:if \(name == "时间天气"\) \{ ShowTimeWeatherCard\(\); return; \}
 P13-28 | 【Esc】模态卡参与 Esc 路由，且返回 true 表示已消费 | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_timeCard\.Close\(\);\s*\n\s*return true;
 P13-29 | 【P30】后处理卷必须写 sharedProfile（写 profile 不序列化，静默失效） | grep:1:Assets/_Project/Editor/TwinP13PostProcess.cs:volume\.sharedProfile = profile;
@@ -700,3 +700,11 @@ P14-30 | 【3D衰减】spatialBlend 不得高于 0.5、maxDistance 不得小于 
 P14-31 | 【诊断】必须有音频链路自检（clip 长度/峰值/音源数/Listener），否则"听不见"分不清是没生成还是没设备 | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:private void LogAudioSelfCheck\(\)
 P14-32 | 【嗡鸣常驻】只 Play 一次，不许 Pause（Pause 会释放混音器通道 + time 不归零导致每次起始相位不同） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:if \(!u\.HumStarted && u\.HumLevel > 0\.001f\)
 P14-33 | 【断电】断电必须真 Stop 并复位 HumStarted（只把 volume 归零会让音源继续无声占通道） | grep:1:Assets/_Project/Scripts/Present/AcAirflowFeedback.cs:u\.HumStarted = false;
+P31-01 | 【着色器不剥离】SchoolTwin/ScreenComposite 必须登记进 Always Included Shaders（查 guid，证明工程设置里真有，不是注释里写了） | grep+:1:ProjectSettings/GraphicsSettings.asset:573dc4bc14eb6f7498a88fa421b04505
+P31-02 | 【着色器不剥离】SchoolTwin/ScreenOnModel 必须登记进 Always Included Shaders | grep+:1:ProjectSettings/GraphicsSettings.asset:1a2ac668da4bb89419bfd0d2b7cb60d6
+P31-03 | 【退出入口】Application.Quit 调用点恰 1 处（全项目唯一出口；出现第二处说明有人加了第二条退出路径） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:Application\.Quit\(
+P31-04 | 【取消不退出】CloseQuitConfirm 方法体内不得出现 Application.Quit（取消只关框，不许顺手退出） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:CloseQuitConfirm\(\)\s*\{[^}]*Application\.Quit
+P31-05 | 【工具行】_toolNames 必须恰为四项且末项是「退出」（96+544+80=720 的不变量靠行高，与项数无关，加项不破） | grep:1:Assets/_Project/Scripts/UI/TwinDrawer.cs:_toolNames = \{ "数据源", "帮助", "时间天气", "退出" \}
+P31-06 | 【不新增 Esc 消费方】TwinDrawer 不得出现 KeyCode.Escape（Esc 仍只由 TwinPicker/TwinTimeWeatherCard 两处消费，第三个消费方就是 F 类耦合） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:KeyCode\.Escape
+P31-07 | 【素材齐全】机房开机视频必须在 StreamingAssets 里（缺了则 18 台全白屏，且打包不会报错） | has:Assets/StreamingAssets/PC/master/boot.mp4
+P31-08 | 【设置落成代码】打包脚本必须存在（着色器登记是工程设置，只有落成代码才能被 git 追踪与判据验证，见 F22） | has:Assets/_Project/Editor/P31Packaging.cs
