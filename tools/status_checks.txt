@@ -708,3 +708,37 @@ P31-05 | 【工具行】_toolNames 必须恰为四项且末项是「退出」（
 P31-06 | 【不新增 Esc 消费方】TwinDrawer 不得出现 KeyCode.Escape（Esc 仍只由 TwinPicker/TwinTimeWeatherCard 两处消费，第三个消费方就是 F 类耦合） | grep0:Assets/_Project/Scripts/UI/TwinDrawer.cs:KeyCode\.Escape
 P31-07 | 【素材齐全】机房开机视频必须在 StreamingAssets 里（缺了则 18 台全白屏，且打包不会报错） | has:Assets/StreamingAssets/PC/master/boot.mp4
 P31-08 | 【设置落成代码】打包脚本必须存在（着色器登记是工程设置，只有落成代码才能被 git 追踪与判据验证，见 F22） | has:Assets/_Project/Editor/P31Packaging.cs
+
+## D13 发黑审计工具重写（2026-11-09 · 裁决 C-73/C-75，负责人补判据）
+# 背景：D13 判据此前为 0 条（断点 V2 摸底发现）。工具重写期间最容易顺手改坏
+# P30FixCeilingLightmap.cs 里那 12 条已验收路径，故先用判据把边界钉死。
+# 依据：P00 §3.4 D13/D14、§1.6 D22/D24、《发黑问题修复经验总纲》§4.3 证伪 A、P32 §3.10。
+
+# --- 一、守住已验收的 12 条修复路径（重写工具期间一条都不许动）---
+D13-01 | 【不许顺手改】DefaultPaths 必须恰为 12 条 SchoolBuilding 路径（增删都算破；D14 三条吊顶未验证前不得移除） | grep:12:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:"SchoolScene/Exterior/SchoolBuilding/
+D13-02 | 【不许顺手改】Floor2 必须仍在路径表（P30 唯一经隔离渲染确证的真病灶；该词在 Tooltip/注释/路径表共现 3 次，故用「至少 1」而非「恰好 N」，避免脆判） | grep+:1:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:SchoolBuilding/Floor2
+D13-03 | 【不许顺手改】Corridor 必须仍在路径表（唯一经主理人 play 验收通过的合并网格修复） | grep+:1:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:SchoolBuilding/Corridor
+D13-04 | 【D14 待验证】ZalTop 必须仍在路径表（D14 疑为过度修复，但未做渲染对比前禁止删除，见 P00 §3.4 D14） | grep+:1:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:SchoolBuilding/ZalTop
+
+# --- 二、守住修法的技术前提（这两条被证伪过，不许复活）---
+D13-05 | 【禁 ExecuteAlways 特性】不得给 P30FixCeilingLightmap 加 [ExecuteAlways]（lightmapIndex 存在 LightingData.asset 二进制内，编辑器执行也存不进去，只会弄脏场景；注释里写「不加」是允许的，故用特性型正则） | grep0:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:^\s*\[ExecuteAlways\]
+D13-06 | 【禁复活被证伪路线】全项目不得出现「抬环境光修发黑」的实现（ambient 对 LIGHTMAP_ON 分支零影响，打光已用 PNG 字节一致实证；改 ambientIntensity/AmbientLight 来治发黑即为复活） | grep0:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:ambientIntensity
+
+# --- 三、守住新工具的指标口径（证伪 A 的正面约束）---
+# ⚠️ 以下四条是「工具重写」的验收判据，属**尚未派工**的任务。
+# 按本文件头部纪律（「每个任务包派出去时再加判据」），现以 # 注释封存，
+# 待负责人正式下发重写任务包时**取消注释启用**，并重新校准期望值。理由：
+# status.py 无「预期红」机制，提前启用会让看板长期红，毁掉「全绿=没改坏」这道闸门（P00 §8.1.1）。
+# 封存期间，这四条以任务包【验收标准】字段人工守。
+# 🔴 D13-08 曾「假通过」实测记录：模式 RenderTexture 在旧工具里命中 9 处，但那 9 处是
+#    Graphics.Blit 把 lightmap 图集转成可读贴图（绕开 isReadable=false），**与「相机渲染实测亮度」无关**。
+#    ⇒ 教训：grep 判据的模式必须能区分「同名的不同用途」，启用前须先跑一次看命中处语义（见 §1.6 D25）。
+#D13-07 | 【证伪 A 必修】审计工具必须应用 lightmapScaleOffset 的 ST 变换（:318 原写法直接取 uv2 是错的根因；缺此行则 108/770 清单类错误会重演） | grep+:1:Assets/_Project/Editor/P30BlackSurfaceAudit.cs:lightmapScaleOffset
+#D13-08 | 【证伪 A 必修】工具必须提供相机渲染实测亮度通道（⚠️ 模式需能区分「Blit 读图集」与「渲染测屏幕亮度」，勿直接用 RenderTexture） | grep+:1:Assets/_Project/Editor/P30BlackSurfaceAudit.cs:待重写时定模式
+#D13-09 | 【分类缺陷 C】GuessCategory 必须有暖气片分支（无此分支则暖气片全落「其他」，D13 派工清单就是这么错的） | grep+:1:Assets/_Project/Editor/P30BlackSurfaceAudit.cs:Radiator
+#D13-11 | 【旧清单作废】工具输出必须显式声明替代 10-30 版清单（防止新旧清单混用；旧 108/770 条已被证伪） | grep+:1:Assets/_Project/Editor/P30BlackSurfaceAudit.cs:旧清单作废
+D13-10 | 【只读纪律】审计工具不得保存场景（工具定位是只读普查，写场景 = 越界改资产；grep0 型护栏，重写前后都该守） | grep0:Assets/_Project/Editor/P30BlackSurfaceAudit.cs:EditorSceneManager\.SaveScene
+
+# --- 四、D14 验证期间的护栏（打光做渲染对比时用）---
+D14-01 | 【验证期护栏】三块吊顶路径必须同时在场（打光临时注释做对比后必须还原；少一条即说明未还原） | grep:3:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:SchoolBuilding/(ZalTop|PCClassTop|DirectorTop)
+D14-02 | 【不许连带改】D14 验证期间不得动 RenderSettings（打光 10-30 已实测 RenderSettings 三项全部无效，重改即白烧一轮） | grep0:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:RenderSettings\.
