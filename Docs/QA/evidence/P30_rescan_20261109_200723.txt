@@ -1,0 +1,575 @@
+﻿本清单替代 10-30 版 108/770 条清单，旧清单作废
+===== P30 发黑审计 v3 · 双指标（只读 / Edit Mode / 不进 Play）=====
+时间：2026-11-09 20:07:14
+通道 A：UV2 + lightmapScaleOffset ST 变换，图集按实际尺寸全分辨率 + 双线性采样
+通道 B：Hide Others 离屏渲染，6 轴全记录，洋红哨兵剔除背景
+  · 最亮帧 = 判「该对象是否被判死」，用于 ZalTop 基准断言
+  · 最暗帧 + 暗像素占比 = 判「局部发黑」（翅片间/竖梃），用于四象限分类
+    （整帧平均值会稀释局部黑，与 UV 通道 v1 漏掉 Floor2 同因，见 §1.6 D23）
+判读：任一通道判黑即标记；「采样黑+渲染亮」= 指标失效，禁止作为派修依据
+只读声明：临时切换的 Renderer.enabled 全部在 finally 中还原，不写场景 / 材质 / 光照
+⚠ 运行后请勿手按 Ctrl+S：Edit Mode 下切换 enabled 可能标记场景 dirty，工具不保存场景，重开即复位
+
+已修复清单（运行时 lightmapIndex=-1）：12 条，来源 P30FixCeilingLightmap.DefaultPaths
+
+---------- 光照图集（按实际尺寸读取）----------
+lightmaps 数量：24
+  图集  0：Lightmap-0_comp_light  1024×1024（全分辨率读取）
+  图集  1：Lightmap-1_comp_light  1024×1024（全分辨率读取）
+  图集  2：Lightmap-2_comp_light  1024×1024（全分辨率读取）
+  图集  3：Lightmap-3_comp_light  1024×1024（全分辨率读取）
+  图集  4：Lightmap-4_comp_light  1024×1024（全分辨率读取）
+  图集  5：Lightmap-5_comp_light  1024×1024（全分辨率读取）
+  图集  6：Lightmap-6_comp_light  1024×1024（全分辨率读取）
+  图集  7：Lightmap-7_comp_light  1024×1024（全分辨率读取）
+  图集  8：Lightmap-8_comp_light  1024×1024（全分辨率读取）
+  图集  9：Lightmap-9_comp_light  1024×1024（全分辨率读取）
+  图集 10：Lightmap-10_comp_light  1024×1024（全分辨率读取）
+  图集 11：Lightmap-11_comp_light  1024×1024（全分辨率读取）
+  图集 12：Lightmap-12_comp_light  1024×1024（全分辨率读取）
+  图集 13：Lightmap-13_comp_light  1024×1024（全分辨率读取）
+  图集 14：Lightmap-14_comp_light  1024×1024（全分辨率读取）
+  图集 15：Lightmap-15_comp_light  1024×1024（全分辨率读取）
+  图集 16：Lightmap-16_comp_light  1024×1024（全分辨率读取）
+  图集 17：Lightmap-17_comp_light  1024×1024（全分辨率读取）
+  图集 18：Lightmap-18_comp_light  1024×1024（全分辨率读取）
+  图集 19：Lightmap-19_comp_light  1024×1024（全分辨率读取）
+  图集 20：Lightmap-20_comp_light  1024×1024（全分辨率读取）
+  图集 21：Lightmap-21_comp_light  1024×1024（全分辨率读取）
+  图集 22：Lightmap-22_comp_light  1024×1024（全分辨率读取）
+  图集 23：Lightmap-23_comp_light  1024×1024（全分辨率读取）
+
+场景 Renderer 总数：2103
+通道 A 有效采样：1822 个 Renderer
+ST 变换后落在图集 [0,1] 之外的采样点：2812（已跳过，不计入均值；若异常偏大说明 ST 口径需复核）
+
+通道 B 渲染实测候选：400 个（按 UV 黑度截断，另有 625 个未测）
+
+---------- 自测断言：通过 ----------
+PASS [ZalTop] 未被判黑：renderAvg=0.2803 ≥ 判黑线 0.10，且 ≥ UV 0.1422（旧工具 UV=0.0351 判近全黑，ST 变换已纠正）。 判读=真黑·双指标一致，最佳视角=下表面
+       6 轴逐视角：上表面=0.1939/暗29%(4096px) 下表面=0.2803/暗0%(720px) -X=0.1739/暗27%(150px) +X=0.1733/暗29%(138px) +Z=0.1659/暗28%(350px) -Z=0.1769/暗24%(232px)
+       最暗帧=0.1939（上表面）暗占比=29%；背景剔除像素=3376
+       注：断言用最亮帧判「不判死」；若最暗帧暗占比高，ZalTop 仍会进「仅渲染黑·待复核」族交打光判读，两者不冲突。
+       偏亮参考线 0.25（仅标注、不作断言）：已达；该线取值待打光按渲染实测裁决。
+PASS [Floor2] 已识别为「已修复（运行时 lightmapIndex=-1）」，不作新缺陷外报。Path=SchoolScene/Exterior/SchoolBuilding/Floor2
+
+---------- 四象限总账 ----------
+  真黑·双指标一致      ：389
+  指标失效·禁派修      ：4   ← 旧 108 条清单的错就出在这一族
+  仅渲染黑·待复核      ：3
+  仅UV黑·未实测        ：98
+  正常                 ：1328
+
+渲染实测已覆盖：400 / 1822；已修复清单命中：13
+
+---------- 标记项按类别 ----------
+  其他          395 处
+  暖气片         56 处
+  灯           16 处
+  门           14 处
+  边条          8 处
+  吊顶          3 处
+  玻璃          2 处
+
+---------- 明细（494 条，任一指标判黑即列入）----------
+渲染均值=6轴最亮帧（判「不黑」用）；最暗帧+暗占比=判「局部发黑」用，两者都要看
+局部发黑判据：最暗帧亮度 < 0.10 或 暗占比 ≥ 15%
+判读 | UV均值 | UV黑占比 | 渲染均值 | 最暗帧 | 暗占比 | 最暗视角 | 有效像素 | 类别 | 图集 | 修复表 | 材质 | 路径
+真黑·双指标一致           | 0.0694 |  65% | 0.0645   | 0.0190   |  95% | -X         | 4096 | 其他         | 10 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (7)
+真黑·双指标一致           | 0.0822 |  67% | 0.0655   | 0.0401   |  96% | +Z         | 4096 | 其他         |  7 | 否      | Fabric05c              | SchoolScene/Interior/ClassComputer/Chair06 (10)/Chair06Fabric
+真黑·双指标一致           | 0.1607 |  56% | 0.0675   | 0.0057   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Computer01             | SchoolScene/Interior/ClassTeachers/Keyboard01
+真黑·双指标一致           | 0.0764 |  75% | 0.0679   | 0.0226   |  94% | -X         | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (12)
+真黑·双指标一致           | 0.0948 |  69% | 0.0680   | 0.0037   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Keyboard05
+真黑·双指标一致           | 0.0614 |  74% | 0.0682   | 0.0255   |  95% | -X         | 4096 | 其他         | 10 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (9)
+真黑·双指标一致           | 0.0938 |  63% | 0.0692   | 0.0309   |  96% | +Z         | 4096 | 其他         |  0 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-2/FlowerRoom3b (2)
+真黑·双指标一致           | 0.1018 |  60% | 0.0693   | 0.0423   |  95% | +Z         | 4096 | 其他         |  9 | 否      | PlasticBlack1          | SchoolScene/Interior/ClassDirector/ChairOffice01 (1)/Plastic
+真黑·双指标一致           | 0.0633 |  75% | 0.0697   | 0.0254   |  95% | -X         | 4096 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (3)/Computer06
+真黑·双指标一致           | 0.0342 |  99% | 0.0699   | 0.0699   |  97% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom3/SportBench02 (5)/Bench2Chrome
+真黑·双指标一致           | 0.0820 |  81% | 0.0700   | 0.0048   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Keyboard05 (3)
+真黑·双指标一致           | 0.0423 |  96% | 0.0701   | 0.0701   |  97% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom3/SportBench02 (8)/Bench2Chrome
+真黑·双指标一致           | 0.0681 |  81% | 0.0702   | 0.0254   |  95% | -X         | 4096 | 其他         | 10 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (8)
+真黑·双指标一致           | 0.0467 |  83% | 0.0702   | 0.0702   |  97% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom2/SportBench02 (1)/Bench2Chrome
+真黑·双指标一致           | 0.0568 |  84% | 0.0704   | 0.0198   |  94% | 下表面        | 4096 | 其他         |  0 | 否      | FlowerRoom4            | SchoolScene/Interior/Class1-2/FlowerRoom4b (2)
+真黑·双指标一致           | 0.1050 |  70% | 0.0707   | 0.0535   |  84% | +Z         | 4096 | 其他         |  9 | 否      | PlasticBlack1          | SchoolScene/Interior/ClassComputer/TableGroup (2)/Chair06 (2)/Chair06Metal
+真黑·双指标一致           | 0.0905 |  65% | 0.0708   | 0.0682   |  92% | 上表面        |  554 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/Chair05 (5)
+真黑·双指标一致           | 0.0694 |  70% | 0.0713   | 0.0256   |  95% | -X         | 4096 | 其他         |  8 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (6)/Computer06
+真黑·双指标一致           | 0.0714 |  78% | 0.0714   | 0.0425   |  90% | +Z         | 4096 | 其他         |  3 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (19)/ChamferBox002
+真黑·双指标一致           | 0.1514 |  62% | 0.0715   | 0.0176   | 100% | -X         | 4096 | 其他         |  9 | 否      | Fabric05c              | SchoolScene/Interior/ClassDirector/Chair01 (14)/Chair01Fabric
+真黑·双指标一致           | 0.0651 |  79% | 0.0716   | 0.0425   |  90% | +Z         | 4096 | 其他         |  3 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (16)/ChamferBox002
+真黑·双指标一致           | 0.0847 |  76% | 0.0716   | 0.0427   |  90% | +Z         | 4096 | 其他         |  3 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (23)/ChamferBox002
+真黑·双指标一致           | 0.1360 |  71% | 0.0717   | 0.0427   |  90% | +Z         | 4096 | 其他         |  3 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (20)/ChamferBox002
+真黑·双指标一致           | 0.1104 |  64% | 0.0718   | 0.0403   |  92% | +Z         | 4096 | 其他         |  8 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (18)/ChamferBox002
+真黑·双指标一致           | 0.0984 |  68% | 0.0718   | 0.0403   |  92% | +Z         | 4096 | 其他         |  7 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (17)/ChamferBox002
+真黑·双指标一致           | 0.1579 |  68% | 0.0718   | 0.0241   | 100% | -X         | 4096 | 其他         |  0 | 否      | Fabric05c              | SchoolScene/Interior/ClassDirector/Chair01 (12)/Chair01Fabric
+真黑·双指标一致           | 0.1218 |  58% | 0.0719   | 0.0405   |  92% | +Z         | 4096 | 其他         |  8 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (22)/ChamferBox002
+真黑·双指标一致           | 0.0485 |  89% | 0.0720   | 0.0510   |  88% | +Z         | 4096 | 其他         | 10 | 否      | MetallGray1            | SchoolScene/Exterior/SchoolBuilding/Stairs02
+真黑·双指标一致           | 0.1992 |  63% | 0.0725   | 0.0202   |  92% | 下表面        | 4096 | 其他         |  0 | 否      | Computer01             | SchoolScene/Interior/ClassDirector/Keyboard01 (2)
+真黑·双指标一致           | 0.0969 |  60% | 0.0727   | 0.0515   |  80% | +Z         | 4096 | 其他         | 10 | 否      | PlasticBlack1          | SchoolScene/Interior/ClassComputer/TableGroup (6)/Chair06 (2)/Chair06Metal
+真黑·双指标一致           | 0.0582 |  79% | 0.0727   | 0.0255   |  95% | -X         |  834 | 其他         | 11 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (10)
+真黑·双指标一致           | 0.1752 |  65% | 0.0728   | 0.0317   |  91% | +Z         | 4096 | 其他         |  1 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-4/Poster01_1a
+真黑·双指标一致           | 0.1024 |  61% | 0.0731   | 0.0356   |  93% | +Z         | 4096 | 其他         |  0 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/Poster01_1a (2)
+真黑·双指标一致           | 0.2634 |  56% | 0.0732   | 0.0393   |  88% | +Z         | 4096 | 其他         |  1 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-3/Poster01_1a (1)
+真黑·双指标一致           | 0.1157 |  71% | 0.0732   | 0.0051   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup/Keyboard05 (4)
+真黑·双指标一致           | 0.0983 |  77% | 0.0732   | 0.0214   | 100% | -Z         | 4096 | 其他         | 12 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Capboard01_05 (1)/Capboard05
+真黑·双指标一致           | 0.1814 |  67% | 0.0734   | 0.0218   | 100% | -X         | 4096 | 其他         |  0 | 否      | Fabric05c              | SchoolScene/Interior/ClassDirector/Chair01 (13)/Chair01Fabric
+真黑·双指标一致           | 0.1361 |  71% | 0.0736   | 0.0347   |  97% | +Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Capboard01_03/Capboard01
+真黑·双指标一致           | 0.0580 |  71% | 0.0736   | 0.0255   |  95% | -X         | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (2)/Computer06
+真黑·双指标一致           | 0.0965 |  71% | 0.0736   | 0.0049   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Keyboard05 (1)
+真黑·双指标一致           | 0.1040 |  64% | 0.0738   | 0.0681   |  93% | 上表面        |  580 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/Chair05 (4)
+真黑·双指标一致           | 0.1865 |  65% | 0.0738   | 0.0274   | 100% | -X         | 4096 | 其他         |  9 | 否      | Fabric05c              | SchoolScene/Interior/ClassDirector/Chair01 (15)/Chair01Fabric
+真黑·双指标一致           | 0.0993 |  58% | 0.0740   | 0.0302   |  97% | +Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Chair01 (8)/Chair01Wood
+真黑·双指标一致           | 0.0916 |  61% | 0.0744   | 0.0318   |  96% | +Z         | 4096 | 其他         |  0 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-2/FlowerRoom3a (2)
+真黑·双指标一致           | 0.0744 |  75% | 0.0745   | 0.0257   |  95% | -X         | 4096 | 其他         |  0 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (11)
+真黑·双指标一致           | 0.1094 |  69% | 0.0747   | 0.0314   |  97% | +Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Chair01a (1)/Chair01Wood
+真黑·双指标一致           | 0.0539 |  86% | 0.0748   | 0.0425   |  90% | +Z         | 4096 | 其他         |  1 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (15)/ChamferBox002
+真黑·双指标一致           | 0.1307 |  63% | 0.0749   | 0.0610   |  76% | 下表面        | 4096 | 其他         |  9 | 否      | PlasticBlack1          | SchoolScene/Interior/ClassComputer/TableGroup (3)/Chair06 (2)/Chair06Metal
+真黑·双指标一致           | 0.0582 |  87% | 0.0749   | 0.0749   |  90% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom3/SportBench02 (7)/Bench2Chrome
+真黑·双指标一致           | 0.1094 |  65% | 0.0752   | 0.0316   |  98% | +Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Chair01a/Chair01Wood
+真黑·双指标一致           | 0.0978 |  57% | 0.0752   | 0.0308   |  96% | +Z         | 4096 | 其他         |  0 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-2/FlowerRoom3a (3)
+真黑·双指标一致           | 0.0644 |  82% | 0.0754   | 0.0475   |  89% | +Z         | 4096 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (19)/Cylinder004
+真黑·双指标一致           | 0.0681 |  75% | 0.0756   | 0.0473   |  89% | +Z         | 4096 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (16)/Cylinder004
+真黑·双指标一致           | 0.0839 |  72% | 0.0756   | 0.0403   |  92% | +Z         | 4096 | 其他         |  7 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (14)/ChamferBox002
+真黑·双指标一致           | 0.0857 |  63% | 0.0758   | 0.0758   |  95% | 上表面        | 4096 | 其他         |  0 | 否      | MetallPainted01LinesBlack | SchoolScene/Interior/SportClassProps/SportGates01b/Shape01
+真黑·双指标一致           | 0.1218 |  57% | 0.0758   | 0.0478   |  89% | +Z         | 4096 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (23)/Cylinder004
+真黑·双指标一致           | 0.1048 |  60% | 0.0761   | 0.0314   |  97% | +Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Chair01 (2)/Chair01Wood
+真黑·双指标一致           | 0.1033 |  72% | 0.0761   | 0.0030   | 100% | -X         | 4096 | 其他         |  1 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Capboard01_05/Capboard05
+真黑·双指标一致           | 0.0981 |  60% | 0.0762   | 0.0489   |  89% | +Z         | 4096 | 其他         |  8 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (17)/Cylinder004
+真黑·双指标一致           | 0.0878 |  71% | 0.0763   | 0.0763   |  91% | 上表面        | 4096 | 玻璃         |  3 | 否      | GlassClear             | SchoolScene/Interior/Class1-4/Capboard01_05/GlassPart1
+真黑·双指标一致           | 0.0451 |  87% | 0.0768   | 0.0768   |  93% | 上表面        | 4096 | 其他         | 10 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom2/SportBench02 (2)/Bench2Metal
+真黑·双指标一致           | 0.0552 |  82% | 0.0768   | 0.0768   |  93% | 上表面        | 4096 | 其他         | 13 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom2/SportBench02 (1)/Bench2Metal
+真黑·双指标一致           | 0.0281 |  98% | 0.0769   | 0.0769   |  93% | 上表面        | 4096 | 其他         | 12 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom3/SportBench02 (5)/Bench2Metal
+真黑·双指标一致           | 0.0609 |  76% | 0.0769   | 0.0769   |  93% | 上表面        | 4096 | 其他         | 13 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom3/SportBench02 (8)/Bench2Metal
+真黑·双指标一致           | 0.0948 |  63% | 0.0776   | 0.0318   |  97% | +Z         | 4096 | 其他         | 10 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01a/TableMetall
+真黑·双指标一致           | 0.0903 |  62% | 0.0783   | 0.0299   |  96% | +Z         | 4096 | 其他         |  0 | 否      | FlowerRoom4            | SchoolScene/Interior/Class1-2/FlowerRoom4a (1)
+真黑·双指标一致           | 0.1210 |  56% | 0.0789   | 0.0619   |  79% | 下表面        | 4096 | 其他         |  0 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-3/FlowerGroup (3)/FlowerRoom3a (1)
+真黑·双指标一致           | 0.0692 |  78% | 0.0791   | 0.0475   |  89% | +Z         | 4096 | 其他         |  1 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (15)/Cylinder004
+真黑·双指标一致           | 0.0749 |  71% | 0.0792   | 0.0319   |  96% | +Z         | 4096 | 其他         | 13 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (9)/TableMetall
+真黑·双指标一致           | 0.0738 |  70% | 0.0797   | 0.0797   |  91% | 上表面        | 4096 | 门          | 13 | 否      | Door07a                | SchoolScene/Interior/Doors/Door07aPost (8)
+真黑·双指标一致           | 0.1114 |  60% | 0.0798   | 0.0798   |  84% | 上表面        | 4096 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Brush (1)
+真黑·双指标一致           | 0.0826 |  68% | 0.0799   | 0.0485   |  89% | +Z         | 4096 | 其他         |  7 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (14)/Cylinder004
+真黑·双指标一致           | 0.0678 |  80% | 0.0801   | 0.0308   |  97% | +Z         | 4096 | 其他         | 10 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (2)/TableMetall
+真黑·双指标一致           | 0.0726 |  81% | 0.0805   | 0.0243   |  99% | +Z         | 4096 | 其他         | 13 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (3)/TableMetall
+真黑·双指标一致           | 0.0914 |  64% | 0.0807   | 0.0807   |  86% | 上表面        | 4096 | 其他         |  8 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (2)/TableMetall
+真黑·双指标一致           | 0.0975 |  59% | 0.0808   | 0.0353   |  94% | +Z         | 4096 | 其他         | 11 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (12)/TableMetall
+真黑·双指标一致           | 0.0904 |  66% | 0.0809   | 0.0809   |  84% | 上表面        | 4096 | 其他         |  8 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (3)/TableMetall
+真黑·双指标一致           | 0.0619 |  79% | 0.0819   | 0.0819   |  85% | 上表面        | 4096 | 其他         | 13 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom3/SportBench02 (7)/Bench2Metal
+真黑·双指标一致           | 0.0896 |  64% | 0.0821   | 0.0299   |  96% | +Z         | 4096 | 其他         | 13 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (8)/TableMetall
+真黑·双指标一致           | 0.1030 |  67% | 0.0828   | 0.0828   |  81% | 上表面        | 4096 | 其他         | 10 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Brush (4)
+真黑·双指标一致           | 0.1117 |  70% | 0.0833   | 0.0311   |  88% | +Z         | 4096 | 其他         |  8 | 否      | Leather06Blue          | SchoolScene/Interior/SportRoom1/SportMattress01 (3)
+真黑·双指标一致           | 0.0735 |  74% | 0.0843   | 0.0775   |  92% | 上表面        |  587 | 其他         | 10 | 否      | Wood5                  | SchoolScene/Interior/SportRoom2/SportBench02 (2)/Bench2Wood
+真黑·双指标一致           | 0.0591 |  81% | 0.0844   | 0.0763   |  94% | 上表面        |  587 | 其他         | 13 | 否      | Wood5                  | SchoolScene/Interior/SportRoom3/SportBench02 (5)/Bench2Wood
+真黑·双指标一致           | 0.0990 |  64% | 0.0869   | 0.0343   |  95% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (25)
+真黑·双指标一致           | 0.0667 |  81% | 0.0873   | 0.0873   |  84% | 上表面        | 4096 | 其他         | 10 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom3/Bath01 (1)/BathsMetall
+真黑·双指标一致           | 0.0644 |  83% | 0.0874   | 0.0371   |  97% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (7)
+真黑·双指标一致           | 0.1616 |  70% | 0.0875   | 0.0386   |  89% | +Z         | 4096 | 其他         |  8 | 否      | Leather06Blue          | SchoolScene/Interior/SportRoom1/SportMattress01 (4)
+真黑·双指标一致           | 0.0873 |  59% | 0.0877   | 0.0877   |  82% | 上表面        | 4096 | 其他         |  0 | 否      | SportGates             | SchoolScene/Interior/SportClassProps/SportGates01b/Gates002
+真黑·双指标一致           | 0.0960 |  68% | 0.0881   | 0.0419   |  94% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (25)
+真黑·双指标一致           | 0.0403 |  96% | 0.0882   | 0.0365   |  97% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (6)
+真黑·双指标一致           | 0.0904 |  63% | 0.0883   | 0.0762   |  74% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (26)
+真黑·双指标一致           | 0.0770 |  75% | 0.0885   | 0.0224   |  97% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (24)
+真黑·双指标一致           | 0.0678 |  76% | 0.0886   | 0.0278   |  97% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (23)
+真黑·双指标一致           | 0.0486 |  87% | 0.0891   | 0.0272   |  97% | +Z         | 4096 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (24)
+真黑·双指标一致           | 0.1107 |  76% | 0.0900   | 0.0213   | 100% | -Z         | 4096 | 其他         |  0 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/Capboard01_05 (2)/Capboard05
+真黑·双指标一致           | 0.0624 |  68% | 0.0924   | 0.0767   |  94% | 上表面        |  588 | 其他         | 12 | 否      | Wood5                  | SchoolScene/Interior/SportRoom2/SportBench02 (1)/Bench2Wood
+真黑·双指标一致           | 0.0837 |  63% | 0.0933   | 0.0823   |  76% | 上表面        | 1524 | 其他         |  0 | 否      | Chancellery2           | SchoolScene/Interior/Class2-1/Pencil02
+真黑·双指标一致           | 0.0724 |  75% | 0.0934   | 0.0934   |  75% | 上表面        | 4096 | 其他         | 12 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom3/Bath01 (1)/BathsShower
+真黑·双指标一致           | 0.0922 |  62% | 0.0947   | 0.0947   |  75% | 上表面        | 4096 | 其他         | 10 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportRoom1/SportBench01 (5)
+真黑·双指标一致           | 0.0463 |  97% | 0.0948   | 0.0948   |  71% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom2/SportBench02 (3)/Bench2Chrome
+真黑·双指标一致           | 0.0616 |  80% | 0.0951   | 0.0776   |  92% | 上表面        |  595 | 其他         | 13 | 否      | Wood5                  | SchoolScene/Interior/SportRoom3/SportBench02 (8)/Bench2Wood
+真黑·双指标一致           | 0.0608 |  81% | 0.0954   | 0.0831   |  83% | 上表面        |  614 | 其他         | 13 | 否      | Wood5                  | SchoolScene/Interior/SportRoom3/SportBench02 (7)/Bench2Wood
+真黑·双指标一致           | 0.0198 |  96% | 0.0959   | 0.0959   |  83% | 上表面        | 4096 | 其他         |  8 | 否      | Geography01b           | SchoolScene/Interior/Class1-4/Blueprints04
+真黑·双指标一致           | 0.0757 |  99% | 0.0979   | 0.0979   |  71% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom3/Bath01 (1)/OilTank01
+真黑·双指标一致           | 0.0822 |  69% | 0.0984   | 0.0941   |  69% | 上表面        | 1933 | 其他         |  8 | 否      | MetallPainted01Green   | SchoolScene/Interior/SportClassProps/SportBrus1 (1)/SprotBrusMetal
+真黑·双指标一致           | 0.0769 |  66% | 0.0985   | 0.0779   |  93% | 上表面        | 1176 | 其他         |  0 | 否      | MetallPainted01Red     | SchoolScene/Interior/SportClassProps/SportBasketShit01 (3)/BasketMetal
+真黑·双指标一致           | 0.0723 |  75% | 0.0994   | 0.0876   |  72% | +X         | 4096 | 其他         |  8 | 否      | MetallPainted01Green   | SchoolScene/Interior/SportClassProps/SportBrus1/SprotBrusMetal
+真黑·双指标一致           | 0.0775 |  70% | 0.0995   | 0.0995   |  63% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom2/SportBench02/Bench2Chrome
+真黑·双指标一致           | 0.0418 |  96% | 0.1004   | 0.1004   |  63% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome03         | SchoolScene/Interior/SportRoom3/SportBench02 (4)/Bench2Chrome
+真黑·双指标一致           | 0.1302 |  60% | 0.1004   | 0.0248   |  92% | 下表面        | 1417 | 其他         |  7 | 否      | Leather06Blue          | SchoolScene/Interior/SportClassProps/SportMattress01
+真黑·双指标一致           | 0.0740 |  70% | 0.1006   | 0.1006   |  71% | 上表面        | 4096 | 其他         | 10 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom2/Bath01/BathsMetall
+真黑·双指标一致           | 0.0841 |  68% | 0.1016   | 0.1016   |  84% | 上表面        | 4096 | 其他         | 13 | 否      | Sink01                 | SchoolScene/Interior/Toilets/Sink01
+真黑·双指标一致           | 0.0682 |  80% | 0.1037   | 0.0343   |  93% | +Z         |  540 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/Chair05 (5)
+真黑·双指标一致           | 0.0752 |  75% | 0.1039   | 0.0209   |  92% | 下表面        | 1110 | 其他         |  8 | 否      | Leather06Blue          | SchoolScene/Interior/SportClassProps/SportMattress01 (1)
+真黑·双指标一致           | 0.1086 |  58% | 0.1040   | 0.0883   |  82% | 上表面        |  955 | 其他         | 13 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportClassProps/SportBench01 (3)
+真黑·双指标一致           | 0.0507 |  89% | 0.1042   | 0.0844   |  88% | -Z         | 4096 | 其他         | 10 | 否      | Wood5                  | SchoolScene/Interior/SportRoom2/SportBench02 (3)/Bench2Wood
+真黑·双指标一致           | 0.0397 |  95% | 0.1043   | 0.1043   |  65% | 上表面        | 4096 | 其他         | 10 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom2/SportBench02 (3)/Bench2Metal
+真黑·双指标一致           | 0.1543 |  58% | 0.1045   | 0.0748   |  92% | 上表面        | 1120 | 其他         | 13 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-4/Poster01_3a (1)
+真黑·双指标一致           | 0.0649 |  80% | 0.1052   | 0.0308   |  94% | +Z         |  531 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/Chair05 (4)
+真黑·双指标一致           | 0.0976 |  66% | 0.1063   | 0.1063   |  84% | 上表面        | 4096 | 其他         | 10 | 否      | Sink01                 | SchoolScene/Interior/Toilets/Sink01 (1)
+真黑·双指标一致           | 0.0865 |  70% | 0.1067   | 0.0306   |  94% | +Z         |  539 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/Chair05 (4)
+真黑·双指标一致           | 0.0855 |  69% | 0.1070   | 0.0360   |  93% | +Z         |  546 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/Chair05 (5)
+真黑·双指标一致           | 0.0623 |  75% | 0.1077   | 0.0924   |  60% | -Z         | 4096 | 其他         | 12 | 否      | Wood5                  | SchoolScene/Interior/SportRoom2/SportBench02/Bench2Wood
+真黑·双指标一致           | 0.0922 |  64% | 0.1080   | 0.0354   |  93% | +Z         |  540 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (17)/Chair05 (5)
+真黑·双指标一致           | 0.1457 |  70% | 0.1084   | 0.1084   |  66% | 上表面        | 4096 | 其他         |  9 | 否      | Geography01b           | SchoolScene/Interior/Class1-4/Blueprints02 (1)
+真黑·双指标一致           | 0.0461 |  93% | 0.1088   | 0.0836   |  88% | -Z         | 4096 | 其他         | 13 | 否      | Wood5                  | SchoolScene/Interior/SportRoom3/SportBench02 (4)/Bench2Wood
+真黑·双指标一致           | 0.0581 |  87% | 0.1089   | 0.1089   |  58% | 上表面        | 4096 | 其他         | 12 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom2/SportBench02/Bench2Metal
+真黑·双指标一致           | 0.0356 |  96% | 0.1099   | 0.1099   |  57% | 上表面        | 4096 | 其他         | 12 | 否      | MetallGray1            | SchoolScene/Interior/SportRoom3/SportBench02 (4)/Bench2Metal
+真黑·双指标一致           | 0.0804 |  70% | 0.1100   | 0.1100   |  59% | 上表面        | 4096 | 其他         | 10 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom2/Bath01/BathsShower
+真黑·双指标一致           | 0.1086 |  58% | 0.1109   | 0.0482   |  87% | -X         | 4096 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenFurniture07
+真黑·双指标一致           | 0.1104 |  57% | 0.1111   | 0.0747   |  93% | 上表面        | 2127 | 其他         |  0 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/Poster01_3a (2)
+真黑·双指标一致           | 0.0956 |  58% | 0.1125   | 0.0379   |  96% | +Z         |  854 | 其他         | 12 | 否      | Sink01                 | SchoolScene/Interior/Toilets/Sink01TrashBox
+真黑·双指标一致           | 0.0328 |  94% | 0.1143   | 0.1143   |  56% | 上表面        | 4096 | 其他         |  9 | 否      | Geography02b           | SchoolScene/Interior/Class1-4/Blueprints02
+真黑·双指标一致           | 0.1022 |  61% | 0.1150   | 0.0337   |  89% | +Z         | 4096 | 其他         | 12 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/Poster01_1a (3)
+真黑·双指标一致           | 0.1000 |  62% | 0.1158   | 0.0744   |  76% | +Z         | 4096 | 边条         |  9 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border013
+真黑·双指标一致           | 0.0592 |  83% | 0.1162   | 0.1162   |  74% | 上表面        | 4096 | 其他         | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom3/Bath01 (1)/002
+真黑·双指标一致           | 0.0590 |  88% | 0.1167   | 0.1167   |  51% | 上表面        | 4096 | 其他         |  0 | 否      | MetallChrome01         | SchoolScene/Interior/SportRoom2/Bath01/OilTank01
+真黑·双指标一致           | 0.0652 |  90% | 0.1171   | 0.0288   |  97% | 下表面        | 4096 | 其他         |  7 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (3)
+真黑·双指标一致           | 0.1028 |  67% | 0.1171   | 0.0806   |  73% | +Z         | 4096 | 边条         |  9 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border5
+真黑·双指标一致           | 0.0984 |  66% | 0.1173   | 0.0056   |  99% | 下表面        | 4096 | 其他         | 10 | 否      | Wood3                  | SchoolScene/Interior/SportRoom1/SportTrampline01 (2)
+真黑·双指标一致           | 0.0577 |  85% | 0.1181   | 0.0774   |  72% | +Z         |  747 | 其他         |  2 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (5)/TableMetall
+真黑·双指标一致           | 0.0672 |  84% | 0.1186   | 0.0680   |  77% | +Z         |  654 | 其他         |  2 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (4)/TableMetall
+真黑·双指标一致           | 0.1123 |  64% | 0.1192   | 0.0403   |  92% | 下表面        |  835 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenFurniture04_1
+真黑·双指标一致           | 0.0804 |  72% | 0.1198   | 0.0615   |  81% | +Z         |  810 | 其他         |  2 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (6)/TableMetall
+真黑·双指标一致           | 0.0787 |  71% | 0.1215   | 0.0201   |  95% | 下表面        |  834 | 其他         | 10 | 否      | Wood5                  | SchoolScene/Interior/SportRoom1/SportInventar01_02/Wood
+真黑·双指标一致           | 0.0901 |  59% | 0.1215   | 0.0181   |  95% | 下表面        |  854 | 其他         |  8 | 否      | Wood5                  | SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Wood
+真黑·双指标一致           | 0.1033 |  61% | 0.1222   | 0.0809   |  90% | 上表面        |  692 | 其他         |  0 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (7)/TableMetall
+真黑·双指标一致           | 0.0639 |  85% | 0.1233   | 0.0989   |  63% | +Z         | 1443 | 其他         |  2 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.0618 |  88% | 0.1236   | 0.0965   |  65% | +Z         | 4096 | 边条         |  2 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border4
+真黑·双指标一致           | 0.1264 |  58% | 0.1254   | 0.0766   |  78% | +X         | 4096 | 其他         |  7 | 否      | MetallPainted01Red     | SchoolScene/Interior/SportClassProps/SportBasketShit01 (4)/BasketMetal
+真黑·双指标一致           | 0.0803 |  67% | 0.1257   | 0.0787   |  88% | 上表面        | 1074 | 其他         |  8 | 否      | MetallPainted01LinesRed | SchoolScene/Interior/SportClassProps/SportGates01 (1)/Shape01
+真黑·双指标一致           | 0.1014 |  60% | 0.1262   | 0.1262   |  44% | 上表面        | 4096 | 灯          | 12 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (31)
+真黑·双指标一致           | 0.0665 |  75% | 0.1287   | 0.0335   |  94% | +Z         |  546 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/Chair05 (7)
+真黑·双指标一致           | 0.0702 |  70% | 0.1289   | 0.0517   |  84% | +Z         |  605 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (17)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0754 |  77% | 0.1297   | 0.0981   |  62% | +X         | 4096 | 其他         |  8 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportClassProps/SportBench01 (2)
+真黑·双指标一致           | 0.0840 |  72% | 0.1299   | 0.0846   |  67% | -X         | 1262 | 其他         | 11 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.1174 |  57% | 0.1300   | 0.0929   |  68% | +X         | 4096 | 其他         |  7 | 否      | MetallPainted01LinesRed | SchoolScene/Interior/SportClassProps/SportGates01a/Shape01
+真黑·双指标一致           | 0.0332 |  98% | 0.1304   | 0.0506   |  86% | 下表面        | 4096 | 其他         | 10 | 是      | ConctereWall12         | SchoolScene/Exterior/SchoolBuilding/Stairs02Concrete
+真黑·双指标一致           | 0.0810 |  69% | 0.1313   | 0.0312   |  93% | +Z         |  530 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/Chair05 (6)
+真黑·双指标一致           | 0.0571 |  85% | 0.1315   | 0.0853   |  69% | +X         | 4096 | 其他         | 11 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportClassProps/SportBench01 (1)
+真黑·双指标一致           | 0.0583 |  83% | 0.1318   | 0.0740   |  95% | 上表面        |  605 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (18)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0463 |  82% | 0.1320   | 0.0510   |  84% | +Z         |  630 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0715 |  74% | 0.1327   | 0.1327   |  59% | 上表面        | 4096 | 其他         | 10 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom2/Bath01/002
+真黑·双指标一致           | 0.0898 |  62% | 0.1327   | 0.0382   |  92% | +Z         |  554 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/Chair05 (7)
+真黑·双指标一致           | 0.0974 |  71% | 0.1334   | 0.0693   |  81% | +Z         | 1376 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenFurniture01 (3)
+真黑·双指标一致           | 0.0972 |  60% | 0.1336   | 0.0322   |  94% | +Z         |  542 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (12)/Chair05 (6)
+真黑·双指标一致           | 0.0574 |  76% | 0.1336   | 0.0727   |  95% | 上表面        |  630 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (19)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.1048 |  61% | 0.1338   | 0.1222   |  70% | -Z         |  665 | 其他         | 10 | 否      | MetallBlack            | SchoolScene/Interior/SportRoom1/SportKozel02 (1)/Kozel2Metal
+真黑·双指标一致           | 0.0479 |  83% | 0.1344   | 0.0353   |  95% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (2)
+真黑·双指标一致           | 0.0638 |  77% | 0.1348   | 0.1059   |  76% | -Z         |  948 | 其他         | 10 | 否      | MetallBlack            | SchoolScene/Interior/SportRoom1/Sportkozel01 (1)/KozelMetal
+真黑·双指标一致           | 0.0668 |  72% | 0.1348   | 0.0360   |  94% | +Z         | 4096 | 其他         | 13 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (7)
+真黑·双指标一致           | 0.1564 |  65% | 0.1349   | 0.0903   |  74% | 下表面        | 4096 | 其他         | 13 | 否      | Paper01                | SchoolScene/Interior/Class1-4/Blueprints05 (1)
+真黑·双指标一致           | 0.0924 |  67% | 0.1370   | 0.0802   |  89% | 上表面        |  550 | 其他         |  0 | 否      | Wood4                  | SchoolScene/Interior/Class1-2/Chair01b/Chair01Wood
+真黑·双指标一致           | 0.0341 |  89% | 0.1373   | 0.0420   |  86% | -X         | 1375 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenFurniture01 (1)
+真黑·双指标一致           | 0.0431 |  75% | 0.1374   | 0.0215   |  99% | 下表面        | 4096 | 其他         |  8 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (5)/Wood
+真黑·双指标一致           | 0.0914 |  65% | 0.1375   | 0.1093   |  57% | +Z         | 4096 | 其他         | 13 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+真黑·双指标一致           | 0.0671 |  83% | 0.1382   | 0.0305   |  92% | -X         | 4096 | 其他         |  7 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1c
+真黑·双指标一致           | 0.0914 |  57% | 0.1383   | 0.0755   |  67% | +Z         |  754 | 门          |  3 | 否      | DoorWindowsWood1       | SchoolScene/Interior/Kitchen/Door02Wood1/DoorAnchor/door02_1
+真黑·双指标一致           | 0.0812 |  74% | 0.1386   | 0.0790   |  70% | -X         |  711 | 其他         |  9 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.0196 |  93% | 0.1401   | 0.1162   |  53% | +Z         | 4096 | 边条         | 10 | 是      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border9
+真黑·双指标一致           | 0.0563 |  83% | 0.1408   | 0.0677   |  76% | +Z         |  782 | 其他         |  0 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (1)/TableMetall
+真黑·双指标一致           | 0.0582 |  88% | 0.1411   | 0.0787   |  91% | 上表面        |  738 | 其他         |  0 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (2)/TableMetall
+真黑·双指标一致           | 0.1518 |  58% | 0.1417   | 0.0584   |  90% | 下表面        |  607 | 其他         | 12 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenTable01
+真黑·双指标一致           | 0.0904 |  64% | 0.1421   | 0.0738   |  95% | 上表面        |  575 | 其他         |  2 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0791 |  68% | 0.1421   | 0.1005   |  76% | +X         | 4096 | 其他         |  7 | 否      | MetallPainted01LinesBlack | SchoolScene/Interior/SportClassProps/SportGates02 (1)/Shape01
+真黑·双指标一致           | 0.0825 |  62% | 0.1424   | 0.0585   |  82% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (3)/RoadBordure1d (1)
+真黑·双指标一致           | 0.0792 |  79% | 0.1426   | 0.0734   |  73% | +Z         |  638 | 其他         |  0 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03 (3)/TableMetall
+真黑·双指标一致           | 0.0654 |  76% | 0.1449   | 0.0261   |  96% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (1)
+真黑·双指标一致           | 0.0429 |  76% | 0.1449   | 0.0190   |  99% | 下表面        | 4096 | 其他         |  8 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (4)/Wood
+真黑·双指标一致           | 0.0752 |  83% | 0.1457   | 0.0389   |  95% | 下表面        | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1c (1)
+真黑·双指标一致           | 0.0689 |  81% | 0.1464   | 0.0880   |  80% | 上表面        |  657 | 其他         | 12 | 否      | PlasticGrey1           | SchoolScene/Interior/Class1-2/TableSchool03/TableMetall
+真黑·双指标一致           | 0.0474 |  85% | 0.1473   | 0.0268   |  97% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (5)/Concrete
+真黑·双指标一致           | 0.0553 |  88% | 0.1473   | 0.1109   |  51% | +X         | 4096 | 其他         | 13 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportClassProps/SportBench01
+真黑·双指标一致           | 0.0518 |  90% | 0.1482   | 0.0240   |  98% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (6)
+真黑·双指标一致           | 0.0471 |  90% | 0.1482   | 0.0312   |  97% | +Z         | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (8)
+真黑·双指标一致           | 0.1063 |  58% | 0.1489   | 0.0685   |  74% | +Z         |  547 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (11)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0457 |  83% | 0.1502   | 0.0565   |  79% | -X         | 1379 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenFurniture01 (2)
+真黑·双指标一致           | 0.0731 |  72% | 0.1516   | 0.0422   |  95% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (5)
+真黑·双指标一致           | 0.0732 |  76% | 0.1518   | 0.0814   |  91% | 上表面        |  759 | 其他         | 10 | 否      | SportBalls             | SchoolScene/Interior/SportRoom1/SportInventar01_02/Balls
+真黑·双指标一致           | 0.0280 |  94% | 0.1525   | 0.0499   |  86% | +Z         |  650 | 其他         |  1 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (16)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0512 |  82% | 0.1534   | 0.0827   |  92% | 上表面        |  536 | 其他         |  8 | 否      | SportBalls             | SchoolScene/Interior/SportRoom1/SportInventar01_01 (1)/Balls
+真黑·双指标一致           | 0.0311 |  94% | 0.1535   | 0.0732   |  95% | 上表面        |  650 | 其他         |  0 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0502 |  79% | 0.1551   | 0.0218   |  98% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (4)/Concrete
+真黑·双指标一致           | 0.0742 |  73% | 0.1554   | 0.1041   |  57% | 上表面        |  825 | 其他         |  5 | 否      | MetallBlack            | SchoolScene/Interior/SportClassProps/Sportkozel01/KozelMetal
+真黑·双指标一致           | 0.0557 |  74% | 0.1559   | 0.0319   |  95% | 下表面        | 4096 | 其他         |  8 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (3)/Wood
+真黑·双指标一致           | 0.0636 |  78% | 0.1559   | 0.0652   |  74% | +Z         |  650 | 其他         |  1 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (13)/TableSimple01_02/TableMetall
+真黑·双指标一致           | 0.0285 |  87% | 0.1559   | 0.0404   |  93% | 下表面        | 4096 | 其他         |  8 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (2)/Wood
+真黑·双指标一致           | 0.0241 |  94% | 0.1563   | 0.0283   |  93% | 下表面        | 4096 | 其他         |  0 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (6)/Wood
+真黑·双指标一致           | 0.1222 |  57% | 0.1565   | 0.0334   |  96% | +Z         | 4096 | 其他         | 10 | 否      | Wood4                  | SchoolScene/Interior/Class2-1/TableSchool01 (2)/TableWood
+真黑·双指标一致           | 0.0847 |  66% | 0.1578   | 0.0634   |  81% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+真黑·双指标一致           | 0.0804 |  59% | 0.1597   | 0.1050   |  55% | +X         | 4096 | 其他         |  7 | 否      | SportGates             | SchoolScene/Interior/SportClassProps/SportGates02 (1)/Gates002
+真黑·双指标一致           | 0.0917 |  68% | 0.1619   | 0.0469   |  91% | 下表面        | 4096 | 其他         |  0 | 否      | Wood4                  | SchoolScene/Interior/Class2-1/Table02
+真黑·双指标一致           | 0.0755 |  76% | 0.1629   | 0.0233   |  96% | 下表面        | 4096 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1c (2)
+真黑·双指标一致           | 0.0844 |  65% | 0.1644   | 0.0212   |  98% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (3)
+真黑·双指标一致           | 0.0751 |  69% | 0.1649   | 0.0296   |  98% | -X         | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1b
+真黑·双指标一致           | 0.0586 |  74% | 0.1649   | 0.0402   |  93% | 下表面        | 4096 | 其他         |  8 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (3)/Concrete
+真黑·双指标一致           | 0.1065 |  59% | 0.1651   | 0.1265   |  50% | -X         | 4096 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1e (1)
+真黑·双指标一致           | 0.0854 |  68% | 0.1653   | 0.0869   |  88% | 上表面        |  573 | 其他         | 10 | 否      | SportBalls             | SchoolScene/Interior/SportRoom1/SportInventar01_01/Balls
+真黑·双指标一致           | 0.0612 |  75% | 0.1659   | 0.0427   |  94% | +Z         | 4096 | 其他         |  8 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (2)/Concrete
+真黑·双指标一致           | 0.0668 |  75% | 0.1661   | 0.0324   |  95% | +Z         | 4096 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (6)/Concrete
+真黑·双指标一致           | 0.0775 |  69% | 0.1668   | 0.0435   |  93% | +Z         | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c (1)
+真黑·双指标一致           | 0.0657 |  79% | 0.1678   | 0.0060   |  99% | 下表面        |  760 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportTrampline01
+真黑·双指标一致           | 0.0607 |  75% | 0.1681   | 0.1681   |  38% | 上表面        | 4096 | 其他         |  1 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (1)
+真黑·双指标一致           | 0.1253 |  60% | 0.1687   | 0.0545   |  89% | 下表面        |  789 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenTable01 (5)
+真黑·双指标一致           | 0.0853 |  70% | 0.1687   | 0.0825   |  78% | +X         |  618 | 其他         |  5 | 否      | MetallBlack            | SchoolScene/Interior/SportClassProps/SportKozel02/Kozel2Metal
+真黑·双指标一致           | 0.0285 |  96% | 0.1689   | 0.0165   | 100% | 下表面        | 4096 | 其他         |  0 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (7)/Wood
+真黑·双指标一致           | 0.0733 |  72% | 0.1693   | 0.0631   |  87% | +X         | 4096 | 其他         | 11 | 否      | MetallPainted01Red     | SchoolScene/Interior/SportClassProps/SportBasketShit01 (2)/BasketMetal
+真黑·双指标一致           | 0.0807 |  62% | 0.1699   | 0.0250   |  97% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (9)
+真黑·双指标一致           | 0.0800 |  60% | 0.1701   | 0.0902   |  73% | -X         | 4092 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/SportClassProps/Radiator01 (6)
+真黑·双指标一致           | 0.0532 |  85% | 0.1736   | 0.0165   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (3)
+真黑·双指标一致           | 0.0681 |  76% | 0.1737   | 0.0166   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (4)
+真黑·双指标一致           | 0.0973 |  67% | 0.1738   | 0.0615   |  84% | 下表面        | 1257 | 其他         | 11 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenRazdacha01_01a (1)
+真黑·双指标一致           | 0.1085 |  57% | 0.1743   | 0.0261   |  97% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (2)
+真黑·双指标一致           | 0.1675 |  56% | 0.1743   | 0.0168   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (5)/Computer06
+真黑·双指标一致           | 0.1220 |  67% | 0.1748   | 0.1748   |  40% | 上表面        | 4096 | 吊顶         | 20 | 是      | TileArmstrong01_04     | SchoolScene/Exterior/SchoolBuilding/DirectorTop
+真黑·双指标一致           | 0.1236 |  62% | 0.1749   | 0.0196   |  99% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b
+真黑·双指标一致           | 0.0957 |  69% | 0.1756   | 0.0199   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (2)
+真黑·双指标一致           | 0.1129 |  63% | 0.1760   | 0.0199   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/Computer06 (1)
+真黑·双指标一致           | 0.0954 |  62% | 0.1762   | 0.0390   |  93% | +Z         | 4096 | 其他         | 15 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (17)
+真黑·双指标一致           | 0.1237 |  64% | 0.1762   | 0.0200   |  95% | -X         |  682 | 其他         |  9 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup/Computer06
+真黑·双指标一致           | 0.2323 |  56% | 0.1763   | 0.1763   |  16% | 上表面        | 4096 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (4)
+真黑·双指标一致           | 0.0450 |  83% | 0.1768   | 0.1212   |  52% | +Z         | 4096 | 其他         |  1 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1e (1)
+真黑·双指标一致           | 0.0744 |  78% | 0.1773   | 0.0198   |  98% | 下表面        | 4096 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (7)/Concrete
+真黑·双指标一致           | 0.1559 |  62% | 0.1786   | 0.0418   |  88% | -X         | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1c
+真黑·双指标一致           | 0.0583 |  81% | 0.1793   | 0.0969   |  71% | 上表面        |  672 | 其他         |  8 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01a (2)
+真黑·双指标一致           | 0.0878 |  63% | 0.1804   | 0.0647   |  90% | 下表面        | 4096 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03 (1)/TableWood
+真黑·双指标一致           | 0.0876 |  81% | 0.1828   | 0.0057   |  99% | 下表面        |  827 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportTrampline01 (1)
+真黑·双指标一致           | 0.0589 |  91% | 0.1832   | 0.0755   |  63% | -X         | 4092 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/SportClassProps/Radiator01 (3)
+真黑·双指标一致           | 0.0687 |  76% | 0.1843   | 0.0913   |  78% | 上表面        |  649 | 其他         |  8 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01a (3)
+真黑·双指标一致           | 0.0785 |  75% | 0.1857   | 0.1857   |  25% | 上表面        | 4096 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (17)
+真黑·双指标一致           | 0.0848 |  66% | 0.1876   | 0.0776   |  95% | 上表面        |  586 | 门          |  8 | 否      | Door07a                | SchoolScene/Interior/Doors/Door07aPost (2)
+真黑·双指标一致           | 0.0851 |  68% | 0.1884   | 0.0774   |  94% | 上表面        |  565 | 门          | 11 | 否      | Door07a                | SchoolScene/Interior/Doors/Door07aPost (1)
+真黑·双指标一致           | 0.0840 |  66% | 0.1899   | 0.0499   |  87% | 下表面        | 4096 | 其他         | 11 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (3)/RoadBordure1d
+真黑·双指标一致           | 0.1052 |  71% | 0.1906   | 0.1293   |  45% | -X         | 4096 | 其他         |  1 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+真黑·双指标一致           | 0.0676 |  72% | 0.1908   | 0.0879   |  65% | -X         | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1a (2)
+真黑·双指标一致           | 0.0909 |  63% | 0.1938   | 0.1938   |  26% | 上表面        | 4096 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (1)
+真黑·双指标一致           | 0.0894 |  63% | 0.1939   | 0.1939   |  24% | 上表面        | 4096 | 其他         |  2 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f
+真黑·双指标一致           | 0.1348 |  67% | 0.1942   | 0.0737   |  94% | 上表面        | 1120 | 其他         | 13 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-4/Poster01_3a
+真黑·双指标一致           | 0.0958 |  67% | 0.1943   | 0.1603   |  31% | -X         | 4096 | 其他         |  7 | 否      | MetallPainted01White   | SchoolScene/Exterior/SchoolBuilding/ReshetkaRight
+真黑·双指标一致           | 0.2046 |  56% | 0.1955   | 0.0781   |  90% | 上表面        | 1120 | 其他         |  1 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-3/Poster01_3a (1)
+真黑·双指标一致           | 0.0622 |  68% | 0.1962   | 0.1962   |  27% | 上表面        | 4096 | 边条         |  9 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border8
+真黑·双指标一致           | 0.1041 |  67% | 0.1979   | 0.1003   |  70% | 上表面        | 1365 | 其他         |  0 | 否      | Sink01                 | SchoolScene/Interior/Toilets/Sink01Paper
+真黑·双指标一致           | 0.0437 |  89% | 0.1987   | 0.0285   |  97% | +Z         |  720 | 门          |  8 | 否      | DoorDouble02           | SchoolScene/Interior/Doors/DoorDouble02/DoorDouble0
+真黑·双指标一致           | 0.1074 |  54% | 0.2003   | 0.2003   |  26% | 上表面        | 4096 | 边条         |  9 | 是      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border011
+真黑·双指标一致           | 0.1181 |  59% | 0.2024   | 0.0914   |  64% | -X         | 4096 | 其他         |  8 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+真黑·双指标一致           | 0.1258 |  59% | 0.2032   | 0.0577   |  81% | -X         | 4096 | 其他         |  7 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (2)/RoadBordure1d
+真黑·双指标一致           | 0.0513 |  83% | 0.2041   | 0.0802   |  75% | +X         | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1c (1)
+真黑·双指标一致           | 0.0818 |  77% | 0.2058   | 0.0619   |  70% | -X         | 3918 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/SportClassProps/Radiator01 (1)
+真黑·双指标一致           | 0.0717 |  83% | 0.2070   | 0.1338   |  49% | +X         | 4096 | 其他         |  9 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.0852 |  58% | 0.2080   | 0.2080   |  50% | 上表面        | 4096 | 边条         |  9 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border017
+真黑·双指标一致           | 0.0941 |  66% | 0.2119   | 0.0416   |  94% | +Z         | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (25)
+真黑·双指标一致           | 0.0410 |  86% | 0.2127   | 0.0553   |  83% | +Z         | 4096 | 其他         |  9 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (13)/Wood
+真黑·双指标一致           | 0.0408 |  96% | 0.2130   | 0.1029   |  67% | 上表面        |  882 | 其他         |  8 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01b (4)
+真黑·双指标一致           | 0.1214 |  62% | 0.2156   | 0.0982   |  60% | -X         | 4096 | 其他         |  0 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.1186 |  59% | 0.2157   | 0.1105   |  58% | +X         |  653 | 其他         |  3 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01a
+真黑·双指标一致           | 0.0549 |  89% | 0.2171   | 0.0988   |  68% | 上表面        |  856 | 其他         |  8 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01b (5)
+真黑·双指标一致           | 0.1417 |  56% | 0.2178   | 0.0916   |  63% | -X         | 4096 | 其他         |  8 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.0731 |  79% | 0.2185   | 0.1115   |  58% | +Z         | 4096 | 其他         |  3 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.1573 |  63% | 0.2191   | 0.0473   |  89% | 下表面        | 4096 | 其他         |  0 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (11)/Wood
+真黑·双指标一致           | 0.0535 |  86% | 0.2200   | 0.0497   |  86% | 下表面        | 4096 | 其他         | 12 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (16)
+真黑·双指标一致           | 0.0000 | 100% | 0.2208   | 0.0634   |  72% | 下表面        | 4096 | 其他         |  3 | 是      | ConctereWall14         | SchoolScene/Exterior/SchoolBuilding/BuildingBottomFloor
+真黑·双指标一致           | 0.1148 |  59% | 0.2213   | 0.2213   |  19% | 上表面        | 4096 | 其他         |  0 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1b (6)
+真黑·双指标一致           | 0.1200 |  59% | 0.2220   | 0.1131   |  58% | +X         |  661 | 其他         |  5 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01a (1)
+真黑·双指标一致           | 0.1741 |  72% | 0.2223   | 0.0551   |  85% | 下表面        | 4096 | 其他         | 12 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea/RoadBordure1b (15)
+真黑·双指标一致           | 0.0761 |  76% | 0.2233   | 0.0537   |  87% | +Z         | 4096 | 其他         | 16 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1/Wood
+真黑·双指标一致           | 0.1544 |  63% | 0.2234   | 0.0366   |  94% | 下表面        | 4096 | 其他         |  0 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (10)/Wood
+真黑·双指标一致           | 0.1115 |  56% | 0.2237   | 0.0274   |  94% | 下表面        | 4096 | 其他         | 13 | 否      | Electro08              | SchoolScene/Interior/Class1-3/Electro08_10 (1)
+真黑·双指标一致           | 0.2681 |  56% | 0.2247   | 0.2247   |  18% | 上表面        | 4096 | 其他         | 15 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (13)
+真黑·双指标一致           | 0.1409 |  66% | 0.2251   | 0.0424   |  90% | 下表面        | 4096 | 其他         |  5 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (9)/Wood
+真黑·双指标一致           | 0.0480 |  88% | 0.2269   | 0.0271   |  97% | +Z         |  600 | 门          |  3 | 否      | DoorDouble02           | SchoolScene/Interior/Doors/DoorDouble02/DoorDouble
+真黑·双指标一致           | 0.1272 |  62% | 0.2299   | 0.1253   |  49% | +Z         | 4096 | 其他         |  0 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+真黑·双指标一致           | 0.0684 |  73% | 0.2329   | 0.0911   |  70% | 上表面        |  843 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Paper (1)
+真黑·双指标一致           | 0.0615 |  77% | 0.2335   | 0.0553   |  81% | +Z         | 4096 | 其他         |  9 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (12)/Wood
+真黑·双指标一致           | 0.0675 |  78% | 0.2335   | 0.0322   |  88% | 下表面        | 1540 | 其他         | 13 | 否      | Wood4                  | SchoolScene/Interior/Class1-4/Capboard01_01 (2)/Capboard01
+真黑·双指标一致           | 0.0896 |  59% | 0.2350   | 0.0205   |  95% | -X         |  682 | 其他         |  2 | 否      | Computer03             | SchoolScene/Interior/ClassTeachers/Computer03
+真黑·双指标一致           | 0.0519 |  85% | 0.2372   | 0.0959   |  67% | 上表面        |  843 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Paper
+真黑·双指标一致           | 0.1286 |  58% | 0.2379   | 0.0731   |  73% | +Z         | 1162 | 其他         |  9 | 否      | Wood4                  | SchoolScene/Interior/Class1-4/Capboard01_04/Capboard04
+真黑·双指标一致           | 0.0712 |  75% | 0.2413   | 0.0851   |  70% | +X         |  804 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01b (3)
+真黑·双指标一致           | 0.1125 |  57% | 0.2421   | 0.0498   |  87% | +Z         | 4096 | 其他         | 16 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1/Concrete
+真黑·双指标一致           | 0.0580 |  87% | 0.2446   | 0.0839   |  71% | +X         |  786 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01b (2)
+真黑·双指标一致           | 0.1167 |  68% | 0.2456   | 0.1275   |  43% | -X         | 4096 | 其他         |  0 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+真黑·双指标一致           | 0.1660 |  59% | 0.2460   | 0.0837   |  70% | +X         | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1c (2)
+真黑·双指标一致           | 0.1756 |  57% | 0.2465   | 0.0465   |  89% | 下表面        | 4096 | 其他         |  5 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (9)/Concrete
+真黑·双指标一致           | 0.0936 |  71% | 0.2475   | 0.0882   |  72% | 上表面        |  843 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Paper (7)
+真黑·双指标一致           | 0.1512 |  66% | 0.2595   | 0.0475   |  92% | 下表面        | 4096 | 其他         |  5 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (8)/Wood
+真黑·双指标一致           | 0.0717 |  69% | 0.2643   | 0.0793   |  93% | 上表面        | 1120 | 其他         |  1 | 否      | MetallChrome01         | SchoolScene/Interior/Corridor1/Poster03_1a (3)/Poster03_1
+真黑·双指标一致           | 0.1732 |  69% | 0.2653   | 0.0544   |  84% | +Z         | 4096 | 其他         | 16 | 否      | Wood2                  | SchoolScene/Exterior/Benches/Bench01_1 (1)/Wood
+真黑·双指标一致           | 0.0783 |  68% | 0.2662   | 0.0855   |  75% | -X         | 2214 | 暖气片        | 13 | 否      | Radiator01             | SchoolScene/Interior/SportClassProps/Radiator01 (7)
+真黑·双指标一致           | 0.0201 |  98% | 0.2686   | 0.0516   |  81% | +Z         | 1490 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/ClassComputer/Radiator01 (8)
+真黑·双指标一致           | 0.0596 |  78% | 0.2725   | 0.0553   |  77% | +Z         | 1586 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (35)
+真黑·双指标一致           | 0.0770 |  68% | 0.2725   | 0.0582   |  91% | 下表面        |  613 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03 (3)/TableWood
+真黑·双指标一致           | 0.1908 |  58% | 0.2736   | 0.0513   |  90% | 下表面        | 4096 | 其他         |  5 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (8)/Concrete
+真黑·双指标一致           | 0.0875 |  61% | 0.2783   | 0.0447   |  93% | +Z         | 1568 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (39)
+真黑·双指标一致           | 0.0914 |  60% | 0.2789   | 0.0658   |  90% | 下表面        |  599 | 其他         | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03/TableWood
+真黑·双指标一致           | 0.1422 |  50% | 0.2803   | 0.1939   |  29% | 上表面        |  720 | 吊顶         | 15 | 是      | TileArmstrong01_04     | SchoolScene/Exterior/SchoolBuilding/ZalTop
+真黑·双指标一致           | 0.1016 |  62% | 0.2806   | 0.1163   |  42% | -X         |  840 | 其他         |  9 | 否      | Wood4                  | SchoolScene/Interior/Class2-2/Capboard01_04/Capboard04
+真黑·双指标一致           | 0.0832 |  65% | 0.2811   | 0.0585   |  90% | 下表面        |  578 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03 (2)/TableWood
+真黑·双指标一致           | 0.0584 |  77% | 0.2843   | 0.0509   |  89% | -X         |  880 | 其他         |  5 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain01 (1)
+真黑·双指标一致           | 0.0808 |  72% | 0.2878   | 0.0970   |  68% | 上表面        |  818 | 门          | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door2
+真黑·双指标一致           | 0.0800 |  59% | 0.2881   | 0.0748   |  67% | +Z         | 1537 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (41)
+真黑·双指标一致           | 0.0785 |  83% | 0.2883   | 0.0652   |  68% | -X         | 2133 | 暖气片        | 13 | 否      | Radiator01             | SchoolScene/Interior/SportClassProps/Radiator01 (2)
+真黑·双指标一致           | 0.0338 |  94% | 0.2944   | 0.0561   |  90% | +Z         | 1382 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Class1-4/Radiator01 (3)
+真黑·双指标一致           | 0.0751 |  78% | 0.3002   | 0.0722   |  73% | -X         | 1718 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/SportRoom1/Radiator01 (9)
+真黑·双指标一致           | 0.0315 |  95% | 0.3013   | 0.0599   |  77% | +Z         | 1354 | 暖气片        | 13 | 否      | Radiator01             | SchoolScene/Interior/ClassComputer/Radiator01 (7)
+真黑·双指标一致           | 0.0292 |  94% | 0.3034   | 0.0597   |  93% | +Z         | 1280 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Class1-4/Radiator01 (5)
+真黑·双指标一致           | 0.1184 |  57% | 0.3060   | 0.1038   |  50% | +X         |  818 | 门          | 10 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom2/Bath01/Door2
+真黑·双指标一致           | 0.0493 |  85% | 0.3115   | 0.0618   |  91% | -X         | 1301 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/ClassComputer/Radiator01 (6)
+真黑·双指标一致           | 0.0323 |  94% | 0.3139   | 0.0522   |  93% | +Z         | 1184 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Class1-4/Radiator01 (4)
+真黑·双指标一致           | 0.0152 | 100% | 0.3169   | 0.0523   |  84% | +Z         | 1206 | 暖气片        |  2 | 否      | Radiator01             | SchoolScene/Interior/Class1-2/Radiator01 (5)
+真黑·双指标一致           | 0.0211 |  96% | 0.3228   | 0.0459   |  85% | +Z         | 1155 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/Class1-2/Radiator01 (3)
+真黑·双指标一致           | 0.0502 |  89% | 0.3232   | 0.0575   |  92% | +Z         | 1150 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Class1-3/Radiator01 (6)
+真黑·双指标一致           | 0.0123 | 100% | 0.3246   | 0.0382   |  89% | +Z         | 1117 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/Class1-2/Radiator01 (4)
+真黑·双指标一致           | 0.1209 |  57% | 0.3283   | 0.0426   |  91% | +Z         |  940 | 其他         | 11 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain02 (5)
+真黑·双指标一致           | 0.1143 |  57% | 0.3315   | 0.0425   |  91% | +Z         |  940 | 其他         |  7 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain02 (7)
+真黑·双指标一致           | 0.0854 |  65% | 0.3349   | 0.0833   |  90% | 上表面        | 1520 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/Corridor1/Poster03_2a (2)/Poster03_2
+真黑·双指标一致           | 0.2320 |  56% | 0.3361   | 0.0739   |  94% | 上表面        | 1120 | 其他         | 13 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-3/Poster01_3a
+真黑·双指标一致           | 0.0400 |  91% | 0.3387   | 0.0704   |  76% | +Z         | 1113 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/Class1-3/Radiator01 (5)
+真黑·双指标一致           | 0.1282 |  63% | 0.3388   | 0.0577   |  86% | -X         |  880 | 其他         | 16 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain01_1
+真黑·双指标一致           | 0.0848 |  77% | 0.3430   | 0.0646   |  68% | -X         | 1620 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (11)
+真黑·双指标一致           | 0.0998 |  60% | 0.3542   | 0.0655   |  78% | +Z         | 1477 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (40)
+真黑·双指标一致           | 0.0596 |  86% | 0.3551   | 0.0743   |  64% | -X         | 1548 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (8)
+真黑·双指标一致           | 0.1195 |  56% | 0.3560   | 0.1124   |  52% | 上表面        |  885 | 门          | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom2/Bath01/Door3
+真黑·双指标一致           | 0.1444 |  57% | 0.3583   | 0.1267   |  80% | 上表面        |  648 | 其他         | 10 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Urinal (3)
+真黑·双指标一致           | 0.0662 |  74% | 0.3600   | 0.0694   |  88% | +Z         | 1063 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/Class1-3/Radiator01 (4)
+真黑·双指标一致           | 0.0795 |  73% | 0.3627   | 0.0842   |  82% | 上表面        |  877 | 门          | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door3
+真黑·双指标一致           | 0.0811 |  74% | 0.3647   | 0.0617   |  78% | +Z         | 1387 | 暖气片        |  5 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (37)
+真黑·双指标一致           | 0.1474 |  57% | 0.3653   | 0.1299   |  78% | 上表面        |  648 | 其他         | 10 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Urinal (2)
+真黑·双指标一致           | 0.0897 |  75% | 0.3691   | 0.0588   |  79% | +Z         | 1450 | 暖气片        |  7 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (36)
+真黑·双指标一致           | 0.0918 |  76% | 0.3869   | 0.0650   |  78% | +Z         | 1320 | 暖气片        | 15 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (38)
+真黑·双指标一致           | 0.0258 | 100% | 0.3985   | 0.0227   |  98% | +Z         |  892 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/Class2-1/Radiator01 (5)
+真黑·双指标一致           | 0.0909 |  72% | 0.3991   | 0.0214   |  92% | -X         | 1049 | 其他         |  2 | 否      | Wood4                  | SchoolScene/Interior/Class1-4/Capboard01_05/Capboard05
+真黑·双指标一致           | 0.0315 |  99% | 0.4019   | 0.0479   |  91% | +Z         |  892 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Class2-2/Radiator01 (5)
+真黑·双指标一致           | 0.0440 |  80% | 0.4049   | 0.0388   |  93% | +Z         |  892 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/Class2-1/Radiator01 (3)
+真黑·双指标一致           | 0.1995 |  58% | 0.4052   | 0.0566   |  77% | -X         |  840 | 其他         | 15 | 否      | Wood4                  | SchoolScene/Interior/Class1-3/Capboard01_02/Capboard01
+真黑·双指标一致           | 0.1144 |  59% | 0.4063   | 0.0615   |  91% | +Z         |  892 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/ClassTeachers/Radiator01 (5)
+真黑·双指标一致           | 0.0233 |  99% | 0.4063   | 0.0234   |  98% | +Z         |  892 | 暖气片        | 13 | 否      | Radiator01             | SchoolScene/Interior/Class2-1/Radiator01 (4)
+真黑·双指标一致           | 0.0417 |  95% | 0.4082   | 0.0708   |  91% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Class2-2/Radiator01 (4)
+真黑·双指标一致           | 0.0249 |  93% | 0.4083   | 0.0621   |  91% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Class2-2/Radiator01 (3)
+真黑·双指标一致           | 0.0247 |  96% | 0.4092   | 0.0195   |  99% | +Z         |  892 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (38)
+真黑·双指标一致           | 0.0303 |  93% | 0.4121   | 0.0443   |  91% | +Z         |  892 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/ClassTeachers/Radiator01 (3)
+真黑·双指标一致           | 0.0286 |  96% | 0.4190   | 0.0356   |  91% | +Z         |  892 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/ClassDirector/Radiator01 (2)
+真黑·双指标一致           | 0.0649 |  80% | 0.4197   | 0.0641   |  91% | +Z         |  892 | 暖气片        | 10 | 否      | Radiator01             | SchoolScene/Interior/ClassTeachers/Radiator01 (4)
+真黑·双指标一致           | 0.0367 |  93% | 0.4197   | 0.0332   |  94% | +Z         |  892 | 暖气片        | 12 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (42)
+真黑·双指标一致           | 0.0865 |  76% | 0.4201   | 0.0629   |  67% | -X         | 1259 | 暖气片        |  8 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (14)
+真黑·双指标一致           | 0.1563 |  56% | 0.4202   | 0.1315   |  77% | 上表面        |  648 | 其他         | 10 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Urinal (1)
+真黑·双指标一致           | 0.0227 |  94% | 0.4230   | 0.0183   |  98% | +Z         |  892 | 暖气片        |  3 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (40)
+真黑·双指标一致           | 0.0408 |  91% | 0.4245   | 0.0284   |  91% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (46)
+真黑·双指标一致           | 0.0952 |  59% | 0.4248   | 0.0338   |  98% | +Z         |  892 | 暖气片        |  2 | 否      | Radiator01             | SchoolScene/Interior/ClassDirector/Radiator01
+真黑·双指标一致           | 0.0220 |  96% | 0.4255   | 0.0252   |  97% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (39)
+真黑·双指标一致           | 0.0587 |  76% | 0.4309   | 0.0286   |  91% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (44)
+真黑·双指标一致           | 0.0307 |  95% | 0.4319   | 0.0254   |  91% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (45)
+真黑·双指标一致           | 0.0427 |  85% | 0.4326   | 0.0270   |  90% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (37)
+真黑·双指标一致           | 0.0316 |  90% | 0.4354   | 0.0258   |  96% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (36)
+真黑·双指标一致           | 0.0800 |  71% | 0.4356   | 0.1284   |  41% | 上表面        |  902 | 门          | 10 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom2/Bath01/Door01
+真黑·双指标一致           | 0.0524 |  87% | 0.4365   | 0.1106   |  54% | 上表面        |  902 | 门          | 12 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom3/Bath01 (1)/Door01
+真黑·双指标一致           | 0.0423 |  87% | 0.4367   | 0.0274   |  90% | +Z         |  892 | 暖气片        |  9 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (47)
+真黑·双指标一致           | 0.0372 |  93% | 0.4475   | 0.0239   |  98% | +Z         |  892 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (43)
+真黑·双指标一致           | 0.0526 |  85% | 0.4481   | 0.0361   |  93% | +Z         |  892 | 暖气片        |  3 | 否      | Radiator01             | SchoolScene/Interior/Corridor2/Radiator01 (41)
+真黑·双指标一致           | 0.1375 |  61% | 0.4568   | 0.0510   |  79% | -X         | 1012 | 其他         |  8 | 否      | Wood4                  | SchoolScene/Interior/Class1-4/Capboard01_03 (1)/Capboard01
+真黑·双指标一致           | 0.1734 |  56% | 0.4941   | 0.0721   |  78% | +Z         |  655 | 其他         |  2 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03 (5)/TableWood
+真黑·双指标一致           | 0.0749 |  76% | 0.5084   | 0.0939   |  79% | 上表面        |  598 | 其他         | 13 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom3/Bath01 (1)/BathsWood
+真黑·双指标一致           | 0.0808 |  76% | 0.5276   | 0.1094   |  62% | 上表面        |  588 | 其他         | 10 | 否      | PlasticWhite1          | SchoolScene/Interior/SportRoom2/Bath01/BathsWood
+真黑·双指标一致           | 0.1691 |  60% | 0.5966   | 0.1682   |  41% | 上表面        |  648 | 其他         |  8 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Urinal (4)
+真黑·双指标一致           | 0.1125 |  56% | 0.7156   | 0.0914   |  76% | 上表面        | 1520 | 其他         | 15 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassDirector/Blinds01c (1)
+真黑·双指标一致           | 0.1183 |  60% | 0.7262   | 0.0840   |  67% | +Z         | 1520 | 其他         | 10 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassComputer/Blinds01c (8)
+真黑·双指标一致           | 0.0632 |  79% | 0.7490   | 0.0327   |  88% | -X         | 1023 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/Capboard01_03 (3)/Capboard01
+真黑·双指标一致           | 0.0526 |  82% | 0.7604   | 0.0107   |  98% | -X         | 1052 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/Capboard01_05 (1)/Capboard05
+真黑·双指标一致           | 0.0539 |  79% | 0.7757   | 0.0286   |  87% | -X         |  880 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/Capboard01_03 (2)/Capboard01
+真黑·双指标一致           | 0.0218 |  95% | 0.8532   | 0.0244   |  92% | -X         |  685 | 其他         | 12 | 否      | Electro06              | SchoolScene/Interior/Class1-3/Electro06 (3)
+仅渲染黑·待复核           | 0.3367 |  26% | 0.2775   | 0.1103   |  62% | -X         | 4096 | 其他         | 22 | 是      | ConcreteWall6d         | SchoolScene/Exterior/SchoolBuilding/Box001
+仅渲染黑·待复核           | 0.3120 |  32% | 0.3940   | 0.1933   |  36% | 上表面        |  712 | 其他         | 21 | 是      | ConcreteStucco01b      | SchoolScene/Exterior/SchoolBuilding/Kitchen
+仅渲染黑·待复核           | 0.4912 |  10% | 0.5210   | 0.0781   |  74% | +Z         |  836 | 吊顶         | 10 | 是      | TileArmstrong01_04     | SchoolScene/Exterior/SchoolBuilding/PCClassTop
+仅UV黑·未实测           | 0.1501 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (10)/ChamferBox002
+仅UV黑·未实测           | 0.1431 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | Wood4                  | SchoolScene/Interior/Class1-4/Capboard01_03/Capboard01
+仅UV黑·未实测           | 0.1299 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (27)
+仅UV黑·未实测           | 0.1058 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 玻璃         |  0 | 否      | GlassClear             | SchoolScene/Interior/Class1-2/Capboard01_05 (1)/GlassPart1
+仅UV黑·未实测           | 0.1304 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/Capboard01_03 (1)/Capboard01
+仅UV黑·未实测           | 0.1110 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 10 | 否      | MetallPaintedBlack     | SchoolScene/Interior/SportClassProps/SportBench01 (4)
+仅UV黑·未实测           | 0.2530 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (4)/RoadBordure1c (1)
+仅UV黑·未实测           | 0.0841 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 边条         |  9 | 否      | Wood2                  | SchoolScene/Exterior/SchoolBuilding/Border1
+仅UV黑·未实测           | 0.1160 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (20)/Cylinder004
+仅UV黑·未实测           | 0.1084 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (4)/TableMetall
+仅UV黑·未实测           | 0.0874 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  7 | 否      | SportGates             | SchoolScene/Interior/SportClassProps/SportGates01a/Gates002
+仅UV黑·未实测           | 0.1759 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassDirector/Blinds01c
+仅UV黑·未实测           | 0.2790 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 16 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (12)
+仅UV黑·未实测           | 0.1519 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 17 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenTable02 (2)
+仅UV黑·未实测           | 0.1108 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (19)/Chair05 (5)
+仅UV黑·未实测           | 0.1583 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (3)/TableSimple01_02/TableMetall
+仅UV黑·未实测           | 0.1358 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+仅UV黑·未实测           | 0.1168 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/Chair05 (6)
+仅UV黑·未实测           | 0.1136 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  1 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (15)/Chair05 (7)
+仅UV黑·未实测           | 0.1399 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | Optimized Bark Material | TreeShadows/Tree3(Clone)
+仅UV黑·未实测           | 0.1745 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 12 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassTeachers/Blinds01c (3)
+仅UV黑·未实测           | 0.1018 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | Computer03             | SchoolScene/Interior/ClassTeachers/Computer03 (2)
+仅UV黑·未实测           | 0.0978 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (23)
+仅UV黑·未实测           | 0.1118 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 12 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassTeachers/Blinds01c (5)
+仅UV黑·未实测           | 0.1356 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | Wood4                  | SchoolScene/Interior/Class2-2/Chair01b/Chair01Wood
+仅UV黑·未实测           | 0.1540 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | Optimized Bark Material | TreeShadows/Tree2(Clone)
+仅UV黑·未实测           | 0.1411 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 11 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/Poster01_2a (2)
+仅UV黑·未实测           | 0.2082 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 12 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenTable01 (3)
+仅UV黑·未实测           | 0.1747 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool03 (4)/TableWood
+仅UV黑·未实测           | 0.1710 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (1)/Concrete
+仅UV黑·未实测           | 0.1708 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | Wood4                  | SchoolScene/Interior/Class1-3/Capboard01_01/Capboard01
+仅UV黑·未实测           | 0.1541 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 暖气片        |  0 | 否      | Radiator01             | SchoolScene/Interior/ClassDirector/Radiator01 (1)
+仅UV黑·未实测           | 0.1164 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 暖气片        | 11 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (10)
+仅UV黑·未实测           | 0.1025 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 门          |  5 | 否      | DoorsWindowsPlastic    | SchoolScene/Interior/SportClassProps/Door02_OpenedWood1/door02_frame
+仅UV黑·未实测           | 0.1610 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassComputer/Blinds01c (7)
+仅UV黑·未实测           | 0.0849 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1b
+仅UV黑·未实测           | 0.1218 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | Leather01Black         | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (19)/Chair05 (4)
+仅UV黑·未实测           | 0.1812 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (12)/ChamferBox002
+仅UV黑·未实测           | 0.1553 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 11 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-3/FlowerGroup (2)/FlowerRoom3a (1)
+仅UV黑·未实测           | 0.1051 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (1)
+仅UV黑·未实测           | 0.1470 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (9)/ChamferBox002
+仅UV黑·未实测           | 0.1441 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (30)
+仅UV黑·未实测           | 0.1520 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (13)/ChamferBox002
+仅UV黑·未实测           | 0.1122 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | PlasticWhite1          | SchoolScene/Interior/Class1-2/TableSchool04 (1)/TableWood
+仅UV黑·未实测           | 0.1266 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  1 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (11)/TableMetall
+仅UV黑·未实测           | 0.1329 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (31)
+仅UV黑·未实测           | 0.0948 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 灯          | 12 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (32)
+仅UV黑·未实测           | 0.1191 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Brush (3)
+仅UV黑·未实测           | 0.0894 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  8 | 否      | ConcreteWall5          | SchoolScene/Exterior/BordersArea (4)/RoadBordure1d
+仅UV黑·未实测           | 0.1204 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 暖气片        | 15 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (44)
+仅UV黑·未实测           | 0.1450 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | PlasticBlack1          | SchoolScene/Interior/ClassComputer/TableGroup (7)/Chair06 (2)/Chair06Metal
+仅UV黑·未实测           | 0.1996 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/Benches/Bench01_1 (10)/Concrete
+仅UV黑·未实测           | 0.1584 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassComputer/Blinds01c (6)
+仅UV黑·未实测           | 0.1245 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 灯          | 12 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (11)
+仅UV黑·未实测           | 0.2360 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 10 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (8)/Computer06
+仅UV黑·未实测           | 0.1392 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain02 (3)
+仅UV黑·未实测           | 0.1612 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | Electro08              | SchoolScene/Interior/Class1-3/Electro08_10 (2)
+仅UV黑·未实测           | 0.1068 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (5)/TableMetall
+仅UV黑·未实测           | 0.1322 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 12 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/Poster01_2a (3)
+仅UV黑·未实测           | 0.1939 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-4/Poster01_1a (1)
+仅UV黑·未实测           | 0.1375 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  8 | 否      | Notebook01             | SchoolScene/Interior/ClassDirector/Notebook01
+仅UV黑·未实测           | 0.1592 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (24)/ChamferBox002
+仅UV黑·未实测           | 0.1769 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | Paper01                | SchoolScene/Interior/Class1-4/Blueprints05
+仅UV黑·未实测           | 0.1150 |  56% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-1/TableSchool01 (10)/TableMetall
+仅UV黑·未实测           | 0.1729 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | SportGates             | SchoolScene/Interior/SportClassProps/SportGates02 (2)/Gates002
+仅UV黑·未实测           | 0.1001 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 灯          |  3 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (16)
+仅UV黑·未实测           | 0.1610 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | BlindsEmmisive         | SchoolScene/Interior/ClassDirector/Blinds01c (2)
+仅UV黑·未实测           | 0.1286 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 暖气片        | 15 | 否      | Radiator01             | SchoolScene/Interior/Kitchen/Radiator01 (39)
+仅UV黑·未实测           | 0.0980 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | Wood4                  | SchoolScene/Interior/ClassDirector/Chair01b (1)/Chair01Wood
+仅UV黑·未实测           | 0.2498 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-4/Poster01_2a
+仅UV黑·未实测           | 0.2464 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 11 | 否      | Computer06             | SchoolScene/Interior/ClassComputer/TableGroup (4)/Computer06
+仅UV黑·未实测           | 0.1148 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (4)/TableMetall
+仅UV黑·未实测           | 0.1293 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  3 | 否      | FlowerRoom3            | SchoolScene/Interior/Class1-3/FlowerGroup (2)/FlowerRoom3a
+仅UV黑·未实测           | 0.1321 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportBrus1 (1)/SportBrusWood
+仅UV黑·未实测           | 0.1157 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 暖气片        | 12 | 否      | Radiator01             | SchoolScene/Interior/Corridor1/Radiator01 (37)
+仅UV黑·未实测           | 0.1221 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  1 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Class2-2/TableSchool01 (6)/TableMetall
+仅UV黑·未实测           | 0.1294 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 15 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain02 (6)
+仅UV黑·未实测           | 0.1151 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (4)
+仅UV黑·未实测           | 0.0999 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-2/TableSchool03 (3)/TableChrome
+仅UV黑·未实测           | 0.1282 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | GlassClear             | SchoolScene/Interior/Class1-2/ChemistryProp01
+仅UV黑·未实测           | 0.1879 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 12 | 否      | WoodOak                | SchoolScene/Interior/ClassDirector/TableOffice2
+仅UV黑·未实测           | 0.1091 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 灯          | 10 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (29)
+仅UV黑·未实测           | 0.0962 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  9 | 否      | Computer03             | SchoolScene/Interior/ClassTeachers/Computer03 (1)
+仅UV黑·未实测           | 0.1096 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 门          |  3 | 否      | Door02                 | SchoolScene/Interior/Doors/Door02 (1)
+仅UV黑·未实测           | 0.1606 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 17 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (2)
+仅UV黑·未实测           | 0.1666 |  50% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | Wood4                  | SchoolScene/Interior/ClassDirector/Capboard01_02/Capboard01
+仅UV黑·未实测           | 0.1364 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  8 | 否      | Leather01Red           | SchoolScene/Interior/ActZal/Seats01 (21)/ChamferBox002
+仅UV黑·未实测           | 0.2966 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 13 | 否      | MetallChrome01         | SchoolScene/Interior/Class1-3/Poster01_1a
+仅UV黑·未实测           | 0.1136 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  2 | 否      | MetallPainted01Gray    | SchoolScene/Interior/Kitchen/SchoolKitchenSeats (2)/TableSimple01_02/TableMetall
+仅UV黑·未实测           | 0.1753 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  5 | 否      | MetallChrome03         | SchoolScene/Interior/Kitchen/KitchenTable03 (1)
+仅UV黑·未实测           | 0.1433 |  51% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 11 | 否      | FabricCurtain02b       | SchoolScene/Interior/ActZal/Curtain02 (4)
+仅UV黑·未实测           | 0.1292 |  52% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  7 | 否      | Wood3                  | SchoolScene/Interior/SportClassProps/SportLadder01b (1)
+仅UV黑·未实测           | 0.1215 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 灯          |  1 | 否      | LightLum01             | SchoolScene/DayLightsInterior/LightLum01_01 (12)
+仅UV黑·未实测           | 0.1191 |  55% | N/A      | N/A      |   0% | N/A        |    0 | 其他         | 10 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Brush (6)
+仅UV黑·未实测           | 0.1323 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | MetallPainted01LinesBlack | SchoolScene/Interior/SportClassProps/SportGates02 (3)/Shape01
+仅UV黑·未实测           | 0.1040 |  54% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  7 | 否      | MetallChrome01         | SchoolScene/Interior/ActZal/Seats01 (18)/Cylinder004
+仅UV黑·未实测           | 0.1001 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  1 | 否      | ConcreteClear03        | SchoolScene/Exterior/ConcreteBox01 (30)
+仅UV黑·未实测           | 0.1207 |  53% | N/A      | N/A      |   0% | N/A        |    0 | 其他         |  0 | 否      | Toilet01               | SchoolScene/Interior/Toilets/Toilet01Paper (6)
+指标失效·禁派修           | 0.2272 |  59% | 0.2034   | 0.2034   |   6% | 上表面        | 3712 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (10)
+指标失效·禁派修           | 0.2432 |  56% | 0.2156   | 0.2156   |  11% | 上表面        | 4096 | 其他         |  5 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (11)
+指标失效·禁派修           | 0.1714 |  68% | 0.2523   | 0.2523   |  10% | 上表面        | 4096 | 其他         |  9 | 否      | Wood2                  | SchoolScene/Exterior/Bench01_2/Wood
+指标失效·禁派修           | 0.2607 |  56% | 0.2608   | 0.2608   |   6% | 上表面        | 4096 | 其他         |  7 | 否      | ConcreteWall5          | SchoolScene/Exterior/RoadBordure1f (14)
+
+注：「指标失效·禁派修」一族 UV 采样判黑但渲染实测判亮，按裁决 C-67 不得作为派修依据；请以渲染实测为准，交打光判读。
+
+===== 结束 =====
