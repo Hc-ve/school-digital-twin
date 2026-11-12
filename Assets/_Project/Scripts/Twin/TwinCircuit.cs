@@ -297,11 +297,32 @@ namespace SchoolTwin.Twin
             bool cached;
             if (_poweredCache.TryGetValue(twinId, out cached)) return cached;
 
-            // 【P3-4】门不受电力回路影响 —— 见 IsPowerIndependent 的说明。
+            // 【P3-4 / D15】门与暖气不受电力回路影响 —— 见 IsPowerIndependent 的说明。
             bool powered = IsPowerIndependent(twinId) || IsPoweredZone(ZoneOf(twinId));
             _poweredCache[twinId] = powered;
             return powered;
         }
+
+        /// <summary>
+        /// 不挂在电力回路下的类别：断电了它们照样能用。
+        ///
+        /// ── 为什么是「集合」而不是继续堆 `category == "Door"` ──────────────
+        /// 原来这里只有一句 `string.Equals(category, "Door")`。D15 要把暖气
+        /// 也加进来，如果照着堆成 `category == "Door" || category == "Heat"`，
+        /// 下一个人加第三种类别时还得回来改逻辑 —— **判据与名单混在一个表达式里，
+        /// 每次扩名单都是一次改代码**。抽成表之后，扩名单只改这张表。
+        ///
+        /// 用 `string[]` + 线性扫描（不是 HashSet）：名单只有个位数，
+        /// 线性扫 2~3 次 Ordinal 比较比 HashSet 的哈希+取模更快，
+        /// 而且**零静态构造开销**。这个方法被 53 台 × 5Hz 问到，
+        /// 缓存未命中时它是热路径（见 `_poweredCache` 那段成本说明）。
+        /// 名单涨到 10 条以上再换 HashSet，届时注释里的这句要一起改。
+        /// </summary>
+        private static readonly string[] s_powerIndependentCategories =
+        {
+            "Door",     // 普通机械门（推拉/合页），不是电磁锁，断电照样能开
+            "Heat",     // 暖气：水暖是水力/机械设备，断电金属表面不变色也不停暖（D15）
+        };
 
         /// <summary>
         /// 该设备是否**不挂在电力回路下**（断不断电都能操作）。
@@ -310,6 +331,24 @@ namespace SchoolTwin.Twin
         /// 「断电关开关门啥事啊，门也不能开关了」—— 教学楼的门是普通机械门
         /// （推拉 / 合页），不是电磁锁，断电照样能开。把它挂在电力回路下，
         /// 会出现「1F 一断电，整层门都点不动」，这在答辩演示里会被直接当成 bug。
+        ///
+        /// ── 为什么暖气要豁免（D15，主理人 2026-11-10 play 实测）─────────────
+        /// 现象：走廊暖气片**断电后整片被染灰、恢复供电变回**，与时间天气无关。
+        /// ⚠️ 这是「断电瞬时染灰」的次生现象，**不是暖气片常态发黑的主因**：
+        ///   暖气常态发黑（不发断电时也黑）的主因是 2017 导入资产的烘焙 lightmap UV 块无光，
+        ///   已由 D13（弃用整套坏烘焙数据）修复，见 P00 §1.6 C8 / §3.4 D13。
+        ///   本豁免只切断「断电时暖气被错误染成 Offline 灰」这条独立链路：
+        ///   · 本方法原漏了 Heat → `IsPowered` 返回 false
+        ///   · → `TwinStatusColor.IsPowerCut()` 为 true
+        ///   · → `EffectiveStatus()` 把状态压成 `Offline`
+        ///   · → `Color.Lerp(白, Offline(0.28,0.28,0.30), 0.45)` 经 MPB 写进 `_Color`
+        ///     → 白漆暖气片断电瞬间被染成中灰。
+        /// 物理事实：水暖是机械/水力设备，**断电不会让金属表面变色**。
+        /// 这与门是同一性质的事实（不接电 → 不该受电影响），所以同列一表。
+        ///
+        /// ⚠️ 这里只解决「不受电力影响」。暖气**异常时该不该染色**是另一个问题
+        /// （C-92 P2 的产品决策，待主理人定），不在本方法职责内 ——
+        /// 本方法只回答"它接不接电"，不回答"它该不该被涂色"。
         ///
         /// ── 为什么解析 TwinId 而不查 Registry ──────────────────────────
         /// 这个方法会被 `AvailabilityOf` 每台设备每帧问到（53 台 × 0.5s），
@@ -330,7 +369,12 @@ namespace SchoolTwin.Twin
             if (b < 0) return false;
 
             string category = twinId.Substring(a + 1, b - a - 1);
-            return string.Equals(category, "Door", StringComparison.Ordinal);
+            for (int i = 0; i < s_powerIndependentCategories.Length; i++)
+            {
+                if (string.Equals(category, s_powerIndependentCategories[i], StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
