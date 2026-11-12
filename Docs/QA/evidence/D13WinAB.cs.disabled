@@ -1,0 +1,231 @@
+// ============================================================================
+// D13-WIN A/B 诊断开关 —— 一次 play 钉死黑条成因
+//
+// ── 为什么要做这个 ──────────────────────────────────────────────────────────
+// 复盘发现两个致命误判：
+//   1) 此前十几轮用的诊断截图（D13WIND_A_origin / C_nolm / R1~R4）机位是
+//      win_north(2.00,1.85,30.20) 与 win_east(22.60,1.85,24.00)。
+//      像素验证：那两张图里窗框本来就是浅米白、根本没有黑条；
+//      A 的 24903 个暗像素在 C 里【一个都没变亮】。
+//      ⇒ 所有基于这些截图的结论（"断光图有效"、"mask 定位正确"）全部作废。
+//   2) ⑦ 把 m_ReceiveGI 写成 2 并保存场景，原理上不可能生效：
+//      lightmapIndex / ST 不序列化在场景 YAML，而存在 LightingData.asset 的
+//      m_LightmappedRendererData 里，场景一加载就被灌回来。
+//      ⑦ 写入的 5 条 override 已回滚，场景恢复干净。
+//
+// 用户最新截图里，黑色只出现在【窗框竖梃下半段】，边界是硬阶梯状锯齿，
+// 上下半段颜色不同 —— 这不是 UV 采样特征，更像实时阴影 / 阴影贴图投影。
+// 而两个项目当前画质档都是最高档 shadows=2，68 盏 Baked 灯 + 1 盏 Realtime。
+//
+// ── 本工具做什么 ──────────────────────────────────────────────────────────
+// Play 时按 F9 循环切换 6 种状态，每种状态自动截一张图到
+// Docs/QA/evidence/D13AB_{n}_{name}.png，并写日志 D13AB_log.txt。
+// 看哪一张图里黑条消失，就一次性确定病灶属于哪个系统，不再靠猜。
+//
+//   [0] BASE        原样（基线）
+//   [1] NO_LM       全场 Renderer.lightmapIndex = -1（整场脱离烘焙光图）
+//   [2] NO_RECV_SH  全场 Renderer.receiveShadows = false
+//   [3] NO_LIGHT_SH 全场 Light.shadows = None
+//   [4] NO_SH_ALL   2+3 同时关
+//   [5] NO_LM_1F    只把 1F 窗框 lightmapIndex = -1（2F 不动，验证 ⑦ 的意图）
+//
+// 默认停在 [0] BASE，不会自动改动任何画面。
+// 每次切换都会把上一种状态完整还原，模式之间互不污染。
+// 本脚本只在 play 生效，不改任何资产；删掉文件即完全回滚。
+//
+// 屏幕左上角有小提示条，F9 下一个 / F8 上一个 / F10 手动重截。
+// ============================================================================
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
+
+namespace SchoolTwin
+{
+    public static class D13WinAB
+    {
+        public const float Floor1MaxY = 3.0f;
+        const string PathToken = "/SchoolBuilding/Window";
+
+        static readonly string[] ModeNames =
+        {
+            "BASE", "NO_LM", "NO_RECV_SH", "NO_LIGHT_SH", "NO_SH_ALL", "NO_LM_1F"
+        };
+
+        struct RState { public Renderer r; public int lm; public bool recv; }
+        struct LState { public Light l; public LightShadows sh; }
+
+        static RState[] _r;
+        static LState[] _l;
+        static int _mode;
+        static int _pendingShot = -1;
+        static readonly StringBuilder Log = new StringBuilder();
+
+        public static int Mode => _mode;
+        public static string ModeName => ModeNames[_mode];
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void Boot()
+        {
+            SceneManager.sceneLoaded += (s, m) => CaptureBaseline();
+            CaptureBaseline();
+            var go = new GameObject("[D13WinAB]");
+            go.hideFlags = HideFlags.HideAndDontSave;
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            go.AddComponent<D13WinABRunner>();
+            Log.AppendLine($"# D13-WIN A/B  {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        /// <summary>记录所有 Renderer / Light 的原始状态，供每次切换完整还原</summary>
+        static void CaptureBaseline()
+        {
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid()) return;
+
+            var rs = new List<RState>();
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+                    if (r != null) rs.Add(new RState { r = r, lm = r.lightmapIndex, recv = r.receiveShadows });
+            _r = rs.ToArray();
+
+            var ls = new List<LState>();
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var l in root.GetComponentsInChildren<Light>(true))
+                    if (l != null) ls.Add(new LState { l = l, sh = l.shadows });
+            _l = ls.ToArray();
+
+            Log.AppendLine($"场景 {scene.name}: Renderer={_r.Length}  Light={_l.Length}");
+            Debug.Log($"[D13AB] 基线已记录 Renderer={_r.Length} Light={_l.Length}；按 F9 切换模式");
+        }
+
+        /// <summary>完整还原到基线</summary>
+        static void Restore()
+        {
+            if (_r != null)
+                foreach (var s in _r)
+                    if (s.r != null) { s.r.lightmapIndex = s.lm; s.r.receiveShadows = s.recv; }
+            if (_l != null)
+                foreach (var s in _l)
+                    if (s.l != null) s.l.shadows = s.sh;
+        }
+
+        static bool Is1FWindow(Renderer r)
+        {
+            if (r == null) return false;
+            if (PathOf(r.transform).IndexOf(PathToken, StringComparison.Ordinal) < 0) return false;
+            try { return r.bounds.center.y < Floor1MaxY; }
+            catch { return false; }
+        }
+
+        public static void Next() { SetMode((_mode + 1) % ModeNames.Length); }
+        public static void Prev() { SetMode((_mode - 1 + ModeNames.Length) % ModeNames.Length); }
+        public static void Reshoot() { _pendingShot = _mode; }
+
+        public static void SetMode(int m)
+        {
+            _mode = Mathf.Clamp(m, 0, ModeNames.Length - 1);
+            Restore();
+
+            int nR = 0, nL = 0;
+            switch (_mode)
+            {
+                case 1: // 整场断光图
+                    foreach (var s in _r)
+                        if (s.r != null && s.r.lightmapIndex != -1) { s.r.lightmapIndex = -1; nR++; }
+                    break;
+                case 2: // 不接收阴影
+                    foreach (var s in _r)
+                        if (s.r != null) { s.r.receiveShadows = false; nR++; }
+                    break;
+                case 3: // 灯不投影
+                    foreach (var s in _l)
+                        if (s.l != null) { s.l.shadows = LightShadows.None; nL++; }
+                    break;
+                case 4: // 阴影全关
+                    foreach (var s in _r) if (s.r != null) { s.r.receiveShadows = false; nR++; }
+                    foreach (var s in _l) if (s.l != null) { s.l.shadows = LightShadows.None; nL++; }
+                    break;
+                case 5: // 只断 1F 窗框
+                    foreach (var s in _r)
+                        if (Is1FWindow(s.r) && s.r.lightmapIndex != -1) { s.r.lightmapIndex = -1; nR++; }
+                    break;
+            }
+
+            string msg = $"[{_mode}] {ModeNames[_mode]}  Renderer改动={nR}  Light改动={nL}";
+            Debug.Log("[D13AB] " + msg);
+            Log.AppendLine(msg);
+            Flush();
+            _pendingShot = _mode;    // 等两帧再截图，保证渲染已完成
+        }
+
+        /// <summary>由 Runner 在切换后延迟调用</summary>
+        public static void Tick()
+        {
+            if (_pendingShot < 0) return;
+            int m = _pendingShot;
+            _pendingShot = -1;
+            try
+            {
+                string dir = Path.Combine(Application.dataPath, "..", "Docs", "QA", "evidence");
+                Directory.CreateDirectory(dir);
+                string f = $"D13AB_{m}_{ModeNames[m]}.png";
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, f), 1);
+                Debug.Log("[D13AB] 截图 → " + f);
+                Log.AppendLine("    截图 " + f);
+            }
+            catch (Exception e) { Debug.LogWarning("[D13AB] 截图失败: " + e.Message); }
+            Flush();
+        }
+
+        static void Flush()
+        {
+            try
+            {
+                string dir = Path.Combine(Application.dataPath, "..", "Docs", "QA", "evidence");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "D13AB_log.txt"), Log.ToString(), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        static string PathOf(Transform t)
+        {
+            var parts = new List<string>();
+            var cur = t;
+            while (cur != null) { parts.Insert(0, cur.name); cur = cur.parent; }
+            return string.Join("/", parts);
+        }
+    }
+
+    /// <summary>顶层 MonoBehaviour（嵌套类无法稳定 AddComponent）</summary>
+    public sealed class D13WinABRunner : MonoBehaviour
+    {
+        int _wait;
+
+        void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F9)) { D13WinAB.Next(); _wait = 2; }
+            if (Input.GetKeyDown(KeyCode.F8)) { D13WinAB.Prev(); _wait = 2; }
+            if (Input.GetKeyDown(KeyCode.F10)) { D13WinAB.Reshoot(); _wait = 2; }
+
+            if (_wait > 0 && --_wait == 0) D13WinAB.Tick();
+        }
+
+        void OnGUI()
+        {
+            var old = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.72f);
+            GUI.DrawTexture(new Rect(8, 8, 330, 46), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            GUI.Label(new Rect(16, 12, 320, 22),
+                $"[D13AB] mode {D13WinAB.Mode} : {D13WinAB.ModeName}");
+            GUI.Label(new Rect(16, 32, 320, 20), "F9 next / F8 prev / F10 reshoot");
+            GUI.color = old;
+        }
+    }
+}

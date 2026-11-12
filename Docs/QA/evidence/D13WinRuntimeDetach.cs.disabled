@@ -1,0 +1,169 @@
+// ============================================================================
+// D13-WIN 运行时断开 1F 窗框的坏烘焙光图
+//
+// ── 为什么需要这个 ──────────────────────────────────────────────────────────
+// ④b 定性实验 C 早已证明：在内存里把 1F 窗框的 lightmapIndex 置 -1，
+// 截图 D13WIND_C_nolm_win_east.png 里窗框就是均匀的浅米白，黑条完全消失。
+//
+// 但此后的 ⑦（D13WinDetachGI.cs）把 m_ReceiveGI 写成 2 并保存场景，无效。
+// 原因：lightmapIndex / lightmapScaleOffset 并不序列化在场景 YAML 里，
+// 而是存在 LightingData.asset 的 m_LightmappedRendererData 中；
+// 场景每次加载，Unity 都会用烘焙数据把 lightmapIndex 灌回来。
+// 场景里能看到 5 条 m_ReceiveGI override，却一条 m_LightmapIndex 都没有。
+// 而 m_ReceiveGI 只影响「GI 从哪来」，光探针数据同样是 2017 年那批烘焙产物，
+// 所以即使生效，也仍可能落在坏数据上。
+//
+// ── 本脚本做什么 ──────────────────────────────────────────────────────────
+// 用 [RuntimeInitializeOnLoadMethod] 在 play 开始、场景加载完成后，
+// 把 1F 所有窗框相关 Renderer 的 lightmapIndex 强制置 -1 —— 精确复刻 C 实验。
+// 不依赖场景序列化，不会被 LightingData 覆盖，编辑器资产零改动。
+//
+//   - 严格按 y < 3.0 过滤（实测 1F 窗框 y≈1.97，2F y≈5.53/5.96）
+//     ⇒ 2F 五个窗框一个都不碰（用户明确要求）
+//   - 路径需含 "/SchoolBuilding/Window"，因此也覆盖打开的窗扇等子物体
+//   - 不改材质、贴图、EXR、LightingData.asset、ProjectSettings
+//   - 前 4 帧重复施加，防 DynamicGI / 延迟光照更新把索引灌回来
+//   - 删除本文件即完全回滚
+//
+// ── 验收 ──────────────────────────────────────────────────────────────────
+// 编译完成后直接 play，Console 会打印 [D13RT] 列出被断开的 Renderer；
+// 详细日志写到 Docs/QA/evidence/D13WIN_runtime.txt。
+// ============================================================================
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace SchoolTwin
+{
+    public static class D13WinRuntimeDetach
+    {
+        // 1F 窗框中心 y≈1.97，2F 窗框 y≈5.53/5.96，取 3.0 作硬分界
+        const float Floor1MaxY = 3.0f;
+        const string PathToken = "/SchoolBuilding/Window";
+
+        static readonly StringBuilder Log = new StringBuilder();
+        static int _applied;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void Boot()
+        {
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            Apply(SceneManager.GetActiveScene());
+
+            // 前几帧补刀：某些光照初始化会在首帧之后重新写入 lightmapIndex
+            var host = new GameObject("[D13WinRuntimeDetach]");
+            host.hideFlags = HideFlags.HideAndDontSave;
+            UnityEngine.Object.DontDestroyOnLoad(host);
+            host.AddComponent<D13WinDetachRepeater>();
+        }
+
+        static void OnSceneLoaded(Scene s, LoadSceneMode mode)
+        {
+            Apply(s);
+        }
+
+        static void Apply(Scene scene)
+        {
+            if (!scene.IsValid()) return;
+
+            int changed = 0;
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                var renderers = root.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in renderers)
+                {
+                    if (r == null) continue;
+                    string path = PathOf(r.transform);
+                    if (path.IndexOf(PathToken, StringComparison.Ordinal) < 0) continue;
+
+                    // 用 bounds 判定楼层，避免误伤 2F
+                    float y;
+                    try { y = r.bounds.center.y; }
+                    catch { continue; }
+                    if (y >= Floor1MaxY) continue;
+
+                    int before = r.lightmapIndex;
+                    if (before == -1) continue;    // 已经断开
+
+                    r.lightmapIndex = -1;
+                    changed++;
+                    if (_applied < 40)
+                        Log.AppendLine($"  {Short(path),-16} y={y:F2}  lm {before} → -1  mesh={MeshName(r)}");
+                }
+            }
+
+            if (changed > 0)
+            {
+                _applied += changed;
+                Debug.Log($"[D13RT] 场景 {scene.name}: 断开 {changed} 个 1F 窗框 Renderer 的烘焙光图（2F 未动）");
+            }
+        }
+
+        static void FlushLog()
+        {
+            try
+            {
+                string dir = Path.Combine(Application.dataPath, "..", "Docs", "QA", "evidence");
+                Directory.CreateDirectory(dir);
+                var sb = new StringBuilder();
+                sb.AppendLine("# D13-WIN 运行时断开记录");
+                sb.AppendLine($"# {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                sb.AppendLine("# 规则: 路径含 /SchoolBuilding/Window 且 bounds.center.y < 3.0");
+                sb.AppendLine($"# 累计断开 {_applied} 次（含前 4 帧重复施加）");
+                sb.AppendLine();
+                sb.Append(Log.ToString());
+                File.WriteAllText(Path.Combine(dir, "D13WIN_runtime.txt"), sb.ToString(), Encoding.UTF8);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[D13RT] 日志写入失败: " + e.Message);
+            }
+        }
+
+        internal static void Tick(int frame)
+        {
+            Apply(SceneManager.GetActiveScene());
+            if (frame >= 3) FlushLog();
+        }
+
+        static string MeshName(Renderer r)
+        {
+            var mf = r.GetComponent<MeshFilter>();
+            return mf != null && mf.sharedMesh != null ? mf.sharedMesh.name : "?";
+        }
+
+        static string PathOf(Transform t)
+        {
+            var parts = new List<string>();
+            var cur = t;
+            while (cur != null) { parts.Insert(0, cur.name); cur = cur.parent; }
+            return string.Join("/", parts);
+        }
+
+        static string Short(string p)
+        {
+            int i = p.LastIndexOf('/');
+            return i >= 0 ? p.Substring(i + 1) : p;
+        }
+    }
+
+    /// <summary>顶层 MonoBehaviour（不能嵌套，否则 Unity 无法稳定 AddComponent）。
+    /// 前 4 帧重复施加，防光照初始化在首帧后把 lightmapIndex 灌回来。</summary>
+    public sealed class D13WinDetachRepeater : MonoBehaviour
+    {
+        IEnumerator Start()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                yield return null;
+                D13WinRuntimeDetach.Tick(i);
+            }
+            Destroy(gameObject);
+        }
+    }
+}

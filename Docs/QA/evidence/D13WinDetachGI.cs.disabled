@@ -1,0 +1,322 @@
+#if UNITY_EDITOR
+// ============================================================================
+// D13-WIN ⑦ / ⑧ —— 1F 窗框脱离坏烘焙光图（改用光探针）
+//
+// ── 为什么这样做 ────────────────────────────────────────────────────────────
+// 用户提供对照项目 E:\Unity Projects\sx5，其 SchoolSceneDay 材质显示完全正常。
+// 逐层对比（详见 Docs/QA/evidence/D13WIN_sx5_compare.md）结论：
+//
+//   ★ 两个项目的材质、贴图引用、FBX 模型导入参数、光图导入参数【完全一致】
+//     - 245 个 FBX .meta 零差异
+//     - 47 个 Lightmap .exr.meta 零差异
+//     - 269 个材质贴图 GUID 零差异、m_DoubleSidedGI 零差异
+//   ★ 真正的差异是：sx5 是 URP 项目，迁移时【清空了内置管线的烘焙光照数据】
+//     - SchoolSceneDaySettings.lighting: m_EnableBakedLightmaps 1 → 0
+//     - LightingData.asset 2,928,808 B → 20,296 B（空壳）
+//     - 142 张 EXR 文件仍在磁盘上、内容未变，但已无任何对象引用
+//     - sx5 自带报告原文：「原内置管线的光照贴图在 URP 下不可复用，
+//       当前是纯实时光照」
+//
+// 也就是说：不缺任何导入参数，缺的是「像 sx5 那样不去用这批 2017 年的坏数据」。
+// 此前十几个版本都在 .exr 里改像素，等于在修一份正常项目根本不用的资产。
+//
+// 本场景 ④b 定性实验 C（lightmapIndex = -1）早已给出答案：
+//   D13WIND_C_nolm_win_east.png 里窗框是均匀的浅米白色，黑条完全消失。
+// 当时误判成「只是排除法对照」，没意识到它就是修复方案本身。
+//
+// ── 本工具做什么 ──────────────────────────────────────────────────────────
+// 把 1F 五个窗框 Renderer 的 m_ReceiveGI 从 Lightmaps(1) 改成 LightProbes(2)，
+// 让它们改用场景里已有的 4 组光探针，不再采样那批坏光图。
+// 这是 Unity 原生支持、可随场景保存、可逐项还原的做法，等价且优于
+// 「运行时把 lightmapIndex 写成 -1」。
+//
+//   - 影响 5 个 Renderer / 场景共 2103 个
+//   - 【2F 五个窗框完全不动】（用户明确要求）
+//   - 不改任何材质、贴图、EXR、LightingData.asset、ProjectSettings
+//   - 一键回滚（⑧）
+//
+// ── 不采用「整场关烘焙光图」的原因 ────────────────────────────────────────
+// sx5 关掉整场烘焙光图后，靠 URP 后处理（曝光 0 / 对比度 +10 / Bloom 0.12）
+// 与 0.75 环境光把画面补回来。原项目是内置管线且无 Global Volume，
+// 直接照搬会让全场景偏亮/过曝、丢失间接光与 AO，改动面过大。
+// ============================================================================
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace SchoolTwin.EditorTools
+{
+    public static class D13WinDetachGI
+    {
+        const string ScenePath = "Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity";
+        const string EvDir = "Docs/QA/evidence";
+        const string BackupName = "D13WIN_detach_backup.txt";
+        const string LogName = "D13WIN_detach.txt";
+
+        // 直接用序列化字段的整数值，不依赖 ReceiveGI 枚举在不同 Unity 版本里的命名空间
+        const int GI_FROM_LIGHTMAPS = 1;
+        const int GI_FROM_LIGHTPROBES = 2;
+
+        // 1F 目标（精确路径，与 D13WindowFrameFix.cs 一致，不扩大）
+        static readonly string[] Win1F =
+        {
+            "SchoolScene/Exterior/SchoolBuilding/Windows1",
+            "SchoolScene/Exterior/SchoolBuilding/Windows2",
+            "SchoolScene/Exterior/SchoolBuilding/Windows3",
+            "SchoolScene/Exterior/SchoolBuilding/Windows4",
+            "SchoolScene/Exterior/SchoolBuilding/Windows5",
+        };
+
+        // 2F —— 仅用于校验「确实没被碰过」，绝不修改
+        static readonly string[] Win2F =
+        {
+            "SchoolScene/Exterior/SchoolBuilding/Windows6",
+            "SchoolScene/Exterior/SchoolBuilding/Windows007",
+            "SchoolScene/Exterior/SchoolBuilding/Windows008",
+            "SchoolScene/Exterior/SchoolBuilding/Windows009",
+            "SchoolScene/Exterior/SchoolBuilding/Windows010",
+        };
+
+        static string Root => Directory.GetCurrentDirectory();
+        static string Abs(string rel) => Path.Combine(Root, rel);
+
+        // ---------------------------------------------------------------- ⑦
+        [MenuItem("归档/D13-WIN ⑦ 1F窗框改用光探针（脱离坏光图）", false, 157)]
+        public static void Apply()
+        {
+            var log = new StringBuilder();
+            void L(string m) { log.AppendLine(m); Debug.Log("[D13DETACH] " + m); }
+
+            try
+            {
+                if (EditorApplication.isPlaying)
+                {
+                    L("❌ 请先退出 Play 模式再执行");
+                    return;
+                }
+                Directory.CreateDirectory(Abs(EvDir));
+
+                var scene = SceneManager.GetActiveScene();
+                if (!scene.IsValid() || !string.Equals(scene.path, ScenePath, StringComparison.Ordinal))
+                    scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                DynamicGI.UpdateEnvironment();
+
+                var all = scene.GetRootGameObjects()
+                               .SelectMany(g => g.GetComponentsInChildren<Renderer>(true))
+                               .ToArray();
+                L($"# D13-WIN ⑦ 1F 窗框改用光探针  {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                L($"场景 {ScenePath}   Renderer 总数 = {all.Length}");
+                L("");
+
+                // 记录 2F 原值（只读校验）
+                var snapshot2F = new List<string>();
+                foreach (var p in Win2F)
+                {
+                    var rr = FindByPath(all, p);
+                    if (rr == null) continue;
+                    int v = GetReceiveGI(rr);
+                    snapshot2F.Add($"{p}\t{v}\t{rr.lightmapIndex}");
+                }
+
+                var backup = new StringBuilder();
+                backup.AppendLine("# D13-WIN ⑦ 回滚记录 —— 每行: 路径<TAB>原m_ReceiveGI<TAB>原lightmapIndex");
+                backup.AppendLine($"# 时间 {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                backup.AppendLine("# 2F 只读基线（执行前后必须一致）:");
+                foreach (var s in snapshot2F) backup.AppendLine("#2F\t" + s);
+
+                int changed = 0;
+                foreach (var p in Win1F)
+                {
+                    var rr = FindByPath(all, p);
+                    if (rr == null) { L($"  ❌ 找不到 {p}，跳过"); continue; }
+
+                    int before = GetReceiveGI(rr);
+                    int lmIdx = rr.lightmapIndex;
+                    backup.AppendLine($"{p}\t{before}\t{lmIdx}");
+
+                    // 三重保险：材质/贴图一律不碰，只改 GI 接收方式
+                    bool ok = SetReceiveGI(rr, GI_FROM_LIGHTPROBES);
+                    if (!ok)
+                    {
+                        L($"  ❌ {Short(p)} 写入 m_ReceiveGI 失败，跳过");
+                        continue;
+                    }
+                    // 双保险：lightmapIndex 不随场景序列化（存在 LightingData.asset 里），
+                    // 但当前 Editor 会话里立即置 -1，可当场看到与 C 实验一致的效果；
+                    // 重开场景后由可持久化的 m_ReceiveGI=2 兜底。
+                    rr.lightmapIndex = -1;
+
+                    EditorUtility.SetDirty(rr);
+                    if (PrefabUtility.IsPartOfPrefabInstance(rr))
+                        PrefabUtility.RecordPrefabInstancePropertyModifications(rr);
+
+                    L($"  ✅ {Short(p),-12} y={rr.bounds.center.y:F2}  lm={lmIdx,2}→-1  " +
+                      $"m_ReceiveGI {before} → {GI_FROM_LIGHTPROBES} (LightProbes)");
+                    changed++;
+                }
+
+                if (changed == 0)
+                {
+                    L("❌ 没有成功修改任何对象，场景未保存");
+                    return;
+                }
+
+                // 硬校验：2F 一个都没被改
+                var all2 = scene.GetRootGameObjects()
+                                .SelectMany(g => g.GetComponentsInChildren<Renderer>(true))
+                                .ToArray();
+                int leak = 0;
+                foreach (var p in Win2F)
+                {
+                    var rr = FindByPath(all2, p);
+                    if (rr == null) continue;
+                    if (GetReceiveGI(rr) != GI_FROM_LIGHTMAPS)
+                    {
+                        L($"  ❌ 2F {Short(p)} 被意外修改！立即回滚");
+                        leak++;
+                    }
+                }
+                if (leak > 0)
+                {
+                    L("❌ 中止，未保存场景");
+                    return;
+                }
+                L($"  2F 校验通过：{snapshot2F.Count} 个 2F 窗框 m_ReceiveGI 仍为 1，未改动");
+
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                File.WriteAllText(Abs(Path.Combine(EvDir, BackupName)), backup.ToString(), Encoding.UTF8);
+
+                L("");
+                L($"✅ 已修改 {changed}/5 个 1F 窗框并保存场景");
+                L($"   回滚记录 {Path.Combine(EvDir, BackupName)}");
+                L("   请进 play 验收：看 1F 走廊窗框黑条是否消失、2F 是否保持原样");
+                L("   不满意执行 归档 → D13-WIN ⑧ 恢复 GI 设置");
+            }
+            catch (Exception ex)
+            {
+                L("❌ 异常: " + ex);
+                Debug.LogException(ex);
+            }
+            finally
+            {
+                File.WriteAllText(Abs(Path.Combine(EvDir, LogName)), log.ToString(), Encoding.UTF8);
+            }
+        }
+
+        // ---------------------------------------------------------------- ⑧
+        [MenuItem("归档/D13-WIN ⑧ 恢复 GI 设置（回滚⑦）", false, 158)]
+        public static void Restore()
+        {
+            var log = new StringBuilder();
+            void L(string m) { log.AppendLine(m); Debug.Log("[D13DETACH] " + m); }
+
+            try
+            {
+                if (EditorApplication.isPlaying) { L("❌ 请先退出 Play 模式"); return; }
+
+                string bp = Abs(Path.Combine(EvDir, BackupName));
+                if (!File.Exists(bp)) { L($"❌ 找不到回滚记录 {bp}"); return; }
+
+                var scene = SceneManager.GetActiveScene();
+                if (!scene.IsValid() || !string.Equals(scene.path, ScenePath, StringComparison.Ordinal))
+                    scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+                var all = scene.GetRootGameObjects()
+                               .SelectMany(g => g.GetComponentsInChildren<Renderer>(true))
+                               .ToArray();
+
+                int n = 0;
+                foreach (var line in File.ReadAllLines(bp, Encoding.UTF8))
+                {
+                    if (line.Length == 0 || line[0] == '#') continue;
+                    var parts = line.Split('\t');
+                    if (parts.Length < 2) continue;
+                    var rr = FindByPath(all, parts[0]);
+                    if (rr == null) { L($"  ⚠ 找不到 {parts[0]}"); continue; }
+                    int v;
+                    if (!int.TryParse(parts[1], out v)) continue;
+                    if (SetReceiveGI(rr, v))
+                    {
+                        EditorUtility.SetDirty(rr);
+                        if (PrefabUtility.IsPartOfPrefabInstance(rr))
+                            PrefabUtility.RecordPrefabInstancePropertyModifications(rr);
+                        L($"  ✅ {Short(parts[0]),-12} m_ReceiveGI → {v}");
+                        n++;
+                    }
+                }
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                L($"✅ 已回滚 {n} 个 Renderer 并保存场景");
+            }
+            catch (Exception ex)
+            {
+                L("❌ 异常: " + ex);
+                Debug.LogException(ex);
+            }
+            finally
+            {
+                File.WriteAllText(Abs(Path.Combine(EvDir, LogName)), log.ToString(), Encoding.UTF8);
+            }
+        }
+
+        // ---------------------------------------------------------------- 工具
+        /// <summary>用 SerializedObject 读 m_ReceiveGI（兼容 prefab 实例与直接序列化对象）</summary>
+        static int GetReceiveGI(Renderer r)
+        {
+            var so = new SerializedObject(r);
+            var p = so.FindProperty("m_ReceiveGI");
+            return p != null ? p.intValue : GI_FROM_LIGHTMAPS;
+        }
+
+        static bool SetReceiveGI(Renderer r, int value)
+        {
+            try
+            {
+                var so = new SerializedObject(r);
+                var p = so.FindProperty("m_ReceiveGI");
+                if (p == null) return false;
+                p.intValue = value;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[D13DETACH] SetReceiveGI 失败: " + e.Message);
+                return false;
+            }
+        }
+
+        /// <summary>按完整层级路径精确匹配，避免同名误伤 2F</summary>
+        static Renderer FindByPath(Renderer[] all, string fullPath)
+        {
+            foreach (var r in all)
+            {
+                if (PathOf(r.transform) == fullPath) return r;
+            }
+            return null;
+        }
+
+        static string PathOf(Transform t)
+        {
+            var parts = new List<string>();
+            var cur = t;
+            while (cur != null) { parts.Insert(0, cur.name); cur = cur.parent; }
+            return string.Join("/", parts);
+        }
+
+        static string Short(string p)
+        {
+            int i = p.LastIndexOf('/');
+            return i >= 0 ? p.Substring(i + 1) : p;
+        }
+    }
+}
+#endif
