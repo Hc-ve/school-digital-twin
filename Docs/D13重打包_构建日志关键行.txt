@@ -1,0 +1,36 @@
+# D13 重打包 · 构建日志关键行摘录
+# 源日志：Logs/p32_d13_build.log（9,083 行，624,907 B，.gitignore 忽略，仅本地留存）
+# 格式：原行号 | 原文（未改动）
+
+# --- 授权通道（第一条握手失败后回退成功，不影响构建）---
+    5 | [Licensing::Client] Error: HandshakeResponse reported an error:
+    8 | [Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-86159"
+   10 | [Licensing::IpcConnector] Channel LicenseClient-86159-2022.3.62 doesn't exist
+   12 | [Licensing::IpcConnector] Successfully connected to: "LicenseClient-86159-2022.3.62" at "2026-11-12T09:24:35.9193323Z"
+   21 | [Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-86159-2022.3.62" (connect: 1.94s, validation: 0.12s, handshake: 0.02s)
+   22 | [Licensing::IpcConnector] Successfully connected to: "LicenseClient-86159-2022.3.62-notifications" at "2026-11-12T09:24:36.055071Z"
+   24 | [Licensing::Module] Error: Access token is unavailable; failed to update
+  240 | *** Tundra requires additional run (0.14 seconds), 0 items updated, 236 evaluated
+  248 | *** Tundra build success (0.12 seconds), 0 items updated, 382 evaluated
+  341 | [P31] 着色器登记完成：新增 0 条、剔除 0 条，当前共 12 条。
+  351 | [P31] 待打包场景（1）：Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay.unity
+  360 | [P31] 开始出包 → E:\Unity Projects\School-pro\Builds\School-pro.exe
+  383 | [2/3        1s] BuildPlayerDataGenerator Library/BuildPlayerData/Editor/TypeDb-All.json
+  443 | *** Tundra requires additional run (1.19 seconds), 1 items updated, 1 evaluated
+  449 | *** Tundra build success (0.04 seconds), 0 items updated, 3 evaluated
+  452 | BuildPlayer: start building target 19
+  486 | Assets\_Project\Scripts\Present\TwinDevicePresenter.cs(3460,22): warning CS0414: The field 'TwinDevicePresenter._bulkBootStarted' is assigned but its value is never used
+  495 | [149/150    0s] BuildPlayerDataGenerator Library/BuildPlayerData/Player/RuntimeInitializeOnLoads.json (+1 other)
+  496 | *** Tundra build success (0.78 seconds), 3 items updated, 150 evaluated
+  505 | Couldn't create a Convex Mesh from source mesh "KozelLeather" within the maximum polygons limit (256). The partial hull will be used. Consider simplifying your mesh.
+  507 | UnityEditor.BuildPipeline:BuildPlayerInternal (string[],string,string,UnityEditor.BuildTargetGroup,UnityEditor.BuildTarget,int,UnityEditor.BuildOptions,string[])
+  508 | UnityEditor.BuildPipeline:BuildPlayer (string[],string,string,UnityEditor.BuildTargetGroup,UnityEditor.BuildTarget,int,UnityEditor.BuildOptions,string[])
+  509 | UnityEditor.BuildPipeline:BuildPlayer (UnityEditor.BuildPlayerOptions)
+  514 | Couldn't create a Convex Mesh from source mesh "Kozel2Leather" within the maximum polygons limit (256). The partial hull will be used. Consider simplifying your mesh.
+ 6425 | *** Tundra build success (1.14 seconds), 157 items updated, 160 evaluated
+ 8417 | [P31] 出包结束：result=Succeeded 耗时=22.0s 大小=586.9MB 错误=0 警告=2
+ 8426 | [P31] StreamingAssets/PC 核对：源 17 个文件（不含 .meta），缺失 0 个。
+ 8436 | [P31] StreamingAssets 完整复制（预期 4 mp4 + 12 slide + desktop.jpg = 17 个）。
+ 8446 | [P31] 出包成功：E:\Unity Projects\School-pro\Builds\School-pro.exe
+ 8460 | [Licensing::IpcConnector] LicenseClient-86159-2022.3.62-notifications channel disconnected successfully.
+ 8461 | [Licensing::IpcConnector] LicenseClient-86159-2022.3.62 channel disconnected successfully.
