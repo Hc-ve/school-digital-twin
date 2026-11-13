@@ -1282,6 +1282,16 @@ internal sealed class TwinLampBloomRunner : MonoBehaviour
             Debug.Log("[TwinLampBloom] 补光层（IndoorFillLight）" + (_fillOff ? "已关闭" : "已恢复") +
                       "。现在只剩" + (_fillOff ? "灯管点光源" : "两套光叠加") + "在照天花板。");
         }
+
+        // F2：底光层（P37 新增层）总开关 —— 同机位开/关各看一眼，A/B 对比「Spot 锥外纯黑」
+        // 是否被垫底消除（走廊墙面半截黑 / 教室斜向硬边 / 礼堂昏暗），并确认天花板没有回升过曝。
+        // 【为什么是 F2】grep 全工程 F1~F12（2026-11-14 复核）：F1 机箱（文档记载）/
+        // F3 天气 HUD / F4 详情面板 / F5 视角切换（TwinThirdPersonCamera）/
+        // F6 性能报告（TwinPerfReport）/ F7~F12 本族诊断 —— F2 是唯一空闲键。
+        if (Input.GetKeyDown(KeyCode.F2))
+        {
+            IndoorFillLight.SetBaseLightsEnabled(!IndoorFillLight.BaseLightsEnabled);
+        }
     }
 
     private bool _fillOff;
@@ -1293,8 +1303,16 @@ internal sealed class TwinLampBloomRunner : MonoBehaviour
     /// </summary>
     private GUIStyle _hudStyle;
 
+    /// <summary>
+    /// 诊断面板显隐（P37 小项 A，负责人已批准）。主理人 2026-11-13 反馈常驻面板挡住总控 UI：
+    /// 默认不画，临时要面板把 false 改 true。热键 F2/F7~F12 全部保留（HandleHotkeys 在
+    /// Update 里，与本面板无关），各开关状态改看 Console 的 [IndoorFill] / [TwinLampBloom] 日志。
+    /// </summary>
+    private const bool ShowDiagPanel = false;
+
     private void OnGUI()
     {
+        if (!ShowDiagPanel) return;   // P37 小项 A：默认不画（样式初始化一并跳过，隐藏态零 GC 零绘制）
         // 只在 Play 里显示，且样式极简 —— 这是诊断面板，不是 UI 交付物。
         if (_hudStyle == null)
         {
@@ -1305,7 +1323,7 @@ internal sealed class TwinLampBloomRunner : MonoBehaviour
 
         int w = Screen.width;
         GUI.color = new Color(0f, 0f, 0f, 0.6f);
-        GUI.DrawTexture(new Rect(w - 300f, 8f, 292f, 148f), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(w - 300f, 8f, 292f, 172f), Texture2D.whiteTexture);
         GUI.color = Color.white;
 
         GUI.Label(new Rect(w - 290f, 10f, 282f, 20f), "── 过曝诊断热键 ──", _hudStyle);
@@ -1320,6 +1338,8 @@ internal sealed class TwinLampBloomRunner : MonoBehaviour
                   "F11  2×2 定量探测（Console 看结果）", _hudStyle);
         GUI.Label(new Rect(w - 290f, 130f, 282f, 20f),
                   "F9   光晕层：" + (TwinLampBloom.Enabled ? "开" : "已关"), _hudStyle);
+        GUI.Label(new Rect(w - 290f, 150f, 282f, 20f),
+                  "F2   底光层：" + (IndoorFillLight.BaseLightsEnabled ? "开" : "已关"), _hudStyle);
     }
 
     private void OnDestroy()
