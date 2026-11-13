@@ -521,10 +521,21 @@ internal sealed class IndoorFillRunner : MonoBehaviour
         GameObject go = new GameObject(name);
         go.transform.SetParent(transform, false);      // 挂在本根下：本根死则全死，OnDestroy 一条就清干净
         go.transform.localPosition = transform.InverseTransformPoint(pos);
+        // 【P36 方案B】Spot 锥体必须显式朝下：Unity 的 Spot 默认朝 +Z（水平），
+        // Euler(90,0,0) 绕 X 轴转 90° 恰把 +Z 转成 -Y。与上一行 localPosition 同一坐标口径
+        // （本根由 new GameObject 创建、旋转恒为单位四元数，local 即世界）：
+        // 天花板在锥体外辐照归零，地面仍在锥体内 NdotL=1，地面照度零变化。
+        go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
         Light l = go.AddComponent<Light>();
-        l.type = LightType.Point;                      // 内置管线只有 Point/Spot 有实时光，Area 仅烘焙（D13 后为零）
+        l.type = LightType.Spot;                       // Point→Spot（P36 交接文档 §4.1）：真实荧光灯有灯罩往上几乎不发光（446 行注释同物理事实），
+                                                       // 全向 Point 直射天花板 1.39 倍辐照必硬削顶；内置管线仍只有 Point/Spot 有实时光（Area 仅烘焙，D13 后为零）
         l.color = FillColor;
         l.range = range;
+        // 【P36 §4.2】150°：初版 140° 经主理人二次验收判「墙面有明暗暗带（像影子）」，
+        // 按交接文档预案全局统一上调 140→150（裁决：唯一预案，不加路径分支）。
+        // 地面覆盖半径 2.20×tan75°≈8.2m；墙面受光高度 x 米外 = 2.2−x/3.73（1.5m 外墙可照到约 1.8m 高）。
+        // 在 Unity Spot 合法域（上限 179°）内不触发钳制；天花板（90° 方向）仍在锥体外，过曝修复不受影响。
+        l.spotAngle = 150f;
         l.intensity = 0f;
         l.shadows = LightShadows.None;                 // 阴影贵且走廊灯管已有 glow 定形状；补光层只补"面"
         // 【为什么 ForcePixel】与 TwinDevicePresenter.BuildGlows 同一条血泪教训（P17）：

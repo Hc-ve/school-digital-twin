@@ -120,7 +120,21 @@ public static class TwinLightingPreset
     {
         var vol = Object.FindObjectOfType<PostProcessVolume>();
         if (vol == null) return;
-        var prof = vol.profile;
+
+        // ══════════════════════════════════════════════════════════════════
+        // 【P36 2026-11-13 修正：这里原来读的是 `vol.profile`，是个陷阱】
+        //
+        // `PostProcessVolume.profile` 的 getter 会 **克隆** `sharedProfile` 并缓存
+        // （PPv2 PostProcessVolume.cs:120-138 → `m_InternalProfile`）。
+        // 而 `EnvironmentState.BindPostProcess()` 写的是 `sharedProfile`（资产本体）。
+        // 一旦本方法先跑（它访问了 profile），相机混合就改为只看那份克隆，
+        // 此后 `EnvironmentState` 每帧写 `sharedProfile` 的夜晚压暗**永久失效** ——
+        // 表现为「夜晚不暗、天空过曝」，而且极难定位（两边代码都"对"）。
+        //
+        // 所以统一改读 `sharedProfile`：与 `EnvironmentState` 写同一份对象，
+        // 不存在克隆分叉。顺带也省掉每次调用的一次 profile 深拷贝。
+        // ══════════════════════════════════════════════════════════════════
+        var prof = vol.sharedProfile;
         if (prof == null) return;
 
         ColorGrading cg;
@@ -130,6 +144,18 @@ public static class TwinLightingPreset
             cg.gradingMode.value = GradingMode.HighDefinitionRange;   // LDR 模式下 postExposure 不参与计算
             cg.tonemapper.value = Tonemapper.Neutral;
             cg.postExposure.value = p.postExposure;
+
+            // 【P36】这些参数原本**没有**把 `overrideState` 置 true，而 PPv2 的混合只
+            // 处理 `overrideState == true` 的参数（`PostProcessLayer.OverrideSettings`）。
+            // 不置 true 就等于"写了但没人读"。这里一并补上。
+            cg.postExposure.overrideState = true;
+            cg.gradingMode.overrideState = true;
+            cg.tonemapper.overrideState = true;
+            cg.temperature.overrideState = true;
+            cg.tint.overrideState = true;
+            cg.saturation.overrideState = true;
+            cg.contrast.overrideState = true;
+
             cg.temperature.value = p.temperature;
             cg.tint.value = p.tint;
             cg.saturation.value = p.saturation;
@@ -139,7 +165,12 @@ public static class TwinLightingPreset
         Vignette vg;
         if (!prof.TryGetSettings(out vg)) vg = prof.AddSettings<Vignette>();
         if (vg != null)
+        {
             vg.intensity.value = p.vignette;
+            vg.intensity.overrideState = true;
+            vg.enabled.overrideState = true;
+            vg.enabled.value = p.vignette > 0.001f;
+        }
 
         Bloom bl;
         if (!prof.TryGetSettings(out bl)) bl = prof.AddSettings<Bloom>();
@@ -147,7 +178,23 @@ public static class TwinLightingPreset
         {
             bl.intensity.value = p.bloomIntensity;
             bl.threshold.value = p.bloomThreshold;
-            bl.active = p.bloomIntensity > 0.001f;
+
+            // ══════════════════════════════════════════════════════════════
+            // 【P36 关键修正：`active` 不是开关，`enabled.value` 才是】
+            //
+            // 原来写的是 `bl.active = ...`。但 PPv2 的
+            // `PostProcessEffectSettings.IsEnabledAndSupported()` **只返回
+            // `enabled.value`**；`active` 只表示"这组参数是否参与混合"，
+            // 与"效果开不开"是两件事（源码 Effects/PostProcessEffectSettings.cs:94-97）。
+            // 于是 `active = true` 写了等于没写，Bloom 一直是关的 ——
+            // 这就是上一轮"调了 bloomIntensity 却完全没变化"的直接原因。
+            //
+            // 另外 `overrideState` 也必须为 true，否则混合阶段直接跳过这个参数。
+            // ══════════════════════════════════════════════════════════════
+            bl.intensity.overrideState = true;
+            bl.threshold.overrideState = true;
+            bl.enabled.overrideState = true;
+            bl.enabled.value = p.bloomIntensity > 0.001f;
         }
     }
 }

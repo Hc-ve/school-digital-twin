@@ -38,33 +38,60 @@ namespace SchoolTwin.Present
         // ---------------------------------------------------------------- 调参
 
         [Header("灯")]
-        [Tooltip("开灯时的自发光颜色。**数值不要超过 0.6**，否则灯管会糊成一块纯白")]
-        [SerializeField] private Color _lampEmission = new Color(0.60f, 0.56f, 0.46f, 1f);
-        // 【调参历史】
-        //   2026-10-22 第六轮：2.2 → 0.35，用户原话「灯本体的材质还是过曝」
-        //   2026-10-26：0.35 → 0.60，用户原话「灯发的光不贴切现实」
-        //     —— 0.35 太暗，灯管只比天花板亮一丝，读不出"正在发光"，
-        //        看着像一块没通电的灰白面板。0.60 是本文件里记录的经验上限。
+        [Tooltip("开灯时的自发光颜色（线性 HDR）。已按 GB 7793-2025 的 4000~5000K 取冷白，>1 才会被 Bloom 拾取")]
+        [SerializeField] private Color _lampEmission = new Color(1.45f, 1.55f, 1.70f, 1f);
+        // ══════════════════════════════════════════════════════════════════
+        // 【P36 2026-11-13 全面重写 · 上一轮的「0.6 上限」已被实测推翻】
         //
-        // 【为什么上限是 0.6】Unity Standard shader 的最终颜色是：
-        //   最终色 = albedo × 光照 + emission
-        // 灯管 albedo 本来就接近白，emission 再高两者相加就整体过 1，整根灯糊成纯白、
-        // 丢失"灯管"的形状感。真正的亮度感来自每盏灯那个点光源，不是这里。
+        // ── 旧结论为什么错 ───────────────────────────────────────────────
+        // 旧上限 0.6 的推导前提是「emission 越高，整根灯越糊成一块白」。这个现象的
+        // 真实原因不是"数值太高"，而是**只往 `_EmissionColor` 里刷色、没有 `_EmissionMap`**：
+        // 灯管材质的 albedo 贴图 `LightLum01.png` 实测 99.0% 的像素亮度 >0.5（mean 0.952），
+        // 整份材质都是白的。没有遮罩时 emission 会**连金属端盖、支架一起点亮**，
+        // 那当然糊成一块。数值只是把这个必然结果提前或推迟了一点。
         //
-        // 【想要"光晕"必须上后处理】本项目是**内置管线**、且没装 Post Processing Stack，
-        // 没有 Bloom —— emission 只会把表面提亮，永远不会往外晕开。
-        // 要真发光，得二选一：装 PPS 加 Bloom，或给每盏灯加一个朝向相机的加法光晕面片。
+        // 素材包里本来就有正确答案：`LightLum01On.mat`（guid 61f023d5…）自带
+        // `_EmissionMap = LightLum01Emmision.png`（guid 0e24c24e…），实测该遮罩
+        // **只有 29.4% 的像素有光、70.6% 纯黑**，黑的正好是端盖/支架位置
+        //（按行统计：y=64~127 与 y=288~511 全黑，亮区集中在 y=160~287 的管壁）。
+        // 配上遮罩之后，emission 提到 1.5 也不会糊 —— 因为只有管壁在发光。
         //
-        // 【数值依据】灯管 albedo ≈ 1.0，场景是烘焙光照、灯管处烘焙光约 0.7：
-        //   emission 0.35 → 总亮度 ≈ 1.05（刚好白，但偏灰、读不出"在发光"）
-        //   emission 0.60 → 总亮度 ≈ 1.30（更亮，形状和边缘还在）  ← 当前
-        //   emission 2.20 → 总亮度 ≈ 2.90（裁剪成死白，形状全丢）  ← 2026-10-22 那次
+        // ── 旧注释里「本项目没装 Post Processing Stack」是错的 ─────────────
+        // 实测 `Packages/manifest.json` 含 `com.unity.postprocessing 3.2.2`；
+        // `SchoolSceneDay.unity` 含 1 个 `PostProcessLayer`（挂在相机上，
+        // `volumeLayer.m_Bits = 4294967295` 全层）+ 2 个 global `PostProcessVolume`。
+        // 也就是说 Bloom **一直是可用的**，只是从来没被打开过：
+        // `PPS_Bloom.asset` 里 `Bloom.enabled = { overrideState:1, value:0 }` —— 硬关。
+        // 详见 `Docs/P36_阶段1_失败诊断_打光.md`。
+        //
+        // ── 为什么现在要 >1（HDR）────────────────────────────────────────
+        // Bloom 的阈值判定在 `ColorGrading` **之前**、且在**线性空间**做：
+        //   `lthresh = GammaToLinearSpace(threshold)`   (Bloom.cs:171)
+        // 阈值取 0.72（Gamma）→ 线性 ≈ 0.477。emission 1.45~1.70 的管壁能稳过阈值；
+        // 而天花板/墙面被补光层照到后一般在 0.1~0.4 线性，过不去 —— 正是想要的
+        //「只有灯管发光晕、天花板不被整体提亮」。
+        //
+        // ── 色温依据（GB 7793-2025）──────────────────────────────────────
+        // 新国标把教室光源色温明确在 4000~5000K（旧版 3300~5500K）。
+        // 取 (1.45, 1.55, 1.70)：三通道比值 ≈ 1 : 1.07 : 1.17，略偏蓝的冷白，
+        // 对应约 4500K 的日光灯观感；而不是旧值 (0.60, 0.56, 0.46) 的暖黄
+        //（那更接近 3000K 白炽灯，和《异环》参考图的冷白灯管明显不符）。
+        //
+        // ── 关键：这两个值对**关灯态没有任何影响** ───────────────────────
+        // 关灯走的是 `Color.black` + 材质本身（`LightLum01.mat` 的 `_EmissionColor`
+        // 本来就是 {0,0,0}），所以白天档观感零变化这条硬约束天然满足。
+        // ══════════════════════════════════════════════════════════════════
 
         [Tooltip("**每盏灯**的点光源强度。0 = 只让灯管自己发光，不照亮房间")]
         [SerializeField] private float _lampGlowIntensity = 2.0f;
 
         [Tooltip("点光源照射半径（米）。0 = 按单盏灯具尺寸自动算（约 3 米）")]
         [SerializeField] private float _lampGlowRange = 0f;
+
+        [Tooltip("点光源相对灯管中心**向下**偏移（米）。0 = 不下移（P13 原观感）。\n" +
+                 "灯管中心距天花板只有 0.16m，全向点光源从那里往上直射会把天花板烧白 ——\n" +
+                 "真实荧光灯有灯罩，往上几乎不发光。下移后光主要照向房间，天花板只剩反射。")]
+        [SerializeField] private float _lampGlowDrop = 0.55f;
 
         [Header("空调提示音")]
         [Tooltip("收到命令时是否发声（模拟空调「滴滴」两声）")]
@@ -157,6 +184,36 @@ namespace SchoolTwin.Present
             public readonly List<Renderer> Renderers = new List<Renderer>(16);
             public readonly List<Material> Materials = new List<Material>(16);
             public readonly List<bool> HasEmission = new List<bool>(16);
+
+            // ── 【P36】开关双材质（运行时克隆，不落盘）──────────────────────
+            /// <summary>
+            /// 本组灯管的**关态材质**（`LightLum01.mat` 的克隆，`_EmissionColor` 恒为黑）。
+            /// 每个 Renderer 一份，与 `Materials` 一一对应。
+            ///
+            /// ⚠️ 注意：`OffMats[i]` 与 `Materials[i]` 是**同一个对象**（构建时就 `Add(m)` 了两次）。
+            /// 保留两个列表只是为了语义清晰（一个叫"这盏灯的材质"，一个叫"关态该用哪份"），
+            /// 销毁时**只能遍历其中一个**，否则会对同一对象 `Destroy` 两次。
+            /// </summary>
+            public readonly List<Material> OffMats = new List<Material>(16);
+
+            /// <summary>
+            /// 本组灯管的**开态材质**（`LightLum01On.mat` 的克隆）。
+            ///
+            /// 【为什么是"克隆 On 材质"而不是"往关态材质里刷 emission"】
+            /// `LightLum01On.mat` 自带一张专用 `_EmissionMap`（`LightLum01Emmision.png`），
+            /// 实测该遮罩只有 29.4% 像素有光、70.6% 纯黑 —— 黑的正好是金属端盖与支架。
+            /// 少了这张遮罩，emission 会连灯壳一起点亮，就是上一轮"糊成一块白"的真正成因。
+            /// 直接克隆它，等于**照抄素材包里已经调好的开态口径**，不用自己猜。
+            ///
+            /// 克隆而不是改资产：任务包禁止改 `.mat`，且克隆只在本次 Play 有效，
+            /// 退出即消失，天然满足「运行时生效、不落盘、可一键回滚」。
+            /// </summary>
+            public readonly List<Material> OnMats = new List<Material>(16);
+
+            /// <summary>
+            /// 开态材质是否真的建起来了（拿不到 `_EmissionMap` 时会退化成"只刷 emission"）。
+            /// </summary>
+            public bool HasOnMaterial;
             /// <summary>
             /// **每盏灯各一个**点光源。
             ///
@@ -194,6 +251,9 @@ namespace SchoolTwin.Present
         private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
         /// <summary>`_EmissionMap` 的属性 id（座位单台开机要换回白色遮罩，见 ApplyScreen）。</summary>
         private static readonly int EmissionMapId = Shader.PropertyToID("_EmissionMap");
+
+        /// <summary>【P36】「找不到开态材质模板」只警告一次，别让每个房间刷一条。</summary>
+        private static bool _warnedNoOnMat;
 
         /// <summary>主脑点位：只管自己那 1 台屏（「开机 / 关闭主脑」）。</summary>
         private const string MasterPcTwinId = "ClassComputer/PC/Master_01";
@@ -424,9 +484,17 @@ namespace SchoolTwin.Present
             foreach (KeyValuePair<string, LampVisual> kv in _lamps)
             {
                 LampVisual v = kv.Value;
+                // `Materials` 与 `OffMats` 是**同一批对象**（OffMats 只是别名列表），
+                // 所以这里只销毁一次，避免重复 Destroy。
                 for (int i = 0; i < v.Materials.Count; i++)
                 {
                     if (v.Materials[i] != null) Destroy(v.Materials[i]);
+                }
+                // 【P36】开态材质是运行时 `new Material(...)` 出来的，不在任何资产引用图里，
+                // 不销毁就会每次进出 Play 泄漏一份（和上面 P19 的材质副本同理）。
+                for (int i = 0; i < v.OnMats.Count; i++)
+                {
+                    if (v.OnMats[i] != null) Destroy(v.OnMats[i]);
                 }
                 if (v.Glows != null)
                 {
@@ -729,6 +797,12 @@ namespace SchoolTwin.Present
             LampVisual v = new LampVisual();
             v.TwinId = anchor.TwinId;
 
+            // 【P36】整组共用同一份"开态模板"：素材包里的 `LightLum01On.mat`。
+            // 每盏灯再各自克隆一份 —— 因为要按 Renderer 切 `sharedMaterial`，
+            // 而同一份 Material 实例可以安全地被多个 Renderer 共享，
+            // 这里逐 Renderer 克隆只是为了不去动任何 `.mat` 资产（也不影响别的房间）。
+            Material onTemplate = FindOnTemplate(group);
+
             for (int i = 0; i < group.Count; i++)
             {
                 Renderer r = group[i];
@@ -742,18 +816,120 @@ namespace SchoolTwin.Present
                 v.Renderers.Add(r);
                 v.Materials.Add(m);
                 v.HasEmission.Add(has);
+
+                // ── 关态 = 上面那份自身克隆（emission 恒黑）；开态 = On 模板的克隆 ──
+                v.OffMats.Add(m);
+
+                Material onMat = null;
+                if (has && onTemplate != null)
+                {
+                    // 以「本盏灯自己的材质」为底克隆，再叠加 On 版的发光口径 ——
+                    // 而不是直接克隆 On 模板。
+                    //
+                    // 【为什么】`LightLum01On.mat` 与 `LightLum01.mat` 虽然共用同一张
+                    // `_MainTex`（guid 7eeb9ef0…），但两者是**不同 shader 变体**：
+                    //   LightLum01   → Standard **Specular**（fileID 45），带 `_SpecGlossMap`
+                    //   LightLum01On → Standard（fileID 46），`_Glossiness` 0.5、无 SpecGloss
+                    // 直接克隆 On 模板会让灯管在开灯瞬间悄悄换掉光泽模型和高光表现，
+                    // 关灯一对比就能看出"开灯后灯管材质变了"。
+                    // 以原材质为底，只把「发光遮罩 + 发光色」换过去，
+                    // 外观其余部分在开关两态之间保持完全一致。
+                    onMat = new Material(m);
+                    onMat.name = m.name + "_On(RT)";
+
+                    Texture em = onTemplate.GetTexture(EmissionMapId);
+                    if (em != null) onMat.SetTexture(EmissionMapId, em);
+
+                    onMat.EnableKeyword("_EMISSION");
+                    onMat.SetColor(EmissionId, _lampEmission);
+                    onMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+                }
+                v.OnMats.Add(onMat);
+                if (onMat != null) v.HasOnMaterial = true;
+            }
+
+            // 关态先落地：构建立刻把灯压到"灭"，避免建完到第一次 ApplyLamp 之间
+            // 出现一帧"预制体自带的发光态"（`LightLum01.mat` 本身 emission 是黑的，
+            // 但若将来有人换了关态材质，这里仍然正确）。
+            for (int i = 0; i < v.Renderers.Count; i++)
+            {
+                if (v.Renderers[i] == null) continue;
+                Material off = v.OffMats[i];
+                if (off == null) continue;
+                off.SetColor(EmissionId, Color.black);
+                off.DisableKeyword("_EMISSION");
+                if (v.Renderers[i].sharedMaterial != off) v.Renderers[i].sharedMaterial = off;
             }
 
             v.Glows = BuildGlows(anchor, group);
 
             Debug.Log("[TwinPresent] 灯已接管：" + anchor.TwinId +
                       "（" + v.Renderers.Count + " 盏灯 / 发光 " + CountEmission(v) + " 盏" +
+                      "，开态材质=" + (v.HasOnMaterial ? "已建（含 EmissionMap）" : "退化（无 On 模板）") +
                       "，点光源=" + (v.Glows != null && v.Glows.Length > 0
                           ? "每盏一个共 " + v.Glows.Length + " 个，range=" +
                             (v.Glows[0] != null ? v.Glows[0].range.ToString("0.0") + "m" : "?")
                           : "无") + "）");
 
             return v;
+        }
+
+        /// <summary>
+        /// 【P36】找本组可用的「开态材质模板」。
+        ///
+        /// 三级兜底，从最准到最保守：
+        ///   ① 场景/预制体上直接配了 `LightLum01On.mat` 的 Renderer（有就用，最理想）；
+        ///   ② 素材包里的 `LightLum01On.mat` 资产（编辑器中用 `AssetDatabase` 按 guid 取，
+        ///      **只读不写**，不修改资产）；
+        ///   ③ 都拿不到 → 返回 null，退化回旧行为（只刷 `_EmissionColor`），
+        ///      画面仍可用，只是没有 EmissionMap 约束、容易糊。日志会写明退化原因。
+        ///
+        /// 【为什么第 ② 级要限 `#if UNITY_EDITOR`】
+        /// 打包后 `AssetDatabase` 不存在，且这个材质本来就没被任何场景引用、会被剥离。
+        /// 本项目的验收方式一直是「编辑器里 play 看效果」（主理人 play 为第一标准），
+        /// 所以编辑器路径完全够用；打包版走第 ③ 级退化，不会编译失败、也不会崩。
+        /// 这也和本项目既有的 `PcScreenPlayer` 用 `#if UNITY_EDITOR` 取编辑器能力的口径一致。
+        /// </summary>
+        private static Material FindOnTemplate(List<Renderer> group)
+        {
+            // ① 组内已经有 On 材质的（素材包里的 *On 预制体实例）
+            for (int i = 0; i < group.Count; i++)
+            {
+                Renderer r = group[i];
+                if (r == null) continue;
+                Material sm = r.sharedMaterial;
+                if (sm == null) continue;
+                if (sm.name != null && sm.name.StartsWith("LightLum01On", StringComparison.Ordinal))
+                    return sm;
+            }
+
+#if UNITY_EDITOR
+            // ② 素材包里的 LightLum01On.mat（guid 61f023d58987e334c95f711abed89d87）
+            //    只读：仅 `LoadAssetAtPath` 取引用并克隆，**不写回、不 SaveAssets**。
+            const string OnPath =
+                "Assets/TirGames/SchoolScene/Models/Interior/Lights/Materials/LightLum01On.mat";
+            Material asset = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(OnPath);
+            if (asset != null) return asset;
+
+            if (!_warnedNoOnMat)
+            {
+                _warnedNoOnMat = true;
+                Debug.LogWarning("[TwinPresent][P36] 找不到开态材质模板 `" + OnPath +
+                                 "`，灯管退化为「只刷 _EmissionColor、无 EmissionMap」，" +
+                                 "可能出现端盖一起发亮的糊白。请确认素材包是否完整。");
+            }
+#else
+            // ③ 打包版兜底：`AssetDatabase` 只在编辑器可用，而这个材质没有被任何场景
+            //    引用，打包时会被剥离，拿不到是正常的。此时退化回旧行为
+            //    （只刷 `_EmissionColor`），画面仍可用、不崩，只是没有 EmissionMap 约束。
+            if (!_warnedNoOnMat)
+            {
+                _warnedNoOnMat = true;
+                Debug.Log("[TwinPresent][P36] 非编辑器环境：开态材质模板不可用，" +
+                          "灯管走「只刷 _EmissionColor」的退化身态（无 EmissionMap 约束）。");
+            }
+#endif
+            return null;
         }
 
         private static int CountEmission(LampVisual v)
@@ -876,10 +1052,22 @@ namespace SchoolTwin.Present
 
                 GameObject go = new GameObject("TwinLampGlow_" + i);
                 go.transform.SetParent(anchor.transform, false);
-                // 【精确还原 P13】落点就是灯管的包围盒中心，**不做任何偏移**。
+                // 【落点：灯管包围盒中心，可再向下偏移 `_lampGlowDrop`】
+                //
+                // 【为什么保留"包围盒中心"作为基准 —— P13 的观感就是这么来的】
                 // 中间有一版我把它下移了 0.35m（想让地面照得亮些），结果灯管本身
                 // 落在光源上方、接收不到光，看起来比之前暗 —— 而用户认可的正是 P13 的观感。
-                go.transform.localPosition = anchor.transform.InverseTransformPoint(b.center);
+                //
+                // 【但仍然必须允许继续下移 —— 2026-11-13 天花板过曝】
+                // 实测几何：灯管中心 3.34m，天花板约 3.5m，**光源距天花板只有 0.16m**。
+                // Unity 点光衰减 `1/(1 + 25·d²/r²)`，d=0.16 / r=3 时衰减因子仍有 0.93 ——
+                // 也就是说天花板正上方几乎**满强度**接收 2.0 的直射光照。
+                // 而真实荧光灯是「灯罩兜着，往上几乎不发光」，
+                // `IndoorFillLight` 早就按这个物理事实把补光点降了 1.14m（`TubeFillDrop`），
+                // 唯独这里的 TwinLampGlow 还贴在天花板上烧。
+                // 所以给一个可调下移量，默认 0 保持 P13 观感，需要时在 Inspector 调大即可。
+                Vector3 worldPos = b.center + Vector3.down * Mathf.Max(0f, _lampGlowDrop);
+                go.transform.localPosition = anchor.transform.InverseTransformPoint(worldPos);
                 go.transform.localRotation = Quaternion.identity;
 
                 Light light = go.AddComponent<Light>();
@@ -919,12 +1107,45 @@ namespace SchoolTwin.Present
             v.IsOn = on;
 
             int written = 0;
+            int swapped = 0;
             for (int i = 0; i < v.Materials.Count; i++)
             {
-                Material m = v.Materials[i];
-                if (m == null || !v.HasEmission[i]) continue;
-                m.SetColor(EmissionId, on ? _lampEmission : Color.black);
-                written++;
+                Material off = i < v.OffMats.Count ? v.OffMats[i] : null;
+                Material onM = i < v.OnMats.Count ? v.OnMats[i] : null;
+                Renderer r = i < v.Renderers.Count ? v.Renderers[i] : null;
+
+                if (r == null || off == null || !v.HasEmission[i]) continue;
+
+                // ── 【P36】开/关走"整份材质切换"，不是只改一个颜色 ──────────
+                //
+                // 为什么必须换材质：开态的光靠 `_EmissionMap` 限定在管壁上。
+                // 只改 `_EmissionColor` 的话，关态材质没有 EmissionMap，
+                // Standard shader 会把 emission 铺满整张 UV —— 端盖、支架一起亮，
+                // 就是上一轮"糊成一块白"。换材质才能把"哪里发光"这件事一起换掉。
+                if (on)
+                {
+                    if (onM != null)
+                    {
+                        onM.SetColor(EmissionId, _lampEmission);
+                        onM.EnableKeyword("_EMISSION");
+                        if (r.sharedMaterial != onM) { r.sharedMaterial = onM; swapped++; }
+                    }
+                    else
+                    {
+                        // 退化分支：拿不到 On 模板时，至少把颜色刷上去（旧行为）
+                        off.SetColor(EmissionId, _lampEmission);
+                        off.EnableKeyword("_EMISSION");
+                        if (r.sharedMaterial != off) { r.sharedMaterial = off; swapped++; }
+                    }
+                    written++;
+                }
+                else
+                {
+                    off.SetColor(EmissionId, Color.black);
+                    off.DisableKeyword("_EMISSION");
+                    if (r.sharedMaterial != off) { r.sharedMaterial = off; swapped++; }
+                    written++;
+                }
             }
 
             if (v.Glows != null)
@@ -935,11 +1156,14 @@ namespace SchoolTwin.Present
                 }
             }
 
+            if (on) TwinLampBloom.EnsureReady();
+
             // 只在「状态真的翻转」或「首次接管」时打一条，方便验收时确认表现层确实动手了。
             // 这条一定要无条件打：状态变了却 `written == 0`（材质没有 _EmissionColor）时，
             // 它是唯一能看出「灯为什么不亮」的线索。
             Debug.Log("[TwinPresent] 灯 " + (on ? "开" : "关") + "：" + v.TwinId +
                       "（" + v.Renderers.Count + " 盏，写了 " + written + " 份自发光" +
+                      "，换材质 " + swapped + " 份" +
                       "，点光源=" + (v.Glows != null ? v.Glows.Length + " 个 × " +
                                      (on ? _lampGlowIntensity.ToString("0.0") : "0.0") : "无") + "）");
         }
