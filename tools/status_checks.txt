@@ -746,3 +746,15 @@ D13-10 | 【只读纪律】审计工具不得保存场景（工具定位是只�
 # --- 四、D14 验证期间的护栏（打光做渲染对比时用）---
 D14-01 | 【验证期护栏】三块吊顶路径必须同时在场（打光临时注释做对比后必须还原；少一条即说明未还原） | grep:3:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:SchoolBuilding/(ZalTop|PCClassTop|DirectorTop)
 D14-02 | 【不许连带改】D14 验证期间不得动 RenderSettings（打光 10-30 已实测 RenderSettings 三项全部无效，重改即白烧一轮） | grep0:Assets/_Project/Scripts/Twin/P30FixCeilingLightmap.cs:RenderSettings\.
+
+# --- 五、P43 昼夜循环修复批（2026-11-17，四项修复的回归护栏；期望值全部先实测再填，见 §1.6 D25）---
+# 背景：验收发现「粒子密度三档」对主雨雪完全失效（雨/雪发射器因 P13-D9 无父节点，子级遍历够不到），
+# 「随机」按钮语义与循环模式矛盾（摇一次骰子+永久退自动）。修复后加 8 条护栏。
+P43-01 | 【修复1】WeatherVisuals 必须有密度源头乘算入口 SetDensityScale（TimeCycleDirector 唯一调用入口） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:public void SetDensityScale
+P43-02 | 【修复1】三路速率写入（雨/雪/水花）都必须乘 _densityScale（少一路即该类粒子不受密度控制） | grep:3:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:em\.rateOverTime = .*_densityScale
+P43-03 | 【修复1·防回潮】TimeCycleDirector 禁止再用子级遍历设密度（模式带 < 泛型限定，避免误命中注释里的事故描述文字） | grep0:Assets/_Project/Scripts/Weather/TimeCycleDirector.cs:GetComponentsInChildren<
+P43-04 | 【修复1】密度写入必须走 WeatherVisuals.SetDensityScale（第一版的 rateOverTimeMultiplier 方案已废弃，不许复活） | grep:1:Assets/_Project/Scripts/Weather/TimeCycleDirector.cs:visuals\.SetDensityScale\(k\)
+P43-05 | 【修复2】「随机」确认 = 恢复自动轮换 SetAuto(true)（主理人诉求"默认处在随机选项"的 UI 回路） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:dir\.SetAuto\(true\)
+P43-06 | 【修复2·防回潮】「随机」不许再摇骰子（旧 Random.Range(0,7) 一次性掷骰已删） | grep0:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:Random\.Range\(0, 7\)
+P43-07 | 【修复3】无预览且自动轮换时高亮「随机」（模式语义优先于当前天气档，不再误导"晴天被钉死"） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:WeatherDirector\.Instance\.auto
+P43-08 | 【修复4】冻结/恢复/起始三处基准同源（都取 NormalizeHour(TwinClimate.HourOfDay)；Pause 曾独用墙钟致每次开合面板丢一帧游戏时间） | grep:3:Assets/_Project/Scripts/Weather/TimeCycleDirector.cs:NormalizeHour\(TwinClimate\.HourOfDay\)

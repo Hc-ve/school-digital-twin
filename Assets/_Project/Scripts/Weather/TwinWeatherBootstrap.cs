@@ -69,12 +69,15 @@ namespace SchoolTwin.Weather
     /// 【挂上之后天气是什么】
     ///
     /// `EnvironmentState` 字段默认 `timeOfDay = Day`、`weather = Clear`，
-    /// 所以挂上之后**默认仍是晴天**。这是刻意的（不该一进场景就下雨），
-    /// 要看到雨雪需要点抽屉「时间天气」→「雨天 / 雪天」。
+    /// 所以挂上之后**首帧仍是晴天**（刻意默认，不该一进场景就下雨）。
     ///
-    /// `WeatherDirector.auto` 保持 `false`：答辩时天气自己每 90~200 秒跳一次
-    /// 会打断讲解节奏，演示要的是"我点它就变"。需要自动轮换时面板里能开
-    /// （`TwinTimeWeatherCard.OnPickWeather` 反而会主动关掉它）。
+    /// 【P43 裁决 2：auto 由 false 改为 true】
+    /// 旧实现 `auto=false`，理由是"答辩时天气自己每 90~200 秒跳一次会打断讲解节奏"。
+    /// 主理人 2026-11-16 新诉求："play 后天气系统默认处在随机选项，昼夜循环过程中
+    /// 仿真现实随机天气"，故改为循环模式默认 true。
+    /// 手动模式仍保留：玩家在时间天气卡点具体天气档（含「随机」按钮）时，
+    /// `TwinTimeWeatherCard.CommitPendingWeather` 会调 `SetAuto(false)` 退出自动轮换 ——
+    /// 既有语义完整，不会与循环器打架（详见 `Ensure()` 内同处注释）。
     /// </summary>
     public static class TwinWeatherBootstrap
     {
@@ -141,9 +144,20 @@ namespace SchoolTwin.Weather
             // WeatherVisuals 子物体建好；再加 WeatherDirector 时就已在 DontDestroyOnLoad 场景里。
             EnvironmentState env = go.AddComponent<EnvironmentState>();
 
-            // 自动轮换默认关（字段默认就是 false，这里显式写一遍表明是刻意选择，不是漏配）
+            // 【P43 裁决 2】自动轮换默认开 —— "循环模式默认随机"。
+            //
+            // 原实现这里写死 auto=false，注释理由是"答辩时每 90~200 秒跳一次会打断讲解节奏"。
+            // 主理人 2026-11-16 明确诉求："play 后天气系统默认处在随机选项，
+            // 时间昼夜循环过程中仿真现实随机天气"，故裁决改为：
+            //   · 循环模式（默认）→ auto=true，用现有权重链持续演变，不另造随机算法；
+            //   · 手动模式 → 玩家在时间天气卡点过任一具体天气档（含「随机」按钮），
+            //     TwinTimeWeatherCard.CommitPendingWeather 会调 SetAuto(false) 退出自动轮换，
+            //     原有语义完整保留，不会与循环器打架。
+            //
+            // 时间循环器与本开关正交：TimeCycleDirector 只推时刻，天气跳档仍由
+            // WeatherDirector 的 deltaTime 驱动（P43 裁决 3 采纳 A，不改天气侧内部）。
             WeatherDirector dir = go.AddComponent<WeatherDirector>();
-            dir.auto = false;
+            dir.auto = true;
 
             // ---- 把数据侧对齐视觉侧 ----
             //
@@ -164,8 +178,8 @@ namespace SchoolTwin.Weather
 
             Debug.Log("[P13] ==== 天气系统已自举 ====\n"
                       + "  EnvironmentState → 「" + RootName + "」（DontDestroyOnLoad）\n"
-                      + "  WeatherDirector  → 同物体，auto=false（不自动跳天气）\n"
-                      + "  初始状态：白天 · 晴（刻意默认值，不会一进场景就下雨）\n"
+                      + "  WeatherDirector  → 同物体，auto=true（P43 循环模式默认随机天气）\n"
+                      + "  初始状态：白天 · 晴（首帧刻意默认；随后由权重链按现实规律演变）\n"
                       + "  数据侧已对齐视觉侧（TwinClimate 原默认是 Cloudy，不改它会让两边矛盾）\n"
                       + "  要看到雨雪：点抽屉工具行「时间天气」→「雨天 / 雪天」");
 

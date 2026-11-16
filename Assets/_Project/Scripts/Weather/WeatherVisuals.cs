@@ -178,6 +178,14 @@ namespace SchoolTwin.Weather
         private float lastRain = -1f, lastSnow = -1f, lastCloud = -1f, lastStarA = -1f, lastOvercast = -1f;
         private float lastArea = -1f;
         private float lastSplashRain = -1f, lastSnowGroundA = -1f;
+
+        // 【P43 修复 11-16】雨雪粒子密度倍率（小 0.35 / 中 1 / 大 2），经 SetDensityScale 写入。
+        // 【为什么乘在写入源头而不是 rateOverTimeMultiplier】① 雨/雪发射器因 P13-D9 刻意
+        // 不挂父节点（世界坐标定位），任何子级遍历都够不到，multiplier 方案只覆盖到水花；
+        // ② 三份速率曲线都是 Constant 模式，该模式下 multiplier 的读改行为不可靠、且会被
+        // 本类对 rateOverTime 的重写覆盖。乘在源头上与重写机制天然共存。默认 1，
+        // 不调密度时行为与历史版本完全一致。
+        private float _densityScale = 1f;
         private float groundY;
         private float groundProbeTimer;
         private bool domeOn;
@@ -1005,6 +1013,23 @@ namespace SchoolTwin.Weather
         // 应用
         // =====================================================================
 
+        /// <summary>
+        /// 【P43】设置雨雪粒子密度倍率（TimeCycleDirector 三档调用：小 0.35 / 中 1 / 大 2）。
+        ///
+        /// 【为什么复位三个 last 缓存】Apply 的三路速率写入都带「值没变就不写」闸
+        /// （lastRain / lastSnow / lastSplashRain），密度变了但天气没变时闸不会自己开 ——
+        /// 复位成 -1 哨兵强制下一次 Apply 全量重写，之后恢复「值变才写」的原节流。
+        /// </summary>
+        public void SetDensityScale(float k)
+        {
+            k = Mathf.Max(0f, k);
+            if (Mathf.Approximately(k, _densityScale)) return;
+            _densityScale = k;
+            lastRain = -1f;
+            lastSnow = -1f;
+            lastSplashRain = -1f;
+        }
+
         /// <summary>由 EnvironmentState 每帧调用；参数都是已经插值好的当前值。</summary>
         /// <param name="overcast">阴天帷幔 0~1：平坦压住天空底色，与 <paramref name="cloud"/> 分工见 CloudDome.shader。</param>
         public void Apply(float rain, float snow, float wind, float cloud, float overcast, Color cloudColor, float star,
@@ -1056,7 +1081,7 @@ namespace SchoolTwin.Weather
             {
                 lastRain = effRain;
                 var em = rainPs.emission;
-                em.rateOverTime = Mathf.Max(0f, effRain) * RainRateMax;
+                em.rateOverTime = Mathf.Max(0f, effRain) * RainRateMax * _densityScale;
 
                 var vel = rainPs.velocityOverLifetime;
                 float lateral = wind * 5.5f;
@@ -1075,7 +1100,7 @@ namespace SchoolTwin.Weather
             {
                 lastSnow = effSnow;
                 var em = snowPs.emission;
-                em.rateOverTime = Mathf.Max(0f, effSnow) * SnowRateMax;
+                em.rateOverTime = Mathf.Max(0f, effSnow) * SnowRateMax * _densityScale;
 
                 var vel = snowPs.velocityOverLifetime;
                 vel.x = new ParticleSystem.MinMaxCurve(wind * 2.2f);
@@ -1177,7 +1202,7 @@ namespace SchoolTwin.Weather
             {
                 lastSplashRain = splashRate;
                 var em = splashPs.emission;
-                em.rateOverTime = splashRate;
+                em.rateOverTime = splashRate * _densityScale;
             }
 
             // ---- 地面积雪（近场精细盘 + 远场白兜底盘，共同覆盖到地平线方向）----

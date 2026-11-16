@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using SchoolTwin.Data;
 using SchoolTwin.Twin;      // P13：TwinWeatherBridge（唯一写入出口）
-using SchoolTwin.Weather;
+using SchoolTwin.Weather;   // P43：EnvironmentState / WeatherDirector / TimeCycleDirector
 
 // 别名：理由见 TwinWeatherBridge.cs 顶部注释（`SchoolTwin.Weather` 命名空间遮蔽同名枚举）。
 using WeatherKind = SchoolTwin.Weather.Weather;
@@ -61,6 +61,36 @@ namespace SchoolTwin.UI
         /// <summary>卡片实际总高 408。新增行落在 y=344~384，新底距 408−384=24，与原图纸一致。</summary>
         private const float CardTotalH = CardH + ActionStripH;
 
+        // ---- 【P43-UI】底部分页圆点区 ----
+        //
+        // 【为什么另开一个常量，而不是把 CardTotalH 直接改成 434】
+        // CardTotalH 是「内容区 + 操作行」的高度，被页面容器与命中区反复引用，
+        // 它的值 408 已经被 P13-16 判据按字面核对过。这里只在它**下面**再接一条圆点带，
+        // 原有 408 的语义与数值都不动，避免牵连已验收的布局。
+
+        /// <summary>底部分页圆点区高度：圆点 10 高 + 与操作行的 8 间隔 + 底距 8。</summary>
+        private const float DotsStripH = 26f;
+
+        /// <summary>卡片外框总高 = 408 + 26 = 434。只有 sizeDelta 与页面容器用它。</summary>
+        private const float CardBoxH = CardTotalH + DotsStripH;
+
+        /// <summary>
+        /// 圆点直径与间距。
+        /// 【为什么是 10 而不是 6 / 8】6 在 Expand 缩放下投影不到 4px、几乎看不见；
+        /// 8 能分辨但仍偏小（第二版截图里两个点要凑近才看得出哪个亮）。
+        /// 参考设计里圆点是明确的页码信号，10 是"清楚可辨但不抢内容"的值。
+        /// 与操作行只隔 8，把圆点往上提一点，让底部不要显得空。
+        /// </summary>
+        private const float DotD = 10f;
+        private const float DotGap = 16f;
+        private const float DotY = CardTotalH + 8f;    // 408 + 8 = 416 → 416~426，底距 8
+
+        /// <summary>分页数：0 = 时间天气，1 = 设置。</summary>
+        private const int PageCount = 2;
+
+        /// <summary>翻页判定阈值：水平拖动超过卡宽的 22% 即翻页，否则弹回原页。</summary>
+        private const float SwipeCommitRatio = 0.22f;
+
         // ---- 新增操作行（重置 / 确认）----
         private const float ActionY = 344f;
         private const float ActionH = 40f;
@@ -111,6 +141,50 @@ namespace SchoolTwin.UI
         private TwinButton[] _buttons;        // 天气四钮
         private TwinButton _resetButton;      // 重置 → 恢复真实时钟
         private TwinButton _confirmButton;    // 确认 → 提交预览时刻
+
+        // ---- 【P43-UI】分页 ----
+        /// <summary>页面容器：两页横向并排，靠 anchoredPosition.x 平移切换。</summary>
+        private RectTransform _pager;
+
+        /// <summary>第 0 页（时间天气）根节点。</summary>
+        private RectTransform _pageClock;
+
+        /// <summary>第 1 页（设置）根节点。</summary>
+        private RectTransform _pageSettings;
+
+        /// <summary>底部圆点，长度 = PageCount。用 TwinRoundedRect 而非 Image —— 无 Sprite 时 Image 画的是方块。</summary>
+        private TwinRoundedRect[] _dots;
+
+        // ---- 设置页控件 ----
+        private TwinButton[] _cycleButtons;
+        private TwinButton[] _densityButtons;
+        private Text _settingsSummary;
+
+        /// <summary>周期三档的显示文案与秒数。索引与 TimeCycleDirector 的设定一一对应。</summary>
+        private static readonly string[] CycleLabels = { "演示 5 分", "默认 15 分", "慢速 30 分" };
+        private static readonly float[] CycleValues = { 300f, 900f, 1800f };
+
+        private static readonly string[] DensityLabels = { "小", "中", "大" };
+
+        /// <summary>当前页索引：0 = 时间天气，1 = 设置。</summary>
+        private int _page;
+
+        /// <summary>
+        /// 分页目标的 x 偏移（**正值向左推**，与 UGUI 的 anchoredPosition 一致）。
+        /// 拖动时它随手指走，松手后由 Update 缓动到整页位置 ——
+        /// 用缓动而不是瞬移，是因为参考设计的页码切换是"滑"过去的。
+        ///
+        /// ⚠️ 符号约定（踩过一次）：`_pagerX = 480` 表示"pager 已左移 480，
+        /// 现在看到的是第 1 页"。所以手指**向左**拖 → `_pagerX` **增大** → 下一页。
+        /// 判定翻页方向时一律按 `_pagerX - PageOffsetOf(_page)` 的符号，不要再按屏幕位移符号
+        /// （两者反号，混用会让滑动永远弹回原页）。
+        /// </summary>
+        private float _pagerX;
+
+        private bool _swiping;
+        private float _swipeStartX;
+        private float _swipeStartPagerX;
+        private float _swipeTargetX;
 
         private Action _onClosed;
 
@@ -241,18 +315,80 @@ namespace SchoolTwin.UI
             _card.anchorMax = new Vector2(0.5f, 0.5f);
             _card.pivot = new Vector2(0.5f, 0.5f);
             _card.anchoredPosition = Vector2.zero;
-            _card.sizeDelta = new Vector2(CardW, CardTotalH);
+            _card.sizeDelta = new Vector2(CardW, CardBoxH);
 
+            // ---- 3. 分页容器（两页横向并排，滑动切换）----
+            BuildPager();
+
+            // ---- 4. 固定页头（标题 / × / 提示行）----
+            //
+            // 【为什么页头建在 pager **之后**】UGUI 按兄弟顺序决定绘制先后。
+            // 页头后建 = 画在页面之上，翻页时页面从它下方滑过也不会盖住标题。
+            // 竖向上页头占 0~52、页面内容从 56 起，本来就不重叠，这层顺序只是兜底。
             BuildTitle();
+
+            // ---- 5. 底部分页圆点 ----
+            BuildDots();
+
+            // ---- 6. 滑动翻页（挂在卡片根上，靠 UGUI 冒泡拿到按钮之外的拖动）----
+            _card.gameObject.AddComponent<TwinPageSwipe>().Owner = this;
+
+            RefreshAll();
+        }
+
+        /// <summary>
+        /// 分页骨架：视口（裁剪）+ 两页并排的容器。
+        ///
+        /// 【为什么需要视口 + RectMask2D】
+        /// 两页并排放，总宽 2×480。滑动时若不做裁剪，离开卡片的那一页会画到卡片外面
+        /// （深色底上一条 480 宽的内容横穿整个场景），比不滑动还难看。
+        /// 视口尺寸正好等于卡片内容区，只让落在卡片内的那一段可见。
+        ///
+        /// 【为什么不用 Mask（圆角版）】Mask 需要一张 Sprite 且会开模板缓冲，
+        /// 本项目是零图片资源约束；且卡片内容四周留了 20 的边距，
+        /// 矩形裁剪在视觉上与圆角裁剪没有可见差异。
+        /// </summary>
+        private void BuildPager()
+        {
+            GameObject vpGo = TwinUIFactory.Node("TWS_Viewport", _card);
+            RectTransform vp = (RectTransform)vpGo.transform;
+            TwinUIFactory.Place(vp, 0f, 0f, CardW, CardTotalH);
+            vpGo.AddComponent<RectMask2D>();
+
+            GameObject pagerGo = TwinUIFactory.Node("TWS_Pager", vp);
+            _pager = (RectTransform)pagerGo.transform;
+            TwinUIFactory.Place(_pager, 0f, 0f, CardW * PageCount, CardTotalH);
+
+            _pageClock = MakePage("TWS_PageClock", 0);
+            _pageSettings = MakePage("TWS_PageSettings", 1);
+
+            BuildPageClock();
+            BuildPageSettings();
+        }
+
+        /// <summary>在 pager 里摆一页：第 <paramref name="index"/> 页的左上角落在 x = index×480。</summary>
+        private RectTransform MakePage(string name, int index)
+        {
+            GameObject go = TwinUIFactory.Node(name, _pager);
+            RectTransform rt = (RectTransform)go.transform;
+            TwinUIFactory.Place(rt, index * CardW, 0f, CardW, CardTotalH);
+            return rt;
+        }
+
+        /// <summary>
+        /// 第 0 页：表盘 + 天气四钮 + 状态行 + 重置/确认。
+        /// 各元素坐标与 P13 定稿**一字不差** —— 页面节点与卡片同原点，所以 Place 的绝对坐标可直接沿用。
+        ///
+        /// 【命中区为什么仍在页内最后建】
+        /// 它必须压在同页的表盘图元之上才能接到拖动；页与页之间由视口裁剪隔开，互不干扰。
+        /// </summary>
+        private void BuildPageClock()
+        {
             BuildDial();
             BuildButtons();
             BuildActionButtons();
             BuildStatus();
-
-            // ---- Hit 最后建（图纸 §3 #15：必须在内容之上，否则拖不动）----
             BuildHitArea();
-
-            RefreshAll();
         }
 
         private void BuildTitle()
@@ -292,13 +428,15 @@ namespace SchoolTwin.UI
 
         private void BuildDial()
         {
+            RectTransform host = HostOf(_pageClock);
+
             // ---- 外圆环面（实心圆，靠半径 = 半宽 得到正圆）----
-            TwinRoundedRect ring = TwinUIFactory.Rounded(_card, "TWS_Ring", DialD * 0.5f,
+            TwinRoundedRect ring = TwinUIFactory.Rounded(host, "TWS_Ring", DialD * 0.5f,
                 TwinTheme.AccentDim, TwinTheme.AccentDim, Color.clear, 0f, false);
             TwinUIFactory.Place(ring.rectTransform, DialCX - DialD * 0.5f, DialCY - DialD * 0.5f, DialD, DialD);
 
             // ---- 内盘：叠在环上抠出 24px 宽的环 ----
-            TwinRoundedRect disc = TwinUIFactory.Rounded(_card, "TWS_Disc", DiscD * 0.5f,
+            TwinRoundedRect disc = TwinUIFactory.Rounded(host, "TWS_Disc", DiscD * 0.5f,
                 TwinTheme.PanelBottom, TwinTheme.PanelBottom, Color.clear, 0f, false);
             TwinUIFactory.Place(disc.rectTransform, DialCX - DiscD * 0.5f, DialCY - DiscD * 0.5f, DiscD, DiscD);
 
@@ -306,7 +444,7 @@ namespace SchoolTwin.UI
             BuildHourMarks();
 
             // ---- 指针枢轴：零尺寸，Place 的 x/y 即圆心 ----
-            GameObject pv = TwinUIFactory.Node("TWS_Pivot", _card);
+            GameObject pv = TwinUIFactory.Node("TWS_Pivot", host);
             _pivot = (RectTransform)pv.transform;
             TwinUIFactory.Place(_pivot, DialCX, DialCY, 0f, 0f);
 
@@ -322,20 +460,28 @@ namespace SchoolTwin.UI
             TwinUIFactory.Place(dot.rectTransform, -4.5f, -TickR - 4.5f, 9f, 9f);
 
             // ---- 中心时刻 ----
-            _timeText = TwinUIFactory.Label(_card, "TWS_Time", TwinTheme.FsDisplay,
+            _timeText = TwinUIFactory.Label(host, "TWS_Time", TwinTheme.FsDisplay,
                 TextAnchor.MiddleCenter, TwinTheme.TextPrimary);
             TwinUIFactory.Place(_timeText.rectTransform,
                 DialCX - DialD * 0.5f, DialCY - 14f, DialD, 30f);
             _timeText.raycastTarget = false;
         }
 
+        /// <summary>取页面的承载节点；页面尚未建好时退回卡片根（防御性，正常不会发生）。</summary>
+        private RectTransform HostOf(RectTransform page)
+        {
+            return page != null ? page : _card;
+        }
+
         /// <summary>12 根刻度。i=0 在 12 点方向，顺时针每根 +2 小时。</summary>
         private void BuildTicks()
         {
+            RectTransform host = HostOf(_pageClock);
+
             for (int i = 0; i < 12; i++)
             {
                 // 刻度条本身不可见（只有子节点那个点可见），所以用 Node 而不是 Block
-                GameObject barGo = TwinUIFactory.Node("Tick_" + i, _card);
+                GameObject barGo = TwinUIFactory.Node("Tick_" + i, host);
                 RectTransform bar = (RectTransform)barGo.transform;
                 TwinUIFactory.Place(bar, DialCX, DialCY, 1f, TickLen);
 
@@ -372,6 +518,7 @@ namespace SchoolTwin.UI
             // 不会和内盘边界或中心 28 号字（最宽约 70px、即 r≤35）相撞。
             const float R = 65f;
             string[] labels = { "00", "06", "12", "18" };
+            RectTransform host = HostOf(_pageClock);
             for (int i = 0; i < 4; i++)
             {
                 // 角度：0° 在 12 点，顺时针每格 90°
@@ -379,7 +526,7 @@ namespace SchoolTwin.UI
                 float cx = DialCX + (float)(Math.Sin(rad) * R);
                 float cy = DialCY - (float)(Math.Cos(rad) * R);
 
-                Text t = TwinUIFactory.Label(_card, "TWS_Mark" + i, TwinTheme.FsMicro,
+                Text t = TwinUIFactory.Label(host, "TWS_Mark" + i, TwinTheme.FsMicro,
                     TextAnchor.MiddleCenter, TwinTheme.TextMuted);
                 TwinUIFactory.Place(t.rectTransform, cx - 9f, cy - 5.5f, 18f, 11f);
                 t.text = labels[i];
@@ -395,10 +542,11 @@ namespace SchoolTwin.UI
             const float gap = 8f;
 
             _buttons = new TwinButton[WeatherNames.Length];
+            RectTransform host = HostOf(_pageClock);
             for (int i = 0; i < WeatherNames.Length; i++)
             {
                 int idx = i;   // 闭包捕获：不走局部变量会全拿到最后一个
-                TwinButton btn = TwinButton.Create(_card, WeatherNames[i],
+                TwinButton btn = TwinButton.Create(host, WeatherNames[i],
                     TwinButtonStyle.Secondary, w, h, () => OnPickWeather(idx), "TWS_Btn" + i);
                 TwinUIFactory.Place(btn.Rect, 20f + i * (w + gap), y, w, h);
 
@@ -421,11 +569,13 @@ namespace SchoolTwin.UI
         /// </summary>
         private void BuildActionButtons()
         {
-            _resetButton = TwinButton.Create(_card, "重置", TwinButtonStyle.Secondary,
+            RectTransform host = HostOf(_pageClock);
+
+            _resetButton = TwinButton.Create(host, "重置", TwinButtonStyle.Secondary,
                 ActionW, ActionH, OnReset, "TWS_ResetBtn");
             TwinUIFactory.Place(_resetButton.Rect, 20f, ActionY, ActionW, ActionH);
 
-            _confirmButton = TwinButton.Create(_card, "确认", TwinButtonStyle.Primary,
+            _confirmButton = TwinButton.Create(host, "确认", TwinButtonStyle.Primary,
                 ActionW, ActionH, OnConfirm, "TWS_ConfirmBtn");
             TwinUIFactory.Place(_confirmButton.Rect, 20f + ActionW + ActionGap, ActionY, ActionW, ActionH);
 
@@ -463,24 +613,28 @@ namespace SchoolTwin.UI
         }
 
         /// <summary>
-        /// 把待提交的天气真正写进桥。「随机」在这里才摇骰子 ——
-        /// 预览期只记录"用户点了随机"，不提前摇，否则每次刷新都会变一档。
-        /// SetAuto(false) 也从 OnPickWeather 挪到这里：预览不该接管自动轮换。
+        /// 把待提交的天气真正写进桥。
+        ///
+        /// 【P43 修复 11-17 ·「随机」= 恢复自动轮换】主理人诉求"play 后默认处在随机选项，
+        /// 昼夜循环中仿真现实随机天气"。旧实现点「随机」= 摇一次骰子 + SetAuto(false)
+        /// 永久退出自动轮换，此后没有任何 UI 路径能回去 —— 既与"随机"二字矛盾，
+        /// 也杀死了"循环过程中天气自己演变"这条主诉求。新语义：确认「随机」=
+        /// SetAuto(true) 回权重链轮换（SetAuto(true) 会缩短首次轮换计时，确认后很快
+        /// 能看到天气自己变）；确认具体档（晴/雨/雪）才 SetAuto(false) 定格。
+        /// SetAuto 的挪位沿用 P13 裁决：预览不接管自动轮换，写入统一在确认时刻。
         /// </summary>
         private void CommitPendingWeather()
         {
             WeatherDirector dir = WeatherDirector.Instance;
-            if (dir != null && dir.auto) dir.SetAuto(false);
 
             if (_pendingWeatherIndex == RandomIndex)
             {
-                int pick = UnityEngine.Random.Range(0, 7);
-                TwinWeatherBridge.ApplyWeather((WeatherKind)pick);
+                if (dir != null && !dir.auto) dir.SetAuto(true);
+                return;
             }
-            else
-            {
-                TwinWeatherBridge.ApplyWeather(PickWeather[_pendingWeatherIndex]);
-            }
+
+            if (dir != null && dir.auto) dir.SetAuto(false);
+            TwinWeatherBridge.ApplyWeather(PickWeather[_pendingWeatherIndex]);
         }
 
         /// <summary>
@@ -545,9 +699,341 @@ namespace SchoolTwin.UI
             if (_confirmButton != null) _confirmButton.SetInteractable(CanConfirm());
         }
 
+        // =================================================================
+        // 设置页交互
+        // =================================================================
+
+        /// <summary>
+        /// 选周期。**立即写入**，不走"预览 → 确认"。
+        ///
+        /// 【为什么设置不纳入确认流】确认钮的语义是"把时间/天气的预览提交到场景"，
+        /// 而周期与粒子密度改的是**循环器的参数**，不是某个待提交的时刻 ——
+        /// 它们没有"反悔前场景还是原样"这个中间态（周期一改，推进速率立刻不同）。
+        /// 硬塞进确认流会造成语义混乱：用户可以连续点三档观察效果，但只有一个"确认"。
+        /// 所以两钮独立生效，且改周期时 TimeCycleDirector 内部会保持当前时刻连续、不跳变。
+        /// </summary>
+        private void OnPickCycle(int index)
+        {
+            if (index < 0 || index >= CycleValues.Length) return;
+
+            TimeCycleDirector.CycleSeconds = CycleValues[index];
+
+            RefreshSettings();
+        }
+
+        private void OnPickDensity(int index)
+        {
+            if (index < 0 || index >= DensityLabels.Length) return;
+
+            TimeCycleDirector.Density = index == 0 ? TimeCycleDirector.ParticleDensity.Low
+                                   : index == 1 ? TimeCycleDirector.ParticleDensity.Medium
+                                   : TimeCycleDirector.ParticleDensity.High;
+
+            RefreshSettings();
+        }
+
+        /// <summary>刷设置页的选中态与摘要文案。</summary>
+        private void RefreshSettings()
+        {
+            if (_cycleButtons != null)
+            {
+                float cur = TimeCycleDirector.CycleSeconds;
+                int sel = 1;   // 匹配不到时高亮"默认"，与真实默认值一致
+                for (int i = 0; i < CycleValues.Length; i++)
+                {
+                    if (Mathf.Abs(cur - CycleValues[i]) < 1f) { sel = i; break; }
+                }
+                for (int i = 0; i < _cycleButtons.Length; i++)
+                {
+                    if (_cycleButtons[i] != null) _cycleButtons[i].SetSelected(i == sel);
+                }
+            }
+
+            if (_densityButtons != null)
+            {
+                int sel = (int)TimeCycleDirector.Density;
+                for (int i = 0; i < _densityButtons.Length; i++)
+                {
+                    if (_densityButtons[i] != null) _densityButtons[i].SetSelected(i == sel);
+                }
+            }
+
+            if (_settingsSummary != null)
+            {
+                float s = TimeCycleDirector.CycleSeconds;
+                _sb.Length = 0;
+                _sb.Append("当前：一天 ").Append((s / 60f).ToString("0.#")).Append(" 分钟")
+                   .Append("　粒子 ").Append(DensityLabel(TimeCycleDirector.Density));
+                _settingsSummary.text = _sb.ToString();
+            }
+        }
+
+        private static string DensityLabel(TimeCycleDirector.ParticleDensity d)
+        {
+            return d == TimeCycleDirector.ParticleDensity.Low ? "小"
+                 : d == TimeCycleDirector.ParticleDensity.High ? "大"
+                 : "中";
+        }
+
+        // =================================================================
+        // 翻页
+        // =================================================================
+
+        /// <summary>翻到指定页。越界自动夹住。</summary>
+        private void GoPage(int index)
+        {
+            _page = Mathf.Clamp(index, 0, PageCount - 1);
+            _swipeTargetX = PageOffsetOf(_page);
+            RefreshDots();
+        }
+
+        /// <summary>第 index 页对应的 pager 偏移（正值向左推）。</summary>
+        private static float PageOffsetOf(int index)
+        {
+            return index * CardW;
+        }
+
+        internal void BeginSwipe(Vector2 screenPos)
+        {
+            _swiping = true;
+            _swipeStartX = screenPos.x;
+            _swipeStartPagerX = _pagerX;
+            _swipeTargetX = _pagerX;   // 拖动期间不额外缓动
+        }
+
+        internal void UpdateSwipe(Vector2 screenPos)
+        {
+            // 屏幕像素位移 → 画布单位位移。除以 scaleFactor，否则高 DPI 下拖一点就翻页。
+            float scale = 1f;
+            Canvas c = GetComponentInParent<Canvas>();
+            if (c != null && c.scaleFactor > 0.01f) scale = c.scaleFactor;
+
+            float dx = (screenPos.x - _swipeStartX) / scale;
+
+            // 边界阻尼：第一页往右拖、最后一页往左拖时只给 35% 位移，制造"到头了"的手感
+            float raw = _swipeStartPagerX - dx;
+            float min = 0f;
+            float max = PageOffsetOf(PageCount - 1);
+            if (raw < min) raw = min + (raw - min) * 0.35f;
+            else if (raw > max) raw = max + (raw - max) * 0.35f;
+
+            _pagerX = raw;
+            ApplyPagerPosition();
+        }
+
+        internal void EndSwipe(Vector2 screenPos)
+        {
+            _swiping = false;
+
+            // 【方向必须按 _pagerX 的符号判，不能按屏幕位移判】
+            // _pagerX 是"把 pager 往左推多少"，所以：
+            //   · 手指向左拖（看下一页）→ _pagerX 增大 → moved > 0 → 应 go +1
+            //   · 手指向右拖（回上一页）→ _pagerX 减小 → moved < 0 → 应 go −1
+            // 第一版按屏幕位移 dx 的符号写（dx<0 时 go+1），与实际 _pagerX 同号，
+            // 结果永远判成"弹回原页" —— 实测拖 300px 松手仍停在第 0 页。
+            float moved = _pagerX - PageOffsetOf(_page);
+            float threshold = CardW * SwipeCommitRatio;
+
+            if (moved > threshold) GoPage(_page + 1);
+            else if (moved < -threshold) GoPage(_page - 1);
+            else GoPage(_page);        // 没到阈值：弹回原页
+        }
+
+        private void ApplyPagerPosition()
+        {
+            if (_pager == null) return;
+            Vector2 p = _pager.anchoredPosition;
+            p.x = -_pagerX;
+            _pager.anchoredPosition = p;
+        }
+
+        private void RefreshDots()
+        {
+            if (_dots == null) return;
+
+            for (int i = 0; i < _dots.Length; i++)
+            {
+                if (_dots[i] == null) continue;
+
+                // 当前页：亮一档、大一圈（参考设计的"实心亮点 = 当前页"）。
+                // 位置由 BuildDots 建好的槽位固定，这里只改颜色与自身尺寸 + 半径，
+                // 不重排槽位 —— 否则当前页变大时会与相邻圆点视觉偏心。
+                bool on = i == _page;
+
+                // 【必须用 SetFill，不能赋 Graphic.color —— 这里踩过一次】
+                // TwinRoundedRect 的 Awake() 把 color 钉成 Color.white（顶点色由它自己写），
+                // OnPopulateMesh 读的是 _fillTop/_fillBottom 两个序列化字段，**从不读 color**。
+                // 所以 `_dots[i].color = Accent` 是彻底无效的：截图里两个点一样灰，
+                // 只有 sizeDelta（大小）生效了，颜色没变 —— 表现就是"当前页没有高亮"。
+                //
+                // 未选中用 TextSecondary@0.55 而不是 TextMuted 全亮：
+                // 全亮的灰点会和 Accent 抢眼，看不出"当前是哪一个"。压到半透明后，
+                // 亮青 vs 暗灰的对比是"一眼可辨"，与参考图的暗点语义一致。
+                Color fill = on ? TwinTheme.Accent : TwinTheme.WithAlpha(TwinTheme.TextSecondary, 0.55f);
+                _dots[i].SetFill(fill, fill);
+
+                // 尺寸差再拉开一点：选中 12 / 未选中 9（差 3）。
+                // 原来 12 vs 10 只差 2，颜色修好之后仍觉得"两个点差不多大"。
+                // 12 的选中点在 1000×720 投影下约 9px，够醒目又不至于变成"胶囊"。
+                float d = on ? DotD + 2f : DotD - 1f;
+                RectTransform rt = _dots[i].rectTransform;
+                TwinUIFactory.Place(rt, (20f - d) * 0.5f, (20f - d) * 0.5f, d, d);
+                _dots[i].SetRadius(d * 0.5f);
+            }
+        }
+
+        /// <summary>
+        /// 底部页码圆点。当前页更大更亮（参考设计：实心亮点 = 当前，暗点 = 其他）。
+        ///
+        /// 【为什么用 TwinRoundedRect 而不是 Image】圆点必须是正圆，
+        /// Image 无 Sprite 时画的是方块，要靠圆角把它磨圆 —— 与表盘同一套零纹理做法。
+        /// </summary>
+        private void BuildDots()
+        {
+            _dots = new TwinRoundedRect[PageCount];
+
+            // 每个圆点套一个 20×20 的透明点击区：
+            // 圆点本身只有 8，直接点 8px 的目标在投影仪上几乎点不中；
+            // 但视觉上又不能把圆点画大到 20 —— 所以"看得见 8、点得中 20"。
+            for (int i = 0; i < PageCount; i++)
+            {
+                int idx = i;
+
+                Image hit = TwinUIFactory.Block(_card, "TWS_DotHit" + i, new Color(0f, 0f, 0f, 0f), true);
+                RectTransform hitRt = hit.rectTransform;
+                PlaceDotSlot(hitRt, i, 20f, 20f);
+
+                Button b = hit.gameObject.AddComponent<Button>();
+                b.targetGraphic = hit;
+                b.transition = Selectable.Transition.None;
+                b.onClick.AddListener(() => GoPage(idx));
+
+                TwinRoundedRect d = TwinUIFactory.Rounded(hitRt, "TWS_Dot" + i, DotD * 0.5f,
+                    TwinTheme.TextSecondary, TwinTheme.TextSecondary, Color.clear, 0f, false);
+                // 圆点在 20×20 点击区里居中（点击区 pivot 左上，故偏移 (20−8)/2 = 6）
+                TwinUIFactory.Place(d.rectTransform, (20f - DotD) * 0.5f, (20f - DotD) * 0.5f, DotD, DotD);
+
+                _dots[i] = d;
+            }
+        }
+
+        /// <summary>把第 i 个"圆点槽"摆到卡片底部居中位置。<paramref name="size"/> 是槽边长（含点击余量）。</summary>
+        private static void PlaceDotSlot(RectTransform rt, int i, float size, float size2)
+        {
+            float pitch = DotD + DotGap;
+            float totalW = PageCount * DotD + (PageCount - 1) * DotGap;
+            float x0 = (CardW - totalW) * 0.5f;
+
+            // 槽位中心要落在第 i 个圆点的中心：
+            // 圆点中心 = x0 + DotD/2 + i*pitch，槽左上角 = 中心 − size/2
+            float cx = x0 + DotD * 0.5f + i * pitch;
+            TwinUIFactory.Place(rt, cx - size * 0.5f, DotY + DotD * 0.5f - size * 0.5f, size, size2);
+        }
+
+        // =================================================================
+        // 第 1 页：设置
+        // =================================================================
+
+        /// <summary>
+        /// 设置页：昼夜循环周期 + 雨雪粒子密度。
+        ///
+        /// ── 为什么放在"第二页"而不是再加一个设置按钮（2026-11-16 主理人裁决）──
+        /// 主理人给了一张参考图：内容分成若干页、底部用小圆点标识当前页，左右滑动切换。
+        /// 明确要求「取消增加设置按钮容纳，采用新增状态页滑动式的」。
+        /// 所以本页不设独立入口，翻页即达；页头（标题/×）两页共用，不重复建。
+        ///
+        /// ── 为什么每档都是"三个互斥按钮"而不是加减器或滑块 ──
+        /// 全项目零图片资源、无 TMP，滑块要自绘轨道与把手且要做拖动换算；
+        /// 而周期只有 3 个有意义的档（演示 / 默认 / 慢速观察），粒子只有小中大 3 档，
+        /// 用 TwinButton 的 SetSelected 就能表达"当前选中"，与天气四钮的交互语言**完全一致**。
+        /// 多一档就多一个常驻控件，反而更难读。
+        ///
+        /// ── 竖向节距为什么是 74 ──
+        /// 内容区 56~408 共 352，两组（标题 20 + 说明 14 + 按钮 38 + 间隙）各占一段，
+        /// 剩下一段放摘要与提示。第一版按 58/100/158/200 排完只用到 294，
+        /// 底部空了 114 —— 截图里能明显看出"上重下轻"。现在把节距拉到 74 铺满。
+        /// </summary>
+        private void BuildPageSettings()
+        {
+            RectTransform host = HostOf(_pageSettings);
+
+            // ---- 分节标题：昼夜循环 ----
+            Text secA = TwinUIFactory.Label(host, "TWS_SetSecCycle", TwinTheme.FsBodyStrong,
+                TextAnchor.MiddleLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(secA.rectTransform, 20f, 58f, 440f, 20f);
+            secA.text = "昼夜循环";
+            secA.raycastTarget = false;
+
+            Text descA = TwinUIFactory.Label(host, "TWS_SetDescCycle", TwinTheme.FsMicro,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(descA.rectTransform, 20f, 80f, 440f, 14f);
+            descA.text = "现实多久走完游戏一整天 · 改完立即生效，当前时刻不跳变";
+            descA.raycastTarget = false;
+
+            // ---- 周期三档 ----
+            _cycleButtons = new TwinButton[CycleLabels.Length];
+            const float realBw = 142f;  // 142×3 + 6×2 = 438，左右各留 21，与天气四钮视觉一致
+            const float bh = 38f;
+            const float bgap = 6f;
+            for (int i = 0; i < CycleLabels.Length; i++)
+            {
+                int idx = i;
+                TwinButton btn = TwinButton.Create(host, CycleLabels[i], TwinButtonStyle.Secondary,
+                    realBw, bh, () => OnPickCycle(idx), "TWS_Cycle" + i);
+                TwinUIFactory.Place(btn.Rect, 20f + i * (realBw + bgap), 102f, realBw, bh);
+
+                Text lbl = btn.GetComponentInChildren<Text>(true);
+                if (lbl != null) lbl.fontSize = TwinTheme.FsBody;
+                _cycleButtons[i] = btn;
+            }
+
+            // ---- 分节标题：雨雪粒子 ----
+            Text secB = TwinUIFactory.Label(host, "TWS_SetSecDensity", TwinTheme.FsBodyStrong,
+                TextAnchor.MiddleLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(secB.rectTransform, 20f, 176f, 440f, 20f);
+            secB.text = "雨雪粒子";
+            secB.raycastTarget = false;
+
+            Text descB = TwinUIFactory.Label(host, "TWS_SetDescDensity", TwinTheme.FsMicro,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(descB.rectTransform, 20f, 198f, 440f, 14f);
+            descB.text = "粒子数量倍率 · 投影仪吃不消时调小，答辩演示时调大";
+            descB.raycastTarget = false;
+
+            // ---- 密度三档 ----
+            _densityButtons = new TwinButton[DensityLabels.Length];
+            for (int i = 0; i < DensityLabels.Length; i++)
+            {
+                int idx = i;
+                TwinButton btn = TwinButton.Create(host, DensityLabels[i], TwinButtonStyle.Secondary,
+                    realBw, bh, () => OnPickDensity(idx), "TWS_Density" + i);
+                TwinUIFactory.Place(btn.Rect, 20f + i * (realBw + bgap), 220f, realBw, bh);
+
+                Text lbl = btn.GetComponentInChildren<Text>(true);
+                if (lbl != null) lbl.fontSize = TwinTheme.FsBody;
+                _densityButtons[i] = btn;
+            }
+
+            // ---- 当前生效值说明 ----
+            _settingsSummary = TwinUIFactory.Label(host, "TWS_SetSummary", TwinTheme.FsCaption,
+                TextAnchor.MiddleLeft, TwinTheme.TextSecondary);
+            TwinUIFactory.Place(_settingsSummary.rectTransform, 20f, 284f, 440f, 16f);
+            _settingsSummary.raycastTarget = false;
+
+            // ---- 分页提示（把"可以滑回去"这件事说清楚）----
+            Text tip = TwinUIFactory.Label(host, "TWS_SetTip", TwinTheme.FsMicro,
+                TextAnchor.MiddleLeft, TwinTheme.TextMuted);
+            TwinUIFactory.Place(tip.rectTransform, 20f, 314f, 440f, 14f);
+            tip.text = "左右滑动切换页面 · 或点下方圆点";
+            tip.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// 底行状态：`当前：白天 · 晴　　室温 20.1°C`（图纸 §2.4）。
+        /// </summary>
         private void BuildStatus()
         {
-            _statusText = TwinUIFactory.Label(_card, "TWS_Status", TwinTheme.FsCaption,
+            _statusText = TwinUIFactory.Label(HostOf(_pageClock), "TWS_Status", TwinTheme.FsCaption,
                 TextAnchor.MiddleCenter, TwinTheme.TextMuted);
             TwinUIFactory.Place(_statusText.rectTransform, 20f, 320f, 440f, 16f);
             _statusText.raycastTarget = false;
@@ -559,7 +1045,7 @@ namespace SchoolTwin.UI
         /// </summary>
         private void BuildHitArea()
         {
-            Image hit = TwinUIFactory.Block(_card, "TWS_Hit", new Color(0f, 0f, 0f, 0f), true);
+            Image hit = TwinUIFactory.Block(HostOf(_pageClock), "TWS_Hit", new Color(0f, 0f, 0f, 0f), true);
             TwinUIFactory.Place(hit.rectTransform, DialCX - DialD * 0.5f, DialCY - DialD * 0.5f, DialD, DialD);
 
             TwinDialDragArea drag = hit.gameObject.AddComponent<TwinDialDragArea>();
@@ -662,6 +1148,9 @@ namespace SchoolTwin.UI
             RefreshButtons();
             RefreshStatus();
             RefreshActions();
+            RefreshSettings();
+            RefreshDots();
+            ApplyPagerPosition();
         }
 
         private void RefreshDial()
@@ -694,6 +1183,15 @@ namespace SchoolTwin.UI
             // 让用户看得见"我选了什么还没提交"。确认/重置后回到已提交档。
             int sel = -1;
             if (_pendingWeatherIndex == RandomIndex) sel = RandomIndex;
+            else if (_pendingWeatherIndex < 0
+                     && WeatherDirector.Instance != null && WeatherDirector.Instance.auto)
+            {
+                // 【P43 修复 11-17】无预览且系统处于自动轮换 → 高亮「随机」。
+                // 旧实现高亮当前天气档（如刚 play 时的「晴天」），但天气此刻正由权重链
+                // 自己演变，高亮具体档会误导用户以为天气被钉死 —— 与"play 后默认处在
+                // 随机选项"的诉求相反。模式语义优先于当前档。
+                sel = RandomIndex;
+            }
             else
             {
                 WeatherKind? cur = DisplayWeather();
@@ -783,6 +1281,30 @@ namespace SchoolTwin.UI
         private void Update()
         {
             // ══════════════════════════════════════════════════════════════
+            // 【P43-UI】分页缓动：松手后把 pager 滑到整页位置。
+            //
+            // 【为什么放在 Update 最前面、且在 Esc / 拖动早退之前】
+            // 缓动是"视觉收尾"，任何状态下都该继续跑完；
+            // 若排在 `if (_pendingHour) return;` 之后，拖过表盘再翻页会卡在中途不归位。
+            // 用非指数缓动（每帧逼近 22%）而不是固定时长插值：
+            // 少一个计时器状态，且帧率波动时观感一致。
+            // ══════════════════════════════════════════════════════════════
+            if (!_swiping && _pager != null)
+            {
+                float diff = _swipeTargetX - _pagerX;
+                if (Mathf.Abs(diff) > 0.25f)
+                {
+                    _pagerX += diff * 0.22f;
+                    ApplyPagerPosition();
+                }
+                else if (Mathf.Abs(diff) > 0f)
+                {
+                    _pagerX = _swipeTargetX;
+                    ApplyPagerPosition();
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
             // 【P13-A】Esc 关闭（图纸 §4：Esc / 点遮罩 / 点 × 三处等价）
             //
             // 为什么放在 Update 而不是给某个对象挂 EventTrigger：
@@ -798,6 +1320,10 @@ namespace SchoolTwin.UI
                 Close();      // Close 内部负责回调 + 销毁（2026-11-13 起不再恢复真实时钟，设定时刻保持生效）
                 return;
             }
+
+            // 设置页可见时无需刷表盘/状态（它们在第 0 页，改了也看不见），
+            // 但也不能 return —— 上面的缓动要跑完。这里只是跳过下面的刷新。
+            if (_page != 0) return;
 
             // 拖动中由 OnDrag 驱动刷新；不拖动时若真实时钟在走（或外部改了时刻），
             // 让表盘跟上。这是"打开面板后时钟仍在走"的唯一来源 ——

@@ -1,18 +1,18 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-10 18:04:14**
+> 生成时间：**2026-11-17 00:12:40**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**有未提交代码**（8 个文件），但最近 45 分钟内没人动过 —— 可能刚停下、也可能忘了提交。
+**断点正在施工**：最后改动 `TwinTimeWeatherCard.cs`（11 分钟前）。未提交代码文件 **7** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
-共 **374** 条判据：**374 通过** / 0 未过 / 0 无法判定。
+共 **382** 条判据：**382 通过** / 0 未过 / 0 无法判定。
 
 > 判据来自 `Tools/status_checks.txt`，全部是 `grep` / 文件存在性这类**机器可验证**的东西。
 > 没有「完成 80%」这种只能人填的数 —— 那种数一定滞后、一定美化。
@@ -393,6 +393,14 @@
 | `D13-10` | 【只读纪律】审计工具不得保存场景（工具定位是只读普查，写场景 = 越界改资产；grep0 型护栏，重写前后都该守） | ✅ 通过 | 0 处 ✔ |
 | `D14-01` | 【验证期护栏】三块吊顶路径必须同时在场（打光临时注释做对比后必须还原；少一条即说明未还原） | ✅ 通过 | 3 处（需 =3） |
 | `D14-02` | 【不许连带改】D14 验证期间不得动 RenderSettings（打光 10-30 已实测 RenderSettings 三项全部无效，重改即白烧一轮） | ✅ 通过 | 0 处 ✔ |
+| `P43-01` | 【修复1】WeatherVisuals 必须有密度源头乘算入口 SetDensityScale（TimeCycleDirector 唯一调用入口） | ✅ 通过 | 1 处（需 =1） |
+| `P43-02` | 【修复1】三路速率写入（雨/雪/水花）都必须乘 _densityScale（少一路即该类粒子不受密度控制） | ✅ 通过 | 3 处（需 =3） |
+| `P43-03` | 【修复1·防回潮】TimeCycleDirector 禁止再用子级遍历设密度（模式带 < 泛型限定，避免误命中注释里的事故描述文字） | ✅ 通过 | 0 处 ✔ |
+| `P43-04` | 【修复1】密度写入必须走 WeatherVisuals.SetDensityScale（第一版的 rateOverTimeMultiplier 方案已废弃，不许复活） | ✅ 通过 | 1 处（需 =1） |
+| `P43-05` | 【修复2】「随机」确认 = 恢复自动轮换 SetAuto(true)（主理人诉求"默认处在随机选项"的 UI 回路） | ✅ 通过 | 1 处（需 =1） |
+| `P43-06` | 【修复2·防回潮】「随机」不许再摇骰子（旧 Random.Range(0,7) 一次性掷骰已删） | ✅ 通过 | 0 处 ✔ |
+| `P43-07` | 【修复3】无预览且自动轮换时高亮「随机」（模式语义优先于当前天气档，不再误导"晴天被钉死"） | ✅ 通过 | 1 处（需 =1） |
+| `P43-08` | 【修复4】冻结/恢复/起始三处基准同源（都取 NormalizeHour(TwinClimate.HourOfDay)；Pause 曾独用墙钟致每次开合面板丢一帧游戏时间） | ✅ 通过 | 3 处（需 =3） |
 
 > ✅ **全部判据通过。** 可以进入验收（但不能替代 play 视觉验收）。
 
@@ -402,254 +410,64 @@
 
 | 项 | 时间 |
 |---|---|
-| 最后一个 .cs 改动 | 11-10 10:15:59（`TwinStatusColor.cs`） |
-| dll 编译时间 | 11-10 10:18:56 |
+| 最后一个 .cs 改动 | 11-17 00:01:24（`TwinTimeWeatherCard.cs`） |
+| dll 编译时间 | 11-17 00:01:50 |
 
-> ✅ **已生效**，编译晚于最后改动 177 秒。可以 play 验收。
+> ✅ **已生效**，编译晚于最后改动 25 秒。可以 play 验收。
 
 ## 2. 未提交改动（= 有丢失风险的工作）
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **226** 个文件未提交（代码 8 / 文档与其他 201）。
+共 **36** 个文件未提交（代码 7 / 文档与其他 27）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay/Lightmap-11_comp_light.exr` | 17 小时前 |
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay/Lightmap-12_comp_light.exr` | 17 小时前 |
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay/Lightmap-3_comp_light.exr` | 17 小时前 |
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay/Lightmap-8_comp_light.exr` | 17 小时前 |
-| 其他 | `Assets/TirGames/SchoolScene/Scenes/SchoolSceneDay/Lightmap-9_comp_light.exr` | 17 小时前 |
-| 代码 | `Assets/_Project/Scripts/Twin/TwinCircuit.cs` | 7 小时前 |
-| 代码 | `Assets/_Project/Scripts/Twin/TwinStatusColor.cs` | 7 小时前 |
-| 文档 | `Docs/P00_项目总览_交接基线.md` | 8 小时前 |
-| 文档 | `Docs/STATUS.md` | 7 小时前 |
-| 其他 | `ProjectSettings/ProjectSettings.asset` | 20 小时前 |
-| 代码 | `Assets/_Project/Editor/D13CorridorFillLight.cs` | 16 小时前 |
-| 其他 | `Assets/_Project/Editor/D13CorridorFillLight.cs.meta` | 16 小时前 |
-| 代码 | `Assets/_Project/Editor/D13ModeDiff.cs` | 18 小时前 |
-| 其他 | `Assets/_Project/Editor/D13ModeDiff.cs.meta` | 18 小时前 |
-| 代码 | `Assets/_Project/Editor/D13UvBlockFix.cs` | 17 小时前 |
-| 其他 | `Assets/_Project/Editor/D13UvBlockFix.cs.meta` | 20 小时前 |
-| 文档 | `Docs/D13_毕设期修复路线_打光方案.md` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_backup_lightmaps` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g0_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g0_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g1_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g1_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g2_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g2_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g3_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_g3_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_before_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_dir_cmp_1F_vs_2F.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_base_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_base_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_base_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_base_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_base_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_log_scene_011243.txt` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_log_scene_085508.txt` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mask_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mask_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mask_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mask_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mask_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i2_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i2_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i2_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i2_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i2_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i8_rad_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i8_rad_north_a.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i8_rad_north_b.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i8_win_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixed1_i8_win_north.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i0p8_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i0p8_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i0p8_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i0p8_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i0p8_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p2_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p2_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p2_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p2_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p2_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p6_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p6_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p6_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p6_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i1p6_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2_rad_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2_rad_north_a.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2_rad_north_b.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2_win_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2_win_north.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2p0_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2p0_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2p0_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2p0_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i2p0_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i3p5_rad_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i3p5_rad_north_a.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i3p5_rad_north_b.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i3p5_win_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i3p5_win_north.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i5_rad_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i5_rad_north_a.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i5_rad_north_b.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i5_win_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_mixedAll_i5_win_north.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i2_rad_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i2_rad_north_a.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i2_rad_north_b.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i2_win_east.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i2_win_north.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i8_rad_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i8_rad_north_a.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i8_rad_north_b.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i8_win_east.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_real1_i8_win_north.png` | 16 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fill_stats.txt` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.35_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.50_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.70_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r0.90_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.10_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_fix_r1.40_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_RAD_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_WIN_rad_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_WIN_rad_north_a.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_WIN_rad_north_b.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_WIN_win_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_iso_WIN_win_north.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm11.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm12.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm13.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm15.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm3.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm7.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm8.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskviz_lm9.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskwhite_rad_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskwhite_rad_north_a.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskwhite_rad_north_b.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskwhite_win_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_maskwhite_win_north.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_modediff_scene_233933.txt` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_persisted_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_persisted_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_persisted_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_persisted_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_persisted_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_probe.txt` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_ref_2F_highlight_user.jpg` | 8 小时前 |
-| 其他 | `Docs/QA/evidence/D13_renderer_dump.tsv` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g0_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g0_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g1_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g1_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g2_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g2_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g3_nz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_g3_pz.png` | 20 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_restore_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_rad_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_rad_north_a.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_rad_north_b.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_ref2f_east.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_ref2f_north.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_ref2f_north2.png` | 18 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_win_east.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_roundtrip_win_north.png` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/D13_white_rad_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_white_rad_north_a.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_white_rad_north_b.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_white_win_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_white_win_north.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_whiteiso_WIN_rad_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_whiteiso_WIN_rad_north_a.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_whiteiso_WIN_rad_north_b.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_whiteiso_WIN_win_east.png` | 19 小时前 |
-| 其他 | `Docs/QA/evidence/D13_whiteiso_WIN_win_north.png` | 19 小时前 |
-| 文档 | `Docs/QA/evidence/D13_无金属光泽_根因判定.md` | 17 小时前 |
-| 其他 | `Docs/QA/evidence/cmp_base.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/cmp_i08.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/cmp_i12.png` | 9 小时前 |
-| 其他 | `Docs/QA/evidence/cmp_i20.png` | 9 小时前 |
-| 其他 | `_diag` | 17 小时前 |
+| 代码 | `Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs` | 11 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs` | 3 小时前 |
+| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 13 分钟前 |
+| 文档 | `Docs/STATUS.md` | 16 分钟前 |
+| 其他 | `tools/status_checks.txt` | 0 秒前 |
+| 代码 | `Assets/_Project/Scripts/UI/TwinPageSwipe.cs` | 2 小时前 |
+| 其他 | `Assets/_Project/Scripts/UI/TwinPageSwipe.cs.meta` | 2 小时前 |
+| 代码 | `Assets/_Project/Scripts/Weather/TimeCycleDirector.cs` | 12 分钟前 |
+| 其他 | `Assets/_Project/Scripts/Weather/TimeCycleDirector.cs.meta` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 51 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 51 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 51 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P43_auto` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P43_verify_card_ui.png` | 30 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_verify_settings_page.png` | 28 分钟前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `TwinStatusColor.cs` | 7 小时前 | 歇着 |
-| 见微 | `10_时间天气面板_设计试绘_夜晚雪天.png` | 6 天前 | 歇着 |
-| 心跳 | `P3_时序历史层_调研报告_断点.md` | 10 天前 | 歇着 |
-| 挑刺 | `cmp_i20.png` | 9 小时前 | 歇着 |
+| 断点 | `TwinTimeWeatherCard.cs` | 11 分钟前 | 🔥 正在干 |
+| 见微 | `10_时间天气面板_设计试绘_夜晚雪天.png` | 12 天前 | 歇着 |
+| 心跳 | `P3_时序历史层_调研报告_断点.md` | 16 天前 | 歇着 |
+| 挑刺 | `auto_2_f55.png` | 4 分钟前 | 🔥 正在干 |
 | 落笔 | — | — | 无记录 |
 
 ## 4. 今日提交
@@ -662,45 +480,44 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `STATUS.md` | 708 | 7 小时前 | ✅ 新鲜 |
-| `P00_项目总览_交接基线.md` | 1216 | 8 小时前 | ✅ 新鲜 |
-| `D13_毕设期修复路线_打光方案.md` | 135 | 20 小时前 | ✅ 新鲜 |
-| `P32_断点V1交接陈述.md` | 557 | 1 天前 | ⚠️ 超 24h |
-| `发黑问题修复经验总纲.md` | 329 | 1 天前 | ⚠️ 超 24h |
-| `P31_打包交付_汇报.md` | 148 | 4 天前 | ❌ 超 72h |
-| `P14_空调反馈_成果报告.md` | 395 | 4 天前 | ❌ 超 72h |
-| `P14_空调反馈_踩坑日志.md` | 813 | 4 天前 | ❌ 超 72h |
-| `P13_踩坑日志_屋顶雪壳事故.md` | 313 | 4 天前 | ❌ 超 72h |
-| `P28_脚印系统_踩坑日志.md` | 240 | 4 天前 | ❌ 超 72h |
-| `机房交互_踩坑日志.md` | 479 | 4 天前 | ❌ 超 72h |
-| `P26_视频播放器泄漏_踩坑日志.md` | 524 | 4 天前 | ❌ 超 72h |
-| `P13_时间天气融合_断点.md` | 970 | 5 天前 | ❌ 超 72h |
-| `打包执行清单.md` | 213 | 5 天前 | ❌ 超 72h |
-| `队员成果三档评估_定盘.md` | 63 | 5 天前 | ❌ 超 72h |
-| `团队分工与答辩口径.md` | 128 | 5 天前 | ❌ 超 72h |
-| `分工板块与实习报告素材.md` | 196 | 5 天前 | ❌ 超 72h |
-| `P13_踩坑日志_白线.md` | 436 | 5 天前 | ❌ 超 72h |
-| `李文玉-公共厕所-README.md` | 589 | 6 天前 | ❌ 超 72h |
-| `杨续-和本项目一个场景（天气系统建设参与者）README.md` | 832 | 6 天前 | ❌ 超 72h |
-| `王雯信-教室-README.md` | 463 | 6 天前 | ❌ 超 72h |
-| `张峻才-教室场景-README.md` | 815 | 6 天前 | ❌ 超 72h |
-| `赵朕-超市场景-README.md` | 546 | 6 天前 | ❌ 超 72h |
-| `王绍锋-教室-README.md` | 536 | 6 天前 | ❌ 超 72h |
+| `STATUS.md` | 517 | 16 分钟前 | ✅ 新鲜 |
+| `P43_昼夜循环_调研_断点.md` | 195 | 4 小时前 | ✅ 新鲜 |
+| `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 4 小时前 | ✅ 新鲜 |
+| `P42_室内补光_调光方法论_打光.md` | 525 | 4 小时前 | ✅ 新鲜 |
+| `P39_灯光视角突变与过曝_方案.md` | 220 | 1 天前 | ⚠️ 超 24h |
+| `P39_灯光视角突变与过曝_断点.md` | 84 | 1 天前 | ⚠️ 超 24h |
+| `P36_阶段2_实现记录_打光.md` | 731 | 3 天前 | ❌ 超 72h |
+| `P36_交接_外包_天花板过曝.md` | 375 | 3 天前 | ❌ 超 72h |
+| `P36_阶段1_失败诊断_打光.md` | 139 | 3 天前 | ❌ 超 72h |
+| `P36_灯管开关态调研_打光.md` | 234 | 3 天前 | ❌ 超 72h |
+| `P35_室内补光_方案与标定_打光.md` | 551 | 3 天前 | ❌ 超 72h |
+| `P35_v11_派单Prompt_F2修正与一层机位.md` | 32 | 3 天前 | ❌ 超 72h |
+| `P35_v10_验收回传反馈_打光.md` | 114 | 3 天前 | ❌ 超 72h |
+| `P35_v9_验收回传反馈_打光.md` | 47 | 3 天前 | ❌ 超 72h |
+| `P35_v8_验收回传反馈_打光.md` | 58 | 3 天前 | ❌ 超 72h |
+| `P35_v7_验收回传反馈_打光.md` | 58 | 3 天前 | ❌ 超 72h |
+| `P35_v6_验收回传反馈_打光.md` | 47 | 3 天前 | ❌ 超 72h |
+| `P35_v5_验收回传反馈_打光.md` | 48 | 3 天前 | ❌ 超 72h |
+| `D13重打包_交付与验收清单.md` | 184 | 4 天前 | ❌ 超 72h |
+| `P00_项目总览_交接基线.md` | 1235 | 4 天前 | ❌ 超 72h |
+| `D13_毕设期修复路线_打光方案.md` | 135 | 7 天前 | ❌ 超 72h |
+| `P32_断点V1交接陈述.md` | 557 | 7 天前 | ❌ 超 72h |
+| `发黑问题修复经验总纲.md` | 329 | 7 天前 | ❌ 超 72h |
 
 ## 6. 最近 10 次提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
-| 11-09 21:05 | `218b918` | chore(checks): 补提交判据库 D13-07/08/09/11 启用（裁决 C-88，随 v1.48） |
-| 11-09 21:04 | `078c9bd` | docs(baseline): v1.48 —— 断点V2验收两栏判定 + 裁决C-83~C-90 + 判据370→374 |
-| 11-09 21:04 | `f017c7a` | feat(D13): 审计工具重写 v3（断点 V2 交付，406→1080 行）+ 首份可信度分级清单 |
-| 11-09 18:29 | `53fcb5e` | docs(baseline): v1.47 —— git 提交失职问责 + 10 笔补推 + 新增纪律 E4 + C-76 顺序纠正 |
-| 11-09 18:24 | `143fcd6` | chore(status): 刷新进度看板（370 判据全绿 + 反映本轮 D13 工具重写进行中） |
-| 11-09 18:23 | `cc016e8` | docs(defense): 同步实习报告 6 份与答辩 PPT v2（11-05~11-06 定稿版） |
-| 11-09 18:23 | `4262bf8` | docs(defense): 补录 PPT 运行截图素材 12 张（PPT v2 已定稿依赖，此前未入库） |
-| 11-09 18:22 | `9ca87de` | fix(meta): 补录 P31Packaging.cs.meta（.cs 已跟踪但 meta 漏提交） |
-| 11-09 18:22 | `c79da56` | docs(P13): 补录 §十三 11-05 三 bug 一轮（Bug1 室内雨雪 / Bug2 观景水坑 / Bug3 屋顶雪壳） |
-| 11-09 18:21 | `8e4d9b2` | docs(P32): 重命名 P32_断点交接陈述.md → P32_断点V1交接陈述.md |
+| 11-16 20:31 | `d7e5ee4` | docs(P43): 昼夜循环调研阶段交付 —— 断点 8章19条带来源，零实现代码 |
+| 11-16 19:49 | `8c334c8` | docs(P42): 补录调光方法论 + 踩坑日志配套引用（打光补充） |
+| 11-16 19:38 | `e780edd` | fix(P39+P42): 室内灯光专项收工 —— 洗顶灯体系 + 餐厅梁柱死黑消除（主理人+老师验收通过） |
+| 11-14 09:48 | `0c6ed00` | chore(P37/P38): 结项入库 —— MCP 工具链 + RoomShellLayer(默认关闭) + 取证截图 74 张 |
+| 11-14 04:21 | `d6fe7a7` | feat(P37): 夜晚室内底光层验收通过 —— 全楼统一配方+二值开关+地板反射柔化+诊断面板默认关闭 |
+| 11-14 00:54 | `a00cf88` | fix(P36): 天花板过曝结案 —— 补光点 Point→Spot 朝下(150°) + 灯管 HDR emission + Bloom 运行时接管 |
+| 11-13 15:37 | `c0a4796` | feat(P35): 室内补光层 v4（灯位补光+glow接管+应急底光）+ 方案标定文档 + pixelLightCount 12→20 |
+| 11-12 17:35 | `db4add8` | build(D13): 发黑修复后首次重打包成功 —— 新 exe 已产出，F22 无回归 |
+| 11-12 16:56 | `6dd16d3` | fix(D15): 暖气断电染色豁免落地 + 工作区大清理 + D15 定性更正（断点 11-10 汇报延迟裁决） |
+| 11-12 16:06 | `27d4f73` | fix(D13): 白天+夜晚场景材质发黑结案 —— 弃用 2017 坏烘焙数据（打光，主理人 play 两轮确认） |
 
 ---
 
