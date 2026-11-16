@@ -768,4 +768,12 @@ P43-11 | 【防回潮】撒播高度必须保留相机自适应抬升（固定�
 P43-12 | 【v2 核心】雪壳列顶判据存在（colTop 逐列最高朝上面；世界绝对高度/纯相对高度均已被证伪） | grep+:2:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:colTop
 P43-13 | 【烘焙链路】编辑器烘焙工具必须存在（静态批处理使建筑运行时网格不可读，仅靠运行时扫描楼顶永远缺失） | has:Assets/_Project/Editor/RoofSnowBakeTool.cs
 P43-14 | 【烘焙链路】烘焙产物必须存在（SnowOnRoofs 路径 A 首选资源；缺失则自动退化为只扫未合批网格） | has:Assets/_Project/Weather/RoofSnow/Resources/RoofSnowBake.prefab
-P43-15 | 【树冠覆盖】树冠雪帽构建存在（地形树材质是共享资产不许改 _Color，帽是独立几何零污染） | grep:1:Assets/_Project/Scripts/Weather/SnowOnTrees.cs:TreeSnowCapsGO
+P43-15→v2（11-17 主理人反馈半球帽太假）| 【树冠覆盖】贴体雪层构建存在（调研后弃用均匀帽：原型叶面朝上三角+法线外扩+面积稀疏化保簇状露底，独立几何零材质污染） | grep:1:Assets/_Project/Scripts/Weather/SnowOnTrees.cs:TreeSnowFoliageGO
+
+# --- 七、P43 雪斑 v3 + 雨天湿楼顶（2026-11-17 二轮反馈，调研后实施）---
+# 背景：半球帽太假（主理人评）、贴体雪层被大叶卡证伪（巨片白板穿树冠）→ 调研后改叶卡表面撒雪斑。
+P43-16 | 【v3 雪斑】叶卡表面撒片逻辑存在（EmitCardPatches：细分采样+Perlin 簇状保留+径向渐隐贴片） | grep:3:Assets/_Project/Scripts/Weather/SnowOnTrees.cs:EmitCardPatches
+P43-17 | 【防回潮】雪壳必须排除树冠叶卡着色器（Hidden/Nature/Tree*——树冠大叶卡经列顶判据会变巨片白板，11-17 现场证伪） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:StartsWith\("Hidden/Nature/"
+P43-18 | 【防回潮】烘焙工具同样排除树冠叶卡（两路径都要挡） | grep:1:Assets/_Project/Editor/RoofSnowBakeTool.cs:StartsWith\("Hidden/Nature/"
+P43-19 | 【冠顶判据】雪斑只取树冠顶部区段（canopyBase = yMax×(1−K)；按"低位起全收"会全选冠底大叶卡，冠顶无雪——俯拍实证） | grep:1:Assets/_Project/Scripts/Weather/SnowOnTrees.cs:1f - foliageCanopyMinK
+P43-20 | 【雨天湿楼顶】雪壳三态切换存在（雨=深灰蓝湿面复用同一壳网格，_SnowAmount 保持 0.9 防 discard） | grep:2:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:WetTint

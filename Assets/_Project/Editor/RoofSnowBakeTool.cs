@@ -78,6 +78,7 @@ namespace SchoolTwin.Weather
                 string shName = rd.sharedMaterial.shader != null ? rd.sharedMaterial.shader.name : "";
                 if (shName == "CampusUI/SnowGround") continue;                       // 雪类几何（v2 壳/树帽等）不收
                 if (shName.StartsWith("SchoolTwin/", System.StringComparison.Ordinal)) continue;  // 屏幕类，双保险
+                if (shName.StartsWith("Hidden/Nature/", System.StringComparison.Ordinal)) continue; // 树冠叶卡：巨卡会变巨片白板，树冠走 SnowOnTrees 雪斑（11-17 v3）
 
                 Mesh m = mf.sharedMesh;
                 if (!m.isReadable && Application.isPlaying) continue;   // 运行时读不了就放弃（编辑器仍可读，见类注）

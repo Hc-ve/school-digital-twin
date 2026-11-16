@@ -94,6 +94,12 @@ namespace SchoolTwin.Weather
         private Transform shellRoot;
         private bool built;
 
+        // 【雨天湿模式】湿层颜色（11-17 主理人反馈"雨天楼顶没有水坑效果"）。
+        // 湿混凝土/沥青屋顶雨中的核心观感 = 整体变深 + 略带冷蓝；雪/湿切换时还原。
+        private static readonly Color WetTint = new Color(0.26f, 0.29f, 0.34f, 1f);
+        private static readonly Color WetSky = new Color(0.18f, 0.21f, 0.26f, 1f);
+        private bool _wetShown;
+
         private static readonly int IdSnowTex = Shader.PropertyToID("_SnowTex");
         private static readonly int IdSnowDetail = Shader.PropertyToID("_DetailTex");
         private static readonly int IdSnowColor = Shader.PropertyToID("_SnowColor");
@@ -234,6 +240,10 @@ namespace SchoolTwin.Weather
                 // 屏幕类材质 defensively 跳过（Monitor/TwinScreen 家族）——
                 // 屏幕本身近乎竖直，法线筛也能挡，这里双保险零成本。
                 if (shName.IndexOf("SchoolTwin/", System.StringComparison.Ordinal) == 0) continue;
+                // 【11-17 v3】树冠叶卡不要：树模型（独立树 Tree1/2/3(Clone)）的叶片是
+                // 2~5m 的大 alpha 卡，"列顶朝上面"就是整张卡 → 雪壳变成巨片白板穿过
+                // 树冠（现场证伪，比半球帽更假）。树冠覆雪统一走 SnowOnTrees 的雪斑系统。
+                if (shName.StartsWith("Hidden/Nature/", System.StringComparison.Ordinal)) continue;
 
                 Mesh m = mf.sharedMesh;
                 if (!m.isReadable) continue;   // 不可读网格读不到顶点，只能放弃
@@ -421,15 +431,60 @@ namespace SchoolTwin.Weather
         {
             if (!built || shellMat == null || parts.Count == 0) return;
 
-            // 与地面雪盘/树根雪堆同一套开关口径：读 WeatherVisuals 每帧写的全局雪量
-            float a = Shader.GetGlobalFloat(IdGlobalSnow);
-            bool on = a > 0.01f;
+            // ══════════════════════════════════════════════════════════════
+            // 【三态：雪 / 雨·湿 / 干燥】（11-17 主理人反馈"雨天楼顶没有水坑效果"）
+            //
+            // 同一片壳网格复用三种呈现，不新增几何：
+            //   · 雪（_GlobalSnow > 0.01）→ 白色积雪，量随全局雪量；
+            //   · 雨（天气=Rain/Storm 且不在下雪）→ **湿模式**：同一网格铺一层
+            //     深灰蓝（湿混凝土观感），_SnowAmount 保持高值让片元不被 discard，
+            //     _DetailTex 噪声自带斑驳 → 近似"低洼处水痕分布不均"；
+            //     真实楼顶雨中就是整体变深，全覆盖深色已是八成观感，
+            //     带反射的水坑留待后续按需加（避免第一版就上重材质）。
+            //   · 干燥 → 隐藏（现状）。
+            // 雪与雨互斥由数据侧 Weather 单值保证，不会双开。
+            // ══════════════════════════════════════════════════════════════
+            float snow = Shader.GetGlobalFloat(IdGlobalSnow);
+            bool snowOn = snow > 0.01f;
+
+            bool raining = false;
+            if (!snowOn)
+            {
+                var env = EnvironmentState.Instance;
+                var w = env != null ? env.weather : Weather.Clear;
+                raining = w == Weather.Rain || w == Weather.Storm;
+            }
+            bool show = snowOn || raining;
+
             for (int i = 0; i < parts.Count; i++)
             {
                 if (parts[i].renderer == null) continue;
-                if (on != parts[i].renderer.enabled) parts[i].renderer.enabled = on;
+                if (show != parts[i].renderer.enabled) parts[i].renderer.enabled = show;
             }
-            if (on) shellMat.SetFloat(IdSnowAmount, a);
+
+            if (snowOn)
+            {
+                if (_wetShown) RestoreSnowTint();   // 雨→雪切回，别把湿色留在雪上
+                _wetShown = false;
+                shellMat.SetFloat(IdSnowAmount, snow);
+            }
+            else if (raining)
+            {
+                if (!_wetShown)
+                {
+                    shellMat.SetColor(IdSnowColor, WetTint);
+                    shellMat.SetColor(IdSkyColor, WetSky);
+                    _wetShown = true;
+                }
+                // 覆盖率保持高值：低 _SnowAmount 会在片元里整片 discard（v1 教训），湿层就没了
+                shellMat.SetFloat(IdSnowAmount, 0.9f);
+            }
+        }
+
+        private void RestoreSnowTint()
+        {
+            shellMat.SetColor(IdSnowColor, new Color(0.92f, 0.95f, 1.0f, 1f));
+            shellMat.SetColor(IdSkyColor, new Color(0.74f, 0.82f, 0.96f, 1f));
         }
 
         private void OnDestroy()

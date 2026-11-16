@@ -1,18 +1,18 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-17 01:38:53**
+> 生成时间：**2026-11-17 02:45:39**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**断点正在施工**：最后改动 `SnowOnRoofs.cs`（27 分钟前）。未提交代码文件 **5** 个。
+**断点正在施工**：最后改动 `SnowOnTrees.cs`（12 分钟前）。未提交代码文件 **3** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
-共 **389** 条判据：**389 通过** / 0 未过 / 0 无法判定。
+共 **394** 条判据：**394 通过** / 0 未过 / 0 无法判定。
 
 > 判据来自 `Tools/status_checks.txt`，全部是 `grep` / 文件存在性这类**机器可验证**的东西。
 > 没有「完成 80%」这种只能人填的数 —— 那种数一定滞后、一定美化。
@@ -407,7 +407,12 @@
 | `P43-12` | 【v2 核心】雪壳列顶判据存在（colTop 逐列最高朝上面；世界绝对高度/纯相对高度均已被证伪） | ✅ 通过 | 4 处（需 ≥2） |
 | `P43-13` | 【烘焙链路】编辑器烘焙工具必须存在（静态批处理使建筑运行时网格不可读，仅靠运行时扫描楼顶永远缺失） | ✅ 通过 | 存在 |
 | `P43-14` | 【烘焙链路】烘焙产物必须存在（SnowOnRoofs 路径 A 首选资源；缺失则自动退化为只扫未合批网格） | ✅ 通过 | 存在 |
-| `P43-15` | 【树冠覆盖】树冠雪帽构建存在（地形树材质是共享资产不许改 _Color，帽是独立几何零污染） | ✅ 通过 | 1 处（需 =1） |
+| `P43-15→v2（11-17 主理人反馈半球帽太假）` | 【树冠覆盖】贴体雪层构建存在（调研后弃用均匀帽：原型叶面朝上三角+法线外扩+面积稀疏化保簇状露底，独立几何零材质污染） | ✅ 通过 | 1 处（需 =1） |
+| `P43-16` | 【v3 雪斑】叶卡表面撒片逻辑存在（EmitCardPatches：细分采样+Perlin 簇状保留+径向渐隐贴片） | ✅ 通过 | 3 处（需 =3） |
+| `P43-17` | 【防回潮】雪壳必须排除树冠叶卡着色器（Hidden/Nature/Tree*——树冠大叶卡经列顶判据会变巨片白板，11-17 现场证伪） | ✅ 通过 | 1 处（需 =1） |
+| `P43-18` | 【防回潮】烘焙工具同样排除树冠叶卡（两路径都要挡） | ✅ 通过 | 1 处（需 =1） |
+| `P43-19` | 【冠顶判据】雪斑只取树冠顶部区段（canopyBase = yMax×(1−K)；按"低位起全收"会全选冠底大叶卡，冠顶无雪——俯拍实证） | ✅ 通过 | 1 处（需 =1） |
+| `P43-20` | 【雨天湿楼顶】雪壳三态切换存在（雨=深灰蓝湿面复用同一壳网格，_SnowAmount 保持 0.9 防 discard） | ✅ 通过 | 2 处（需 =2） |
 
 > ✅ **全部判据通过。** 可以进入验收（但不能替代 play 视觉验收）。
 
@@ -417,85 +422,104 @@
 
 | 项 | 时间 |
 |---|---|
-| 最后一个 .cs 改动 | 11-17 01:11:51（`SnowOnRoofs.cs`） |
-| dll 编译时间 | 11-17 01:29:37 |
+| 最后一个 .cs 改动 | 11-17 02:32:44（`SnowOnTrees.cs`） |
+| dll 编译时间 | 11-17 02:33:40 |
 
-> ✅ **已生效**，编译晚于最后改动 1067 秒。可以 play 验收。
+> ✅ **已生效**，编译晚于最后改动 55 秒。可以 play 验收。
 
 ## 2. 未提交改动（= 有丢失风险的工作）
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **51** 个文件未提交（代码 5 / 文档与其他 43）。
+共 **69** 个文件未提交（代码 3 / 文档与其他 61）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 代码 | `Assets/_Project/Scripts/Weather/SnowOnRoofs.cs` | 27 分钟前 |
-| 代码 | `Assets/_Project/Scripts/Weather/SnowOnTrees.cs` | 32 分钟前 |
-| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 37 分钟前 |
+| 代码 | `Assets/_Project/Editor/RoofSnowBakeTool.cs` | 38 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/SnowOnRoofs.cs` | 38 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/SnowOnTrees.cs` | 12 分钟前 |
+| 其他 | `Assets/_Project/Weather/RoofSnow/Resources/RoofSnowBake.prefab` | 36 分钟前 |
+| 文档 | `Docs/P43_昼夜循环_验收与修复回执_断点.md` | 41 秒前 |
 | 文档 | `Docs/STATUS.md` | 1 分钟前 |
-| 其他 | `ProjectSettings/ProjectSettings.asset` | 12 分钟前 |
-| 其他 | `tools/status_checks.txt` | 0 秒前 |
-| 代码 | `Assets/_Project/Editor/RoofSnowBakeTool.cs` | 9 分钟前 |
-| 其他 | `Assets/_Project/Editor/RoofSnowBakeTool.cs.meta` | 25 分钟前 |
-| 其他 | `Assets/_Project/Weather.meta` | 25 分钟前 |
-| 其他 | `Assets/_Project/Weather` | 25 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f10.png` | 6 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f12.png` | 25 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 13 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 4 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f18.png` | 52 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 56 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f23.png` | 6 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f29.png` | 25 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f30.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 4 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 13 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f36.png` | 30 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f40.png` | 57 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 52 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 56 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f34.png` | 6 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f41.png` | 25 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f49.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 13 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f64.png` | 57 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f66.png` | 52 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P43_roof_closeup.png` | 3 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snowcover_aerial.png` | 24 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snowcover_aerial2.png` | 6 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snowcover_aerial_final.png` | 3 分钟前 |
+| 其他 | `ProjectSettings/ProjectSettings.asset` | 1 小时前 |
+| 其他 | `tools/status_checks.txt` | 1 分钟前 |
+| 其他 | `Assets/_Project/Weather.meta` | 1 小时前 |
+| 其他 | `Assets/_Project/Weather/RoofSnow.meta` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f10.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f12.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 6 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f17.png` | 58 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f18.png` | 39 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f20.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f22.png` | 32 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f23.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f25.png` | 35 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f29.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f30.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 6 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f34.png` | 39 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f36.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f40.png` | 58 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f30.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f32.png` | 32 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f34.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f41.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f44.png` | 35 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f49.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 42 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f56.png` | 39 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f61.png` | 58 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f64.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f66.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P43_roof_wet_rain.png` | 2 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snowcover_aerial.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P43_snowcover_aerial_final.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P43_tree_foliage_v2.png` | 42 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_foliage_v2b.png` | 42 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3.png` | 39 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3_day.png` | 32 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3_top2.png` | 21 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3_top4.png` | 13 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3_top5.png` | 7 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3_topdown.png` | 32 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_tree_snow_v3b.png` | 35 分钟前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `SnowOnRoofs.cs` | 27 分钟前 | 🔥 正在干 |
+| 断点 | `SnowOnTrees.cs` | 12 分钟前 | 🔥 正在干 |
 | 见微 | `10_时间天气面板_设计试绘_夜晚雪天.png` | 12 天前 | 歇着 |
 | 心跳 | `P3_时序历史层_调研报告_断点.md` | 16 天前 | 歇着 |
-| 挑刺 | `P43_snowcover_aerial_final.png` | 3 分钟前 | 🔥 正在干 |
+| 挑刺 | `P43_roof_wet_rain.png` | 2 分钟前 | 🔥 正在干 |
 | 落笔 | — | — | 无记录 |
 
 ## 4. 今日提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 01:39 | `c73c410` | feat(P43): 雪覆盖 v2（楼顶/树冠/灯顶积雪）+ 撒播高度相机自适应 |
 | 00:42 | `68c5384` | feat(P43): 雨雪撒播高度 16→60m（主理人反馈楼顶一线凭空出现） |
 | 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 
@@ -505,11 +529,11 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `STATUS.md` | 549 | 1 分钟前 | ✅ 新鲜 |
-| `P43_昼夜循环_验收与修复回执_断点.md` | 76 | 56 分钟前 | ✅ 新鲜 |
-| `P43_昼夜循环_调研_断点.md` | 195 | 5 小时前 | ✅ 新鲜 |
-| `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 5 小时前 | ✅ 新鲜 |
-| `P42_室内补光_调光方法论_打光.md` | 525 | 5 小时前 | ✅ 新鲜 |
+| `P43_昼夜循环_验收与修复回执_断点.md` | 136 | 41 秒前 | ✅ 新鲜 |
+| `STATUS.md` | 572 | 1 分钟前 | ✅ 新鲜 |
+| `P43_昼夜循环_调研_断点.md` | 195 | 6 小时前 | ✅ 新鲜 |
+| `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 7 小时前 | ✅ 新鲜 |
+| `P42_室内补光_调光方法论_打光.md` | 525 | 7 小时前 | ✅ 新鲜 |
 | `P39_灯光视角突变与过曝_方案.md` | 220 | 1 天前 | ⚠️ 超 24h |
 | `P39_灯光视角突变与过曝_断点.md` | 84 | 2 天前 | ⚠️ 超 24h |
 | `P36_阶段2_实现记录_打光.md` | 731 | 3 天前 | ❌ 超 72h |
@@ -533,6 +557,7 @@
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11-17 01:39 | `c73c410` | feat(P43): 雪覆盖 v2（楼顶/树冠/灯顶积雪）+ 撒播高度相机自适应 |
 | 11-17 00:42 | `68c5384` | feat(P43): 雨雪撒播高度 16→60m（主理人反馈楼顶一线凭空出现） |
 | 11-17 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 | 11-16 20:31 | `d7e5ee4` | docs(P43): 昼夜循环调研阶段交付 —— 断点 8章19条带来源，零实现代码 |
@@ -542,7 +567,6 @@
 | 11-14 04:21 | `d6fe7a7` | feat(P37): 夜晚室内底光层验收通过 —— 全楼统一配方+二值开关+地板反射柔化+诊断面板默认关闭 |
 | 11-14 00:54 | `a00cf88` | fix(P36): 天花板过曝结案 —— 补光点 Point→Spot 朝下(150°) + 灯管 HDR emission + Bloom 运行时接管 |
 | 11-13 15:37 | `c0a4796` | feat(P35): 室内补光层 v4（灯位补光+glow接管+应急底光）+ 方案标定文档 + pixelLightCount 12→20 |
-| 11-12 17:35 | `db4add8` | build(D13): 发黑修复后首次重打包成功 —— 新 exe 已产出，F22 无回归 |
 
 ---
 
