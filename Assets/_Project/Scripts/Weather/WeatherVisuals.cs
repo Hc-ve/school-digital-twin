@@ -22,7 +22,13 @@ namespace SchoolTwin.Weather
     public class WeatherVisuals : MonoBehaviour
     {
         private const float AreaSize = 110f;     // 发射盒水平尺寸（运行时按相机高度再放大）
-        private const float EmitHeight = 16f;    // 发射高度（相机上方）
+        // 【P43 追加 11-17 主理人反馈】撒播高度 16 → 60。
+        // 16m 时雨雪从楼顶一线（教学楼约 15~16m）凭空出现，观感是"比楼高一点点"，不像天上来的；
+        // 60m ≈ 教学楼 3.75 倍，肉眼不再看到"出生线"。注意发射点的真实语义是
+        // 「室外地面 + EmitHeight」（见 UpdateGround :3912 emitPos.y = outdoorGroundY + EmitHeight），
+        // 不是字面的"相机上方"。寿命不用跟着改：UpdateRainLifetime / UpdateSnowLifetime
+        // 是按实测落距解 √(2h/g) 的解析式，落距变大自动重算。
+        private const float EmitHeight = 60f;    // 撒播高度（室外地面以上）
         private const float DomeRadius = 380f;   // 云穹顶半径，必须小于相机 farClip(2000)
 
         private const float RainRateMax = 3200f; // rain = 1 时每秒发射数
@@ -372,7 +378,11 @@ namespace SchoolTwin.Weather
             main.startColor = new Color(0.72f, 0.82f, 0.96f, 0.55f);
             main.gravityModifier = 1.3f;                  // 靠重力加速，比固定速度自然
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 9000;
+            // 【P43 追加】撒播 16→60m 后落程变长、寿命从 1.6s 涨到 ~3.0s，
+            // 同发速率下活跃粒子 ≈ rate × t：Medium 3200×3.0≈9.8k，High(×2)≈19.6k。
+            // 旧 9000 会被静默截断（缓冲满 = 新粒子不发射 = 下雪变稀，还查不出原因，
+            // 与 P28-01 PrintMax 同型病），按 High 满载留 22% 余量。
+            main.maxParticles = 24000;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
 
             var em = ps.emission;
@@ -508,7 +518,10 @@ namespace SchoolTwin.Weather
             main.startColor = new Color(1f, 1f, 1f, 0.9f);
             main.gravityModifier = 0.035f;                 // 几乎不加速，慢慢飘
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 6000;
+            // 【P43 追加】撒播 16→60m 后雪寿命从 ~9.6s 涨到 ~18.3s（仍在 Clamp[4,30] 内），
+            // 活跃粒子 ≈ rate × t：Medium 520×18.3≈9.5k，High(×2)≈19k。旧 6000 远不够，
+            // 按 High 满载留 15% 余量（缓冲满会静默截断发射，见 BuildRain 同款注释）。
+            main.maxParticles = 22000;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
 
             var em = ps.emission;
@@ -3255,7 +3268,7 @@ namespace SchoolTwin.Weather
 
             sb.AppendLine("  四、粒子（落地是否干净）");
             sb.AppendLine("    camY-groundY = " + (cam != null ? (cam.transform.position.y - groundY).ToString("F2") : "?")
-                          + " m   （落距 = EmitHeight 16 + 这个值）");
+                          + " m   （落距 = EmitHeight " + EmitHeight.ToString("0") + " + 这个值）");
             if (rainPs != null)
             {
                 var rl = rainPs.main.startLifetime;

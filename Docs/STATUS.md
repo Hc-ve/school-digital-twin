@@ -1,14 +1,14 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-17 00:12:40**
+> 生成时间：**2026-11-17 00:42:34**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**断点正在施工**：最后改动 `TwinTimeWeatherCard.cs`（11 分钟前）。未提交代码文件 **7** 个。
+**断点正在施工**：最后改动 `WeatherVisuals.cs`（9 分钟前）。未提交代码文件 **1** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
@@ -410,69 +410,71 @@
 
 | 项 | 时间 |
 |---|---|
-| 最后一个 .cs 改动 | 11-17 00:01:24（`TwinTimeWeatherCard.cs`） |
-| dll 编译时间 | 11-17 00:01:50 |
+| 最后一个 .cs 改动 | 11-17 00:33:30（`WeatherVisuals.cs`） |
+| dll 编译时间 | 11-17 00:33:59 |
 
-> ✅ **已生效**，编译晚于最后改动 25 秒。可以 play 验收。
+> ✅ **已生效**，编译晚于最后改动 29 秒。可以 play 验收。
 
 ## 2. 未提交改动（= 有丢失风险的工作）
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **36** 个文件未提交（代码 7 / 文档与其他 27）。
+共 **36** 个文件未提交（代码 1 / 文档与其他 34）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 代码 | `Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs` | 11 分钟前 |
-| 代码 | `Assets/_Project/Scripts/Weather/TwinWeatherBootstrap.cs` | 3 小时前 |
-| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 13 分钟前 |
-| 文档 | `Docs/STATUS.md` | 16 分钟前 |
-| 其他 | `tools/status_checks.txt` | 0 秒前 |
-| 代码 | `Assets/_Project/Scripts/UI/TwinPageSwipe.cs` | 2 小时前 |
-| 其他 | `Assets/_Project/Scripts/UI/TwinPageSwipe.cs.meta` | 2 小时前 |
-| 代码 | `Assets/_Project/Scripts/Weather/TimeCycleDirector.cs` | 12 分钟前 |
-| 其他 | `Assets/_Project/Scripts/Weather/TimeCycleDirector.cs.meta` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 3 小时前 |
+| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 9 分钟前 |
+| 文档 | `Docs/P43_昼夜循环_验收与修复回执_断点.md` | 21 秒前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 7 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 34 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 51 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f18.png` | 1 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 26 秒前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f30.png` | 7 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 9 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 39 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 34 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f40.png` | 1 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 51 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 9 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 20 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 24 秒前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 39 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f49.png` | 7 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 2 小时前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 4 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 34 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f64.png` | 1 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 51 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P43_auto` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P43_verify_card_ui.png` | 30 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_verify_settings_page.png` | 28 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f66.png` | 21 秒前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 19 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P43_snow_column_far.png` | 2 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snow_emitheight60.png` | 5 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snow_sky_look_up.png` | 3 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snow_sky_look_up2.png` | 2 分钟前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `TwinTimeWeatherCard.cs` | 11 分钟前 | 🔥 正在干 |
+| 断点 | `WeatherVisuals.cs` | 9 分钟前 | 🔥 正在干 |
 | 见微 | `10_时间天气面板_设计试绘_夜晚雪天.png` | 12 天前 | 歇着 |
 | 心跳 | `P3_时序历史层_调研报告_断点.md` | 16 天前 | 歇着 |
-| 挑刺 | `auto_2_f55.png` | 4 分钟前 | 🔥 正在干 |
+| 挑刺 | `auto_2_f66.png` | 21 秒前 | 🔥 正在干 |
 | 落笔 | — | — | 无记录 |
 
 ## 4. 今日提交
 
-今日无提交。
+| 时间 | 提交 | 说明 |
+|---|---|---|
+| 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 
 ## 5. 文档新鲜度（谁过期了）
 
@@ -480,12 +482,13 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `STATUS.md` | 517 | 16 分钟前 | ✅ 新鲜 |
+| `P43_昼夜循环_验收与修复回执_断点.md` | 76 | 21 秒前 | ✅ 新鲜 |
+| `STATUS.md` | 525 | 29 分钟前 | ✅ 新鲜 |
 | `P43_昼夜循环_调研_断点.md` | 195 | 4 小时前 | ✅ 新鲜 |
-| `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 4 小时前 | ✅ 新鲜 |
-| `P42_室内补光_调光方法论_打光.md` | 525 | 4 小时前 | ✅ 新鲜 |
+| `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 5 小时前 | ✅ 新鲜 |
+| `P42_室内补光_调光方法论_打光.md` | 525 | 5 小时前 | ✅ 新鲜 |
 | `P39_灯光视角突变与过曝_方案.md` | 220 | 1 天前 | ⚠️ 超 24h |
-| `P39_灯光视角突变与过曝_断点.md` | 84 | 1 天前 | ⚠️ 超 24h |
+| `P39_灯光视角突变与过曝_断点.md` | 84 | 2 天前 | ⚠️ 超 24h |
 | `P36_阶段2_实现记录_打光.md` | 731 | 3 天前 | ❌ 超 72h |
 | `P36_交接_外包_天花板过曝.md` | 375 | 3 天前 | ❌ 超 72h |
 | `P36_阶段1_失败诊断_打光.md` | 139 | 3 天前 | ❌ 超 72h |
@@ -502,12 +505,12 @@
 | `P00_项目总览_交接基线.md` | 1235 | 4 天前 | ❌ 超 72h |
 | `D13_毕设期修复路线_打光方案.md` | 135 | 7 天前 | ❌ 超 72h |
 | `P32_断点V1交接陈述.md` | 557 | 7 天前 | ❌ 超 72h |
-| `发黑问题修复经验总纲.md` | 329 | 7 天前 | ❌ 超 72h |
 
 ## 6. 最近 10 次提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11-17 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 | 11-16 20:31 | `d7e5ee4` | docs(P43): 昼夜循环调研阶段交付 —— 断点 8章19条带来源，零实现代码 |
 | 11-16 19:49 | `8c334c8` | docs(P42): 补录调光方法论 + 踩坑日志配套引用（打光补充） |
 | 11-16 19:38 | `e780edd` | fix(P39+P42): 室内灯光专项收工 —— 洗顶灯体系 + 餐厅梁柱死黑消除（主理人+老师验收通过） |
@@ -517,7 +520,6 @@
 | 11-13 15:37 | `c0a4796` | feat(P35): 室内补光层 v4（灯位补光+glow接管+应急底光）+ 方案标定文档 + pixelLightCount 12→20 |
 | 11-12 17:35 | `db4add8` | build(D13): 发黑修复后首次重打包成功 —— 新 exe 已产出，F22 无回归 |
 | 11-12 16:56 | `6dd16d3` | fix(D15): 暖气断电染色豁免落地 + 工作区大清理 + D15 定性更正（断点 11-10 汇报延迟裁决） |
-| 11-12 16:06 | `27d4f73` | fix(D13): 白天+夜晚场景材质发黑结案 —— 弃用 2017 坏烘焙数据（打光，主理人 play 两轮确认） |
 
 ---
 
