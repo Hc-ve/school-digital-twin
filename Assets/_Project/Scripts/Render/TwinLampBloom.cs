@@ -96,7 +96,10 @@ public static class TwinLampBloom
     /// 然后快速衰减"，这个"0.7 倍"是**叠加在本来就接近白的管壁上**，
     /// 换算到全局叠加倍率就是 0.2 左右，不是 0.5。
     /// </summary>
-    private const float NightIntensity = 3.2f;
+    private const float NightIntensity = 2.6f;
+    // P39：3.2→2.6。用户 11-14 反馈「灯管周围灰雾随视角漫开」——走廊黑顶上 Bloom 是唯一
+    // 可见"光"，灰雾即 Bloom 大半径扩散；夜晚洗顶灯接棒给天花板供光后，光晕退回"贴管柔晕"
+    // 职责。配合 Neutral tonemapper（本文件 P39 新增）：高光滚降后不再需要大倍率 Bloom 撑观感。
 
     /// <summary>
     /// 黄昏档强度。天还亮着、环境光更强、墙面本身就更接近阈值，
@@ -133,8 +136,9 @@ public static class TwinLampBloom
     /// 高光完全失去层次。这就是「教室 62.5% 像素 p50 恰好等于 1.000」的成因：
     /// Bloom 把一大片像素推过 1.0，而没人把它们压回来。
     /// → 阈值在这里的作用不只是"选谁发光"，而是**守住 1.0 这条线**。
-    /// 开启 Tonemapper 是正确解法，但会改变白天档基线且要改资产，
-    /// 超出本任务硬约束（见 Docs/P36_阶段2_实现记录_打光.md §4.1、§9 ⑦）。
+    /// 【P39 已解】用户 11-14 以「真实世界物理照明」为验收口径，本层在夜晚/黄昏档
+    /// 运行时写 Neutral tonemapper、白天档与 Shutdown 还原 None（见 Apply/Restore）——
+    /// 资产默认态与白天基线不变，夜景高光获得滚降。
     ///
     /// ⚠️ 这个值需要 play 微调：
     ///   · 若天花板/墙面还有淡淡泛白 → 继续往上加（每次 +0.02）
@@ -243,6 +247,9 @@ public static class TwinLampBloom
     private static float _origIntensity, _origThreshold, _origDiffusion, _origSoftKnee;
     private static bool _origIntensityOverride, _origThresholdOverride,
                         _origDiffusionOverride, _origSoftKneeOverride;
+    // P39：tonemapper 进场原值（ PPv2 TonemapperMode：None=0 / Neutral=1 / ACES=2 ）
+    private static int _origTonemapperMode;
+    private static bool _origTonemapperOverride;
     private static bool _origCaptured;
 
     /// <summary>清掉"已绑定"相关的静态状态。放在宏里，包不存在时整段消失。</summary>
@@ -978,6 +985,17 @@ public static class TwinLampBloom
                 bl.threshold.value = BloomThreshold;
                 bl.diffusion.value = BloomDiffusion;
                 bl.softKnee.value = BloomSoftKnee;
+
+                // P39：夜晚/黄昏档启用 Neutral tonemapper。原硬约束「开启会动白天基线」
+                // 由下面的还原机制化解：白天档走 Restore() 回写原值（None），Shutdown()
+                // 兜底还原——资产默认态不变，白天画面零改动红线不破。
+                // Neutral（而非 ACES）：饱和度偏移最小、高光滚降够用，夜景不会偏色。
+                ColorGrading cg = GetColorGrading(_profiles[i]);
+                if (cg != null)
+                {
+                    cg.tonemapper.overrideState = true;
+                    cg.tonemapper.value = Tonemapper.Neutral;   // PPv2 3.2.2 枚举名是 Tonemapper（非 TonemapperMode）
+                }
             }
         }
 
@@ -1086,6 +1104,15 @@ public static class TwinLampBloom
         return prof.TryGetSettings(out bl) ? bl : null;
     }
 
+    /// <summary>P39：取卷资产里的 ColorGrading（tonemapper 写入/还原用）。
+    /// 与 GetBloom 同口径：只读，不存在返回 null、安静不生效。</summary>
+    private static ColorGrading GetColorGrading(PostProcessProfile prof)
+    {
+        if (prof == null) return null;
+        ColorGrading cg;
+        return prof.TryGetSettings(out cg) ? cg : null;
+    }
+
     /// <summary>记下进场原值，供 `Restore()` 回滚。只记一次。</summary>
     private static void CaptureOriginal()
     {
@@ -1105,6 +1132,16 @@ public static class TwinLampBloom
         _origDiffusionOverride = bl.diffusion.overrideState;
         _origSoftKnee = bl.softKnee.value;
         _origSoftKneeOverride = bl.softKnee.overrideState;
+
+        // P39：tonemapper 原值一并记录（卷资产里 ColorGrading 与 Bloom 同份存在，
+        // 实测 PP_Bloom.asset 的 tonemapper = {overrideState:0, value:0} 即 None）
+        ColorGrading cg = GetColorGrading(_profiles[0]);
+        if (cg != null)
+        {
+            _origTonemapperMode = (int)cg.tonemapper.value;
+            _origTonemapperOverride = cg.tonemapper.overrideState;
+        }
+
         _origCaptured = true;
     }
 
@@ -1129,6 +1166,14 @@ public static class TwinLampBloom
             bl.diffusion.overrideState = _origDiffusionOverride;
             bl.softKnee.value = _origSoftKnee;
             bl.softKnee.overrideState = _origSoftKneeOverride;
+
+            // P39：tonemapper 一并还原（白天档零变化红线的另一半——进场时改了就必须还）
+            ColorGrading cg = GetColorGrading(_profiles[i]);
+            if (cg != null)
+            {
+                cg.tonemapper.value = (Tonemapper)_origTonemapperMode;
+                cg.tonemapper.overrideState = _origTonemapperOverride;
+            }
         }
     }
 #else

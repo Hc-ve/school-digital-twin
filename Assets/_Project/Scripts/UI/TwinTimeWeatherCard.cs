@@ -42,7 +42,41 @@ namespace SchoolTwin.UI
     {
         // ---- 卡片尺寸（图纸 §1）----
         private const float CardW = 480f;
+
+        /// <summary>
+        /// 图纸 §1 裁决的**内容区基准高**。所有原有元素（提示 40 / 表盘 56–256 /
+        /// 天气四钮 272–312 / 状态行 320–336 / 底距 24）都相对它排布，本轮一个都没动。
+        ///
+        /// 【2026-11-13】新增「重置 / 确认」操作行挂在内容区下方，
+        /// 实际卡片总高 = CardH + ActionStripH = **408**（见 <see cref="CardTotalH"/>）。
+        /// 把基准高与附加区拆开，而不是直接把 CardH 改成 408：
+        /// 原有那些绝对 y 坐标是见微试绘逐格验收过的，改 CardH 会让它们集体"看着错位"，
+        /// 也容易让下一个人误以为表盘/按钮区一起放大了。
+        /// </summary>
         private const float CardH = 360f;
+
+        /// <summary>操作行附加高度：40 高的按钮 + 与状态行的 8 间隔。</summary>
+        private const float ActionStripH = 48f;
+
+        /// <summary>卡片实际总高 408。新增行落在 y=344~384，新底距 408−384=24，与原图纸一致。</summary>
+        private const float CardTotalH = CardH + ActionStripH;
+
+        // ---- 新增操作行（重置 / 确认）----
+        private const float ActionY = 344f;
+        private const float ActionH = 40f;
+        private const float ActionGap = 8f;
+        private const float ActionW = (CardW - 40f - ActionGap) * 0.5f;   // 216：左右各留 20
+
+        /// <summary>确认阈值：拖动值与已提交时刻相差 ≥ 1 分钟才可提交。</summary>
+        private const double ConfirmMinuteDelta = 1.0;
+
+        /// <summary>
+        /// 浮点容差。1 分钟在小时域是 1/60，转回分钟时 0.016666…×60 会得到
+        /// 0.9999999999999999，恰好卡在阈值上会被判成「灰」。
+        /// 静态推演实测：Δ(16.0, 16.0+1/60) = 1.000 但 `>= 1.0` 为 false。
+        /// 用 1e-6 分钟（= 0.06 毫秒）容差吸收舍入，不影响任何真实交互粒度。
+        /// </summary>
+        private const double MinuteEpsilon = 1e-6;
 
         // ---- 表盘几何（图纸 §2.2）----
         private const float DialCX = 240f;      // 卡内圆心 x
@@ -74,15 +108,45 @@ namespace SchoolTwin.UI
         private RectTransform _pivot;         // 指针枢轴（只转这个）
         private Text _timeText;               // 中心 HH:mm
         private Text _statusText;             // 底行状态
-        private TwinButton[] _buttons;
+        private TwinButton[] _buttons;        // 天气四钮
+        private TwinButton _resetButton;      // 重置 → 恢复真实时钟
+        private TwinButton _confirmButton;    // 确认 → 提交预览时刻
 
         private Action _onClosed;
 
-        /// <summary>当前拖动出来的小时数（0~24，保留小数）。指针角度与文字都由它推。</summary>
+        /// <summary>当前表盘上的小时数（0~24）。**拖动时是预览值，不一定已生效**。</summary>
         private double _hour = 12.0;
 
         /// <summary>正在拖动：拖动期间不要再从 TwinClimate 反向同步，否则会自我拉扯。</summary>
         private bool _dragging;
+
+        /// <summary>
+        /// 有未提交的**时间**预览。与 <see cref="_dragging"/> 是两件事：
+        /// `_dragging` 只覆盖「手指还按在表盘上」，`_pendingHour` 覆盖「松手后到确认/重置/关闭」。
+        /// 松手后若仍让 Update 从 TwinClimate 反拉，预览会被立刻冲掉 —— 所以 Update 要挡的是它。
+        ///
+        /// 【2026-11-13 天气纳入确认后拆分】原来只有一个 `_pending`，
+        /// 天气预览也会把 Update 挡住，导致「只点天气、没拖时间」时表盘不走真实时钟。
+        /// 时间与天气是两条独立的待提交轴，必须分开。
+        /// </summary>
+        private bool _pendingHour;
+
+        /// <summary>
+        /// 有未提交的**天气**预览：记录用户点的是哪个按钮索引，-1 = 没有。
+        /// 用索引而不是 WeatherKind，因为「随机」是一个动作而不是一档状态 ——
+        /// 预览期不该真的摇一次骰子（那会造成"每次刷新显示都变"），要等确认时才摇。
+        /// </summary>
+        private int _pendingWeatherIndex = -1;
+
+        /// <summary>
+        /// 最近一次「已提交」的时刻快照，用来判 1 分钟阈值。
+        ///
+        /// 为什么不直接读 TwinClimate.HourOfDay 比：
+        /// 真实时钟每秒都在走，拖完停手几秒再判断会得到漂移后的值；
+        /// 而覆盖模式下 HourOfDay 又恒等于上次提交值。两种模式口径不一致。
+        /// 统一在「提交成功 / 重置成功 / 打开卡片」三处刷这个快照，判据才稳定。
+        /// </summary>
+        private double _baselineHour = 12.0;
 
         private readonly StringBuilder _sb = new StringBuilder(64);
 
@@ -111,13 +175,25 @@ namespace SchoolTwin.UI
             return card;
         }
 
-        /// <summary>关闭并销毁。Esc / 点遮罩 / 点 × 三处等价，都会恢复真实时钟（图纸 §4）。</summary>
+        /// <summary>
+        /// 关闭并销毁。Esc / 点遮罩 / 点 × 三处等价。
+        ///
+        /// 【2026-11-13 语义订正，推翻图纸 §4 的「关闭恢复真实时钟」】
+        /// 原实现关闭时调 ApplyHour(…, false) 弹回真实时钟 —— 那是把调时间当"临时预览"。
+        /// 但时间系统的实际用途是**定格时刻做演示/录视频**（先定到晚上，再关面板去操作别的），
+        /// 关掉就弹回等于功能不可用。主理人实测反馈后裁决：关闭只关面板，
+        /// 设定时刻**保持生效**（TwinClimate._useRealClock 维持 false），
+        /// 直到用户再次拖动表盘或重启 Play（运行时状态不落盘，重进 Play 自然回到真实时钟）。
+        ///
+        /// 【2026-11-13 状态机补充】未确认的**时间 / 天气**预览在此**直接丢弃**：
+        /// 两者从来没写进桥（OnDrag 不再调 ApplyHour、OnPickWeather 不再调 ApplyWeather），
+        /// 所以只要不提交就什么都不会发生，这里不需要、也不允许补一次写桥去"撤销"——
+        /// 那反而会把已提交时刻/天气改掉。
+        /// 「恢复真实时钟」现在由常亮的「重置」钮独立负责，不再挂在本方法上。
+        /// Close() 函数体保持前置修复原样，只有回调 + 销毁两个动作。
+        /// </summary>
         public void Close()
         {
-            // 恢复真实时钟：这是"三处等价"里唯一的副作用，必须写在关闭路径上，
-            // 而不是只写在 Esc 那一条上 —— 否则点 × 关掉后时钟还是停在拖动值。
-            TwinWeatherBridge.ApplyHour(TwinClimate.HourOfDay, false);
-
             Action cb = _onClosed;
             _onClosed = null;
             if (cb != null) cb();
@@ -132,7 +208,11 @@ namespace SchoolTwin.UI
         private void Build()
         {
             // 起始时刻：取当前真实/覆盖时刻，指针直接落在那里（图纸 §4：不做从 0 扫入的入场动画）
+            // 2026-11-13 起 Close() 不再恢复真实时钟，所以这里拿到的可能就是上次提交的覆盖时刻。
             _hour = NormalizeHour(TwinClimate.HourOfDay);
+            _baselineHour = _hour;   // 打开时无待提交预览，确认钮应为灰
+            _pendingHour = false;
+            _pendingWeatherIndex = -1;
 
             // ---- 1. 遮罩 ----
             Image scrim = TwinUIFactory.Block(transform, "TWS_Scrim",
@@ -161,11 +241,12 @@ namespace SchoolTwin.UI
             _card.anchorMax = new Vector2(0.5f, 0.5f);
             _card.pivot = new Vector2(0.5f, 0.5f);
             _card.anchoredPosition = Vector2.zero;
-            _card.sizeDelta = new Vector2(CardW, CardH);
+            _card.sizeDelta = new Vector2(CardW, CardTotalH);
 
             BuildTitle();
             BuildDial();
             BuildButtons();
+            BuildActionButtons();
             BuildStatus();
 
             // ---- Hit 最后建（图纸 §3 #15：必须在内容之上，否则拖不动）----
@@ -205,7 +286,7 @@ namespace SchoolTwin.UI
             Text hint = TwinUIFactory.Label(_card, "TWS_Hint", TwinTheme.FsMicro,
                 TextAnchor.MiddleCenter, TwinTheme.TextMuted);
             TwinUIFactory.Place(hint.rectTransform, 20f, 40f, 440f, 12f);
-            hint.text = "拖动表盘选择时间 · Esc 恢复真实时钟";
+            hint.text = "时间 / 天气先预览 · 确认后生效 · 重置回真实时间 · 关闭保持已提交";
             hint.raycastTarget = false;
         }
 
@@ -329,6 +410,141 @@ namespace SchoolTwin.UI
             }
         }
 
+        /// <summary>
+        /// 操作行：重置（次操作，常亮）+ 确认（主操作，按 1 分钟阈值切灰亮）。
+        ///
+        /// 【为什么确认钮固定 Primary、只切 SetInteractable】
+        /// TwinButton 的禁用分支（ApplyVisual 里 !_interactable）已经把底色压到 0.35、
+        /// 文字降到 TextMuted，并且四个 IPointer* 事件都带 !_interactable 早退。
+        /// 所以「视觉灰 + 不响应点击」是现成能力，无需在两套 style 之间来回切 ——
+        /// 切 style 反而会在某次 SetStyle/SetInteractable 顺序不同时出现"灰底但青蓝描边"的错位。
+        /// </summary>
+        private void BuildActionButtons()
+        {
+            _resetButton = TwinButton.Create(_card, "重置", TwinButtonStyle.Secondary,
+                ActionW, ActionH, OnReset, "TWS_ResetBtn");
+            TwinUIFactory.Place(_resetButton.Rect, 20f, ActionY, ActionW, ActionH);
+
+            _confirmButton = TwinButton.Create(_card, "确认", TwinButtonStyle.Primary,
+                ActionW, ActionH, OnConfirm, "TWS_ConfirmBtn");
+            TwinUIFactory.Place(_confirmButton.Rect, 20f + ActionW + ActionGap, ActionY, ActionW, ActionH);
+
+            // 与天气四钮统一字号（TwinButton 默认 FsBody=13）
+            Text resetLabel = _resetButton.GetComponentInChildren<Text>(true);
+            if (resetLabel != null) resetLabel.fontSize = TwinTheme.FsBodyStrong;
+            Text confirmLabel = _confirmButton.GetComponentInChildren<Text>(true);
+            if (confirmLabel != null) confirmLabel.fontSize = TwinTheme.FsBodyStrong;
+
+            // 起始无待提交预览，确认钮必须是灰的
+            _confirmButton.SetInteractable(false);
+        }
+
+        /// <summary>
+        /// 确认：把待提交的时间 / 天气预览一次性提交到桥。
+        /// 这是卡片内**唯一**一处写桥的地方（时间 + 天气各一次），
+        /// 两条轴互不影响：只改天气时不会动时刻，只拖时间时不会动天气。
+        /// </summary>
+        private void OnConfirm()
+        {
+            // 双保险：按钮置灰时 IPointerClick 已被 TwinButton 挡掉，
+            // 但回调仍可能被别处直接调用，所以这里再判一次状态与阈值。
+            if (!CanConfirm()) return;
+
+            if (HourDirty()) TwinWeatherBridge.ApplyHour(_hour, true);
+            if (WeatherDirty()) CommitPendingWeather();
+
+            _pendingHour = false;
+            _pendingWeatherIndex = -1;
+            _baselineHour = _hour;
+
+            RefreshButtons();     // 预览选中态 → 已提交选中态
+            RefreshStatus();
+            RefreshActions();
+        }
+
+        /// <summary>
+        /// 把待提交的天气真正写进桥。「随机」在这里才摇骰子 ——
+        /// 预览期只记录"用户点了随机"，不提前摇，否则每次刷新都会变一档。
+        /// SetAuto(false) 也从 OnPickWeather 挪到这里：预览不该接管自动轮换。
+        /// </summary>
+        private void CommitPendingWeather()
+        {
+            WeatherDirector dir = WeatherDirector.Instance;
+            if (dir != null && dir.auto) dir.SetAuto(false);
+
+            if (_pendingWeatherIndex == RandomIndex)
+            {
+                int pick = UnityEngine.Random.Range(0, 7);
+                TwinWeatherBridge.ApplyWeather((WeatherKind)pick);
+            }
+            else
+            {
+                TwinWeatherBridge.ApplyWeather(PickWeather[_pendingWeatherIndex]);
+            }
+        }
+
+        /// <summary>
+        /// 重置：立刻恢复真实时钟，并丢弃未提交的天气预览。
+        ///
+        /// 传 TwinClimate.HourOfDay 而不是 _hour：enable=false 时桥内部取的就是真实时钟
+        /// （ApplyHour 里 now = enable ? hour : TwinClimate.HourOfDay），
+        /// 传预览值只会让 _hourOverride 残留一个无用数字。
+        /// 天气预览从未写进桥，丢弃即可，不需要 ApplyWeather 去"撤销"。
+        /// </summary>
+        private void OnReset()
+        {
+            TwinWeatherBridge.ApplyHour(TwinClimate.HourOfDay, false);
+
+            _pendingHour = false;
+            _pendingWeatherIndex = -1;
+            _hour = NormalizeHour(TwinClimate.HourOfDay);
+            _baselineHour = _hour;
+
+            RefreshDial();
+            RefreshButtons();     // 天气四钮回到已提交档
+            RefreshStatus();
+            RefreshActions();
+        }
+
+        /// <summary>时间轴是否有可提交的改动（≥ 1 分钟）。</summary>
+        private bool HourDirty()
+        {
+            return _pendingHour &&
+                   MinuteDelta(_hour, _baselineHour) >= ConfirmMinuteDelta - MinuteEpsilon;
+        }
+
+        /// <summary>天气轴是否有可提交的改动。</summary>
+        private bool WeatherDirty()
+        {
+            return _pendingWeatherIndex >= 0;
+        }
+
+        /// <summary>
+        /// 确认是否可提交：**任一轴**有改动即可。
+        /// 时间轴仍守 1 分钟阈值；天气轴一点就亮（选天气是离散动作，没有"差不多"）。
+        /// </summary>
+        private bool CanConfirm()
+        {
+            return HourDirty() || WeatherDirty();
+        }
+
+        /// <summary>
+        /// 两个时刻的差（分钟）。**按环形算**：23:59 与 00:01 只差 2 分钟，
+        /// 直接相减会得到 1438 分钟，跨零点时确认钮会被错误点亮/判错。
+        /// </summary>
+        private static double MinuteDelta(double a, double b)
+        {
+            double d = Math.Abs(NormalizeHour(a) - NormalizeHour(b));
+            if (d > 12.0) d = 24.0 - d;
+            return d * 60.0;
+        }
+
+        /// <summary>刷确认钮的灰/亮。重置钮常亮，不需要动。</summary>
+        private void RefreshActions()
+        {
+            if (_confirmButton != null) _confirmButton.SetInteractable(CanConfirm());
+        }
+
         private void BuildStatus()
         {
             _statusText = TwinUIFactory.Label(_card, "TWS_Status", TwinTheme.FsCaption,
@@ -388,11 +604,16 @@ namespace SchoolTwin.UI
             double hour = deg / 15.0;              // 360° / 24h = 15°/h
             _hour = NormalizeHour(hour);
 
-            // 【同帧调】视觉侧与环境侧必须同一帧改，否则下一帧会看到"指针动了、天色没动"
-            TwinWeatherBridge.ApplyHour(_hour, true);
+            // 【2026-11-13 状态机改造】拖动只做**预览**，不再写桥。
+            // 旧实现在这里每帧 ApplyHour(_hour, true)，等于"拖动即生效"，
+            // 用户无法反悔、也无法只看看某个时刻的天色而不改数据。
+            // 现在写入只发生在 OnConfirm()（提交）与 OnReset()（恢复真实时钟）两处，
+            // 桥仍是改时刻的唯一入口（P13-13）。
+            _pendingHour = true;
 
             RefreshDial();
             RefreshStatus();
+            RefreshActions();
         }
 
         /// <summary>把小时规整到 [0,24)。</summary>
@@ -403,25 +624,36 @@ namespace SchoolTwin.UI
             return r;
         }
 
+        /// <summary>
+        /// 天气四钮：**只记预览，不写桥**（2026-11-13 纳入确认）。
+        ///
+        /// 旧实现点一下就 ApplyWeather + SetAuto(false) 立即改场景，
+        /// 与"拖动预览 → 确认提交"的新状态机矛盾：用户选完天气还没点确认，
+        /// 天色已经变了。现在只记录索引，选中态与底行文案显示预览，
+        /// 真正写入统一在 <see cref="CommitPendingWeather"/>。
+        ///
+        /// 「随机」不在这里摇骰子 —— 预览期摇了会让每次刷新显示都跳一档。
+        /// </summary>
         private void OnPickWeather(int index)
         {
-            // 手动选天气 = 接管控制权，自动轮换退出（否则 40 秒后被翻走，用户以为没生效）
-            WeatherDirector dir = WeatherDirector.Instance;
-            if (dir != null && dir.auto) dir.SetAuto(false);
+            if (index < 0 || index >= WeatherNames.Length) return;
 
-            if (index == RandomIndex)
-            {
-                // "随机"是一个动作而不是一档状态：从视觉 7 档里随机取一个
-                int pick = UnityEngine.Random.Range(0, 7);
-                TwinWeatherBridge.ApplyWeather((WeatherKind)pick);
-            }
-            else
-            {
-                TwinWeatherBridge.ApplyWeather(PickWeather[index]);
-            }
+            _pendingWeatherIndex = index;
 
             RefreshButtons();
             RefreshStatus();
+            RefreshActions();     // 天气一改，确认钮立刻高亮
+        }
+
+        /// <summary>
+        /// 当前用于显示的天气档：有预览用预览，否则用已提交档。
+        /// 「随机」预览没有确定档，返回 null 让调用方走"未定"文案。
+        /// </summary>
+        private WeatherKind? DisplayWeather()
+        {
+            if (_pendingWeatherIndex < 0) return TwinWeatherBridge.CurrentVisual;
+            if (_pendingWeatherIndex == RandomIndex) return null;
+            return PickWeather[_pendingWeatherIndex];
         }
 
         private void RefreshAll()
@@ -429,6 +661,7 @@ namespace SchoolTwin.UI
             RefreshDial();
             RefreshButtons();
             RefreshStatus();
+            RefreshActions();
         }
 
         private void RefreshDial()
@@ -457,15 +690,20 @@ namespace SchoolTwin.UI
         {
             if (_buttons == null) return;
 
-            WeatherKind cur = TwinWeatherBridge.CurrentVisual;
-
-            // 四档里哪一格"代表"了当前视觉档。注意多对一：
-            // 视觉侧是 Overcast/Storm/Fog 时，面板上没有对应格 —— 那就一格都不选中。
-            // 这不是缺陷：面板只是"四个快捷入口"，不代表完整状态（完整状态在底行文字里）。
+            // 预览优先：点过天气四钮但还没确认时，选中态跟预览走，
+            // 让用户看得见"我选了什么还没提交"。确认/重置后回到已提交档。
             int sel = -1;
-            if (cur == WeatherKind.Clear) sel = 1;
-            else if (cur == WeatherKind.Rain) sel = 2;
-            else if (cur == WeatherKind.Snow) sel = 3;
+            if (_pendingWeatherIndex == RandomIndex) sel = RandomIndex;
+            else
+            {
+                WeatherKind? cur = DisplayWeather();
+                if (cur.HasValue)
+                {
+                    if (cur.Value == WeatherKind.Clear) sel = 1;
+                    else if (cur.Value == WeatherKind.Rain) sel = 2;
+                    else if (cur.Value == WeatherKind.Snow) sel = 3;
+                }
+            }
 
             for (int i = 0; i < _buttons.Length; i++)
             {
@@ -484,8 +722,14 @@ namespace SchoolTwin.UI
         {
             if (_statusText == null) return;
 
-            WeatherKind w = TwinWeatherBridge.CurrentVisual;
-            double h = _dragging ? _hour : TwinClimate.HourOfDay;
+            // 天气文案跟预览走；「随机」预览期没有确定档，显示"随机（待确认）"。
+            WeatherKind? w = DisplayWeather();
+
+            // 拖动中或有待提交时间预览时，底行的"白天/夜间"跟表盘预览走；
+            // 否则跟已提交时刻/真实时钟走。只改天气时这一项不动（两条轴独立）。
+            // ⚠️ 室温仍取 TwinClimate.IndoorNowC()（数据侧权威），**不随预览变** ——
+            // 预览尚未写入桥，数据侧没有这个时刻/天气，硬造一个温度会造成"面板比数据快一步"。
+            double h = (_dragging || _pendingHour) ? _hour : TwinClimate.HourOfDay;
 
             // 昼 = 06:00–18:00，夜 = 其余（图纸 §2.4 的文案规则，与表盘数字标口径一致）
             bool day = h >= 6.0 && h < 18.0;
@@ -515,11 +759,16 @@ namespace SchoolTwin.UI
             _statusText.text = _sb.ToString();
         }
 
-        /// <summary>7 档的中文名。与 EnvironmentState.WeatherLabel 同口径，但那边在 Weather 命名空间，
-        /// 这里为了不让 UI 层直接依赖那个静态方法（它还需要 EnvironmentState 存在），单独给一份。</summary>
-        private static string WeatherLabel(WeatherKind w)
+        /// <summary>
+        /// 7 档的中文名。与 EnvironmentState.WeatherLabel 同口径，但那边在 Weather 命名空间，
+        /// 这里为了不让 UI 层直接依赖那个静态方法（它还需要 EnvironmentState 存在），单独给一份。
+        /// 传 null 表示「随机」预览期尚未定档 —— 不显示具体天气名，避免误导。
+        /// </summary>
+        private static string WeatherLabel(WeatherKind? w)
         {
-            switch (w)
+            if (!w.HasValue) return "随机（待确认）";
+
+            switch (w.Value)
             {
                 case WeatherKind.Cloudy: return "多云";
                 case WeatherKind.Overcast: return "阴";
@@ -546,7 +795,7 @@ namespace SchoolTwin.UI
             // ══════════════════════════════════════════════════════════════
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                Close();      // Close 内部负责恢复真实时钟 + 回调 + 销毁
+                Close();      // Close 内部负责回调 + 销毁（2026-11-13 起不再恢复真实时钟，设定时刻保持生效）
                 return;
             }
 
@@ -554,6 +803,12 @@ namespace SchoolTwin.UI
             // 让表盘跟上。这是"打开面板后时钟仍在走"的唯一来源 ——
             // 少了这段，不拖的时候面板会定在打开那一刻不动，看起来像卡住了。
             if (_dragging) return;
+
+            // 【2026-11-13】有未提交预览时同样挡住：松手那一帧若被真实时钟反拉，
+            // 用户刚拖好的时刻会被立刻冲掉，预览根本留不到点「确认」。
+            // 单独写一行而不是并进上一行的 || —— P13-24 判据锁的是 `if (_dragging) return;`
+            // 这条字面，合并会让它失配；拆开则判据与新语义同时成立。
+            if (_pendingHour) return;
 
             double now = NormalizeHour(TwinClimate.HourOfDay);
 

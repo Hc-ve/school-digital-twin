@@ -233,7 +233,12 @@ namespace SchoolTwin.Weather
                     sunTint = new Color(1f, 0.66f, 0.42f);
                     break;
                 case TimeOfDay.Night:
-                    sunMul = 0.10f; expMul = 0.34f; ambMul = 0.30f;
+                    // P39e（迭代6·反弹底色）：ambMul 0.30→0.55。用户验收点：走廊墙面出现"水位线"——
+                    // fill 锥体边缘以上全黑。根因 = D13 后场景零反弹，锥体边缘以上没有天花板反弹光可填。
+                    // D13 清掉烘焙后环境光已"复活"（不再被烘焙贴图顶掉），夜晚档抬 ambMul 相当于
+                    // 给全场景垫一层"反弹底色"，把水位线糊成平滑渐变；灯具下的光池保留（保明暗结构）。
+                    // 白天档 ambMul=1 不动（零变化红线）；外景随动需复检（若夜景外墙过亮，压 fogMul 补偿）。
+                    sunMul = 0.10f; expMul = 0.34f; ambMul = 0.55f;
                     skyMul = 0.20f; blueBias = 1.70f; fogMul = 0.42f;
                     sunTint = new Color(0.58f, 0.68f, 1f);
                     break;
