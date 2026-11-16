@@ -28,7 +28,13 @@ namespace SchoolTwin.Weather
         // 「室外地面 + EmitHeight」（见 UpdateGround :3912 emitPos.y = outdoorGroundY + EmitHeight），
         // 不是字面的"相机上方"。寿命不用跟着改：UpdateRainLifetime / UpdateSnowLifetime
         // 是按实测落距解 √(2h/g) 的解析式，落距变大自动重算。
-        private const float EmitHeight = 60f;    // 撒播高度（室外地面以上）
+        private const float EmitHeight = 60f;    // 撒播高度基底（室外地面以上）
+        // 【P43 追加 11-17 二轮】发射高度随相机自适应：自由相机（F3）升到高空俯瞰时，
+        // 固定 60m 的发射面就是一顶"雪天花板"—— 主理人航拍截图里看到的正是它。
+        // 实际发射 Y = max(地面+60, 相机+40)，封顶 地面+250（封顶是为了给寿命解析式与
+        // 粒子缓冲一个可计算的边界，见两处 maxParticles 的推导）。xz 仍锚角色（F19）。
+        private const float CamEmitClearance = 40f;   // 发射面至少在相机上方这么多
+        private const float MaxEmitAGL = 250f;        // 相对室外地面的发射高度上限
         private const float DomeRadius = 380f;   // 云穹顶半径，必须小于相机 farClip(2000)
 
         private const float RainRateMax = 3200f; // rain = 1 时每秒发射数
@@ -378,11 +384,11 @@ namespace SchoolTwin.Weather
             main.startColor = new Color(0.72f, 0.82f, 0.96f, 0.55f);
             main.gravityModifier = 1.3f;                  // 靠重力加速，比固定速度自然
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            // 【P43 追加】撒播 16→60m 后落程变长、寿命从 1.6s 涨到 ~3.0s，
-            // 同发速率下活跃粒子 ≈ rate × t：Medium 3200×3.0≈9.8k，High(×2)≈19.6k。
-            // 旧 9000 会被静默截断（缓冲满 = 新粒子不发射 = 下雪变稀，还查不出原因，
-            // 与 P28-01 PrintMax 同型病），按 High 满载留 22% 余量。
-            main.maxParticles = 24000;
+            // 【P43 追加】撒播高度随相机自适应后（最高 地面+250m），落程更长：
+            // 250m 时雨寿命 t=√(500/12.75)≈6.1s，活跃粒子 ≈ rate × t：
+            // Medium 3200×6.1≈19.5k，High(×2)≈39k。旧 24000 在高空档会被静默截断
+            // （缓冲满 = 新粒子不发射 = 下雪变稀，还查不出原因，与 P28-01 同型病）。
+            main.maxParticles = 45000;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
 
             var em = ps.emission;
@@ -518,10 +524,11 @@ namespace SchoolTwin.Weather
             main.startColor = new Color(1f, 1f, 1f, 0.9f);
             main.gravityModifier = 0.035f;                 // 几乎不加速，慢慢飘
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            // 【P43 追加】撒播 16→60m 后雪寿命从 ~9.6s 涨到 ~18.3s（仍在 Clamp[4,30] 内），
-            // 活跃粒子 ≈ rate × t：Medium 520×18.3≈9.5k，High(×2)≈19k。旧 6000 远不够，
-            // 按 High 满载留 15% 余量（缓冲满会静默截断发射，见 BuildRain 同款注释）。
-            main.maxParticles = 22000;
+            // 【P43 追加】撒播高度随相机自适应后（最高 地面+250m），雪寿命最高
+            // t=√(500/0.343)≈37.4s（Clamp 上限已同步 30→40）：活跃粒子
+            // Medium 520×37.4≈19.4k，High(×2)≈38.9k。旧 22000 在高空档不够
+            // （缓冲满会静默截断发射，见 BuildRain 同款注释）。
+            main.maxParticles = 45000;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
 
             var em = ps.emission;
@@ -863,32 +870,21 @@ namespace SchoolTwin.Weather
             BuildSnowFar();   // 远场白兜底：覆盖近场盘到雪天雾起之间的环带，消除地平线裸地形缺口
             EnsureTreeSnow(); // 自动挂载树根积雪组件(《异环》"树根被雪埋"近似)
             // ══════════════════════════════════════════════════════════════
-            // 【P13 Bug3 已停用 —— 2026-11-05 12:50】
+            // 【P13 Bug3 雪壳 v2 已复用 —— 2026-11-17 主理人要求屋顶/建筑顶积雪】
             //
-            // EnsureRoofSnow() 打出来的雪壳**污染了整个场景**，四路连带故障：
-            //
-            //   ① 机房幕布发黑：雪壳 renderQueue=2997，盖在幕布与所有屏幕之上
-            //   ② 角色浮空：雪壳是朝上大面，被 SampleGroundHeight 选中当"地面"
-            //   ③ 脚印消失：同一份错误采样，脚印世界坐标全算错
-            //   ④ 屋顶仍无雪：4067 个面里混了大量非屋顶面，自己糊成一团
-            //
-            // ── 真根因：minRoofY 是**世界绝对高度**，不是"相对该建筑" ──────
-            // 机房在 1F、天花板约 3m，而 minRoofY=3.2f 只拦得住地面铺装。
-            // 于是室内二层地板、走廊吊顶、楼梯平台、看台顶面全被当成"屋顶"
-            // 复制进了雪壳 —— 截图上那块从天花板斜插进机房的黑色几何体就是它。
-            //
-            // ── 为什么不是调参数能救 ──────────────────────────────────
-            // 抬高 minRoofY 会连带漏掉 1~2 层楼的屋顶（教室楼本身才 12m）；
-            // 按建筑根节点分组又需要先有一份可信的建筑清单，而本工程
-            // 1393 个 PrefabInstance、建筑网格全在 prefab 里，没有现成清单。
-            // 答辩前一天动这个，风险远大于收益。
-            //
-            // ── 处置：整块停用，保留代码与文档，等机房稳定后单独一轮重做 ──
-            // SnowOnRoofs.cs 文件保留（不删），只摘掉这里的挂载调用；
-            // shader 侧的 _MaskOff / _Cull 是**纯加法**（默认值 = 原行为），
-            // 留着不影响地面雪盘，重做时直接可用。
+            // 11-05 事故的四路连带（幕布发黑/角色浮空/脚印消失/自己糊成一团），
+            // v2 按分册 §八判据逐条堵死，防线明细见 SnowOnRoofs.cs 头注：
+            //   ① 判屋顶不再用世界绝对高度 → 「相对本网格自身竖向跨度 ≥60%」+「向上射线
+            //      4m 确认无遮挡」双过滤，室内楼板/吊顶/楼梯平台全部出局；
+            //   ② 一楼一壳（每来源网格一个小 mesh），不再合成全场景单块；
+            //   ③ renderQueue 2996（屏幕是 Geometry 2000；且室内面已被 ① 出局，
+            //      与屏幕不再空间重叠）；
+            //   ④ 壳**不带 Collider**（RequireComponent 只有 MeshFilter/MeshRenderer）
+            //      → SampleGroundHeight 的 Physics 射线天然穿透，角色/脚印免疫；
+            //   ⑤ IndoorByRendererRoof 建表加了雪壳着色器/名字双排除（本文件 :2450 附近）。
+            // 验收时必须复测的四个老病灶：机房幕布、角色落地、脚印、室内判定。
             // ══════════════════════════════════════════════════════════════
-            // EnsureRoofSnow();
+            EnsureRoofSnow();
         }
 
         /// <summary>
@@ -2068,7 +2064,9 @@ namespace SchoolTwin.Weather
             float t = (-V0 + Mathf.Sqrt(V0 * V0 + 2f * G * drop)) / G;
 
             // 收 2%：让 alpha 归零发生在贴地前一点点，雪片"落进"地面而不是"消失在半空"。
-            t = Mathf.Clamp(t * 0.98f, 4f, 30f);
+            // 上限 30→40：发射高度随相机自适应后（MaxEmitAGL=250m），落距 250m 时
+            // t=√(500/0.343)≈37.4s，30 的旧上限会让高空撒的雪"半空蒸发"。
+            t = Mathf.Clamp(t * 0.98f, 4f, 40f);
 
             var main = snowPs.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(t * 0.97f, t);
@@ -2472,6 +2470,14 @@ namespace SchoolTwin.Weather
                     if (rd == null) continue;
                     if (rd is ParticleSystemRenderer) continue;      // 粒子不要
                     if (rd is LineRenderer) continue;                // 线不要
+                    // 【P43 追加 11-17】雪壳 v2 的 Renderer 不要 —— 这是屋顶雪壳事故
+                    // 四路连带之一（室内判定翻转）的通路：雪壳世界包围盒罩住全校园，
+                    // "顶面在头顶之上 + 玩家 XZ 在盒内"会恒成立 → 全场景被判室内。
+                    // 双保险：按雪壳专用着色器名 + 按物体名前缀各挡一道（SnowOnRoofs v2
+                    // 的壳用 CampusUI/SnowGround 着色器、物体名 RoofSnowShell 前缀）。
+                    if (rd.sharedMaterial != null && rd.sharedMaterial.shader != null
+                        && rd.sharedMaterial.shader.name == "CampusUI/SnowGround") continue;
+                    if (rd.name.StartsWith("RoofSnowShell")) continue;
                     bool isSelf = false;
                     for (int k = 0; k < all.Length; k++)
                         if (all[k] == rd) { isSelf = true; break; }
@@ -3922,7 +3928,15 @@ namespace SchoolTwin.Weather
             // ══════════════════════════════════════════════════════════════════
             if (rainPs != null || snowPs != null)
             {
-                Vector3 emitPos = new Vector3(anchorSrc.x, outdoorGroundY + EmitHeight, anchorSrc.z);
+                // 【P43 追加 11-17 二轮】发射 Y 随相机自适应：自由相机升空俯瞰时，
+                // 固定高度的发射面会被相机压在头顶之下（航拍视角看到"雪天花板"）。
+                // 取「地面+60」与「相机+40」的较大者，封顶「地面+250」——
+                // 封顶是给寿命解析式（雪 Clamp 上限 40s）与粒子缓冲（45000）一个可算的边界。
+                float camY = (cam != null) ? cam.transform.position.y : (outdoorGroundY + EmitHeight);
+                float emitY = Mathf.Min(
+                    Mathf.Max(outdoorGroundY + EmitHeight, camY + CamEmitClearance),
+                    outdoorGroundY + MaxEmitAGL);
+                Vector3 emitPos = new Vector3(anchorSrc.x, emitY, anchorSrc.z);
                 if (rainPs != null) rainPs.transform.position = emitPos;
                 if (snowPs != null) snowPs.transform.position = emitPos;
             }

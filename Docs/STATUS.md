@@ -1,18 +1,18 @@
 # 项目状态看板
 
 > **自动生成，不要手改。** 刷新命令：`python Tools/status.py`
-> 生成时间：**2026-11-17 00:42:34**
+> 生成时间：**2026-11-17 01:38:53**
 >
 > 本看板只认**可验证的证据**（文件时间戳 / git 状态 / 编译产物），不认「他说改完了」。
 > 凡是算不出来的，宁可不写 —— 看板滞后比没有看板更坏。
 
 ## 0. 一句话
 
-**断点正在施工**：最后改动 `WeatherVisuals.cs`（9 分钟前）。未提交代码文件 **1** 个。
+**断点正在施工**：最后改动 `SnowOnRoofs.cs`（27 分钟前）。未提交代码文件 **5** 个。
 
 ## 0.5 验收判据自检（这活到底做完没有）
 
-共 **382** 条判据：**382 通过** / 0 未过 / 0 无法判定。
+共 **389** 条判据：**389 通过** / 0 未过 / 0 无法判定。
 
 > 判据来自 `Tools/status_checks.txt`，全部是 `grep` / 文件存在性这类**机器可验证**的东西。
 > 没有「完成 80%」这种只能人填的数 —— 那种数一定滞后、一定美化。
@@ -296,17 +296,17 @@
 | `P13-55` | 【Bug3】朝上判据必须用顶点法线平均（叉积方向由绕序决定，第三方模型绕序不一定统一） | ✅ 通过 | 1 处（需 =1） |
 | `P13-56` | 【Bug3】屋顶雪壳必须钉世界原点并脱离跟随相机的父节点（白线 bug 同型病） | ✅ 通过 | 1 处（需 =1） |
 | `P13-57` | 【Bug3】挂载判存在必须全场景查找（脱离层级后 GetComponentInChildren 会漏判 → 重复创建） | ✅ 通过 | 1 处（需 =1） |
-| `P13-58` | 【Bug3】必须跳过已用积雪着色器的几何（否则地面雪盘被收进雪壳 → 白度翻倍） | ✅ 通过 | 2 处（需 ≥2） |
-| `P13-59` | 【Bug3】雪壳必须设 _MaskOff=1（_SnowTex 是 Clamp 遮罩，世界 UV 超出后被钳到 alpha=0 边缘 → 整片 discard） | ✅ 通过 | 1 处（需 =1） |
-| `P13-60` | 【Bug3】雪壳剔除模式必须跟原屋顶一致（Cull Off 会从室内天花板露白） | ✅ 通过 | 1 处（需 =1） |
+| `P13-58` | 【Bug3】必须跳过已用积雪着色器的几何（否则地面雪盘被收进雪壳 → 白度翻倍） | ✅ 通过 | 3 处（需 ≥2） |
+| `P13-59` | 【Bug3】雪壳必须设 _MaskOff=1（_SnowTex 是 Clamp 遮罩，世界 UV 超出后被钳到 alpha=0 边缘 → 整片 discard；v2 改由 MakeShellMaterial 统一创建，变量名 shellMat→m，意图不变 11-17） | ✅ 通过 | 1 处（需 =1） |
+| `P13-60` | 【Bug3】雪壳剔除模式必须跟原屋顶一致（Cull Off 会从室内天花板露白；v2 同上变量名变更 11-17） | ✅ 通过 | 1 处（需 =1） |
 | `P13-61` | 【Shader】屋顶模式下覆盖率不采 _SnowTex alpha | ✅ 通过 | 1 处（需 =1） |
 | `P13-62` | 【Shader】Cull 必须由属性驱动（默认 0=Off 保持地面雪盘原行为） | ✅ 通过 | 1 处（需 =1） |
 | `P13-63` | 【Shader】屋顶模式厚薄/微法线改从可平铺 _DetailTex 取（sn.r 被 Clamp 后是常数，梯度恒 0） | ✅ 通过 | 1 处（需 =1） |
 | `P13-64` | 【Bug3】雪壳顶点法线一律给 up（坡屋顶用原法线会偏灰） | ✅ 通过 | 3 处（需 ≥3） |
-| `P13-65` | 【Bug3】索引必须 UInt32（顶点可超 65535） | ✅ 通过 | 1 处（需 =1） |
-| `P13-66` | 【Bug3】雪壳 renderQueue 2997（排在近场 2996 / 远场 2995 之上） | ✅ 通过 | 1 处（需 =1） |
-| `P13-67` | 【事故】雪壳营锥不得被调用（注释行不算命中，2026-11-05 幕布发黑/浮空/脚印/无雪四路连带） | ✅ 通过 | 0 处 ✔ |
-| `P13-68` | 【事故】SnowOnRoofs 必须有事故保险开关（即使被别处 AddComponent 也不 Build） | ✅ 通过 | 1 处（需 =1） |
+| `P13-65` | 【Bug3】索引必须 UInt32（顶点可超 65535；v2 变量 shellMesh→mesh 11-17） | ✅ 通过 | 1 处（需 =1） |
+| `P13-66` | 【Bug3→v2 更新 11-17】雪壳 renderQueue 2996（v1 用 2997 是四路连带之一；屏幕是 Geometry 2000，v2 不收室内面后与屏幕无空间重叠，2996 与近场雪盘同族即可） | ✅ 通过 | 1 处（需 =1） |
+| `P13-67→v2 反转（11-17）` | 【事故解除】EnsureRoofSnow 必须恢复调用（v2 按 §八判据重做：列顶判据/一楼一壳/无 Collider/Indoor 排除/烘焙链，四路连带各有独立防线；主理人明确要求楼顶积雪） | ✅ 通过 | 1 处（需 =1） |
+| `P13-68` | 【事故】SnowOnRoofs 必须保留保险开关（开关名不许删；v2 置 false 放行但 kill-switch 语义不变，复发即拨回 true） | ✅ 通过 | 1 处（需 =1） |
 | `P13-69` | 【事故】事故保险必须在 Start 里生效并早退 | ✅ 通过 | 1 处（需 =1） |
 | `P13-70` | 【回归】摘雪壳后 Bug2 观景水坑必须仍在（不许顺手回滚） | ✅ 通过 | 2 处（需 ≥2） |
 | `P13-71` | 【回归】摘雪壳后 Bug1 室内剔除必须仍在 | ✅ 通过 | 3 处（需 ≥1） |
@@ -401,6 +401,13 @@
 | `P43-06` | 【修复2·防回潮】「随机」不许再摇骰子（旧 Random.Range(0,7) 一次性掷骰已删） | ✅ 通过 | 0 处 ✔ |
 | `P43-07` | 【修复3】无预览且自动轮换时高亮「随机」（模式语义优先于当前天气档，不再误导"晴天被钉死"） | ✅ 通过 | 1 处（需 =1） |
 | `P43-08` | 【修复4】冻结/恢复/起始三处基准同源（都取 NormalizeHour(TwinClimate.HourOfDay)；Pause 曾独用墙钟致每次开合面板丢一帧游戏时间） | ✅ 通过 | 3 处（需 =3） |
+| `P43-09` | 【事故红线】雪壳永不带 Collider（SampleGroundHeight/脚印走物理射线，壳无碰撞体才天然免疫；v1 角色浮空即此通路） | ✅ 通过 | 0 处 ✔ |
+| `P43-10` | 【事故红线】IndoorByRendererRoof 建表必须排除雪壳（v1 室内判定翻转的通路：壳大包围盒恒满足"顶在头上+人在盒内"） | ✅ 通过 | 1 处（需 =1） |
+| `P43-11` | 【防回潮】撒播高度必须保留相机自适应抬升（固定高度会被自由相机俯瞰压成"雪天花板"） | ✅ 通过 | 1 处（需 =1） |
+| `P43-12` | 【v2 核心】雪壳列顶判据存在（colTop 逐列最高朝上面；世界绝对高度/纯相对高度均已被证伪） | ✅ 通过 | 4 处（需 ≥2） |
+| `P43-13` | 【烘焙链路】编辑器烘焙工具必须存在（静态批处理使建筑运行时网格不可读，仅靠运行时扫描楼顶永远缺失） | ✅ 通过 | 存在 |
+| `P43-14` | 【烘焙链路】烘焙产物必须存在（SnowOnRoofs 路径 A 首选资源；缺失则自动退化为只扫未合批网格） | ✅ 通过 | 存在 |
+| `P43-15` | 【树冠覆盖】树冠雪帽构建存在（地形树材质是共享资产不许改 _Color，帽是独立几何零污染） | ✅ 通过 | 1 处（需 =1） |
 
 > ✅ **全部判据通过。** 可以进入验收（但不能替代 play 视觉验收）。
 
@@ -410,70 +417,86 @@
 
 | 项 | 时间 |
 |---|---|
-| 最后一个 .cs 改动 | 11-17 00:33:30（`WeatherVisuals.cs`） |
-| dll 编译时间 | 11-17 00:33:59 |
+| 最后一个 .cs 改动 | 11-17 01:11:51（`SnowOnRoofs.cs`） |
+| dll 编译时间 | 11-17 01:29:37 |
 
-> ✅ **已生效**，编译晚于最后改动 29 秒。可以 play 验收。
+> ✅ **已生效**，编译晚于最后改动 1067 秒。可以 play 验收。
 
 ## 2. 未提交改动（= 有丢失风险的工作）
 
 基线 §6.8：多人在同一工作区写同一批文件，冲突不是 merge conflict，是**后写覆盖先写**，且被覆盖方收不到提示。
 
-共 **36** 个文件未提交（代码 1 / 文档与其他 34）。
+共 **51** 个文件未提交（代码 5 / 文档与其他 43）。
 
 | 类型 | 文件 | 最后修改 |
 |---|---|---|
-| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 9 分钟前 |
-| 文档 | `Docs/P43_昼夜循环_验收与修复回执_断点.md` | 21 秒前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 7 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 34 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f18.png` | 1 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 26 秒前 |
+| 代码 | `Assets/_Project/Scripts/Weather/SnowOnRoofs.cs` | 27 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/SnowOnTrees.cs` | 32 分钟前 |
+| 代码 | `Assets/_Project/Scripts/Weather/WeatherVisuals.cs` | 37 分钟前 |
+| 文档 | `Docs/STATUS.md` | 1 分钟前 |
+| 其他 | `ProjectSettings/ProjectSettings.asset` | 12 分钟前 |
+| 其他 | `tools/status_checks.txt` | 0 秒前 |
+| 代码 | `Assets/_Project/Editor/RoofSnowBakeTool.cs` | 9 分钟前 |
+| 其他 | `Assets/_Project/Editor/RoofSnowBakeTool.cs.meta` | 25 分钟前 |
+| 其他 | `Assets/_Project/Weather.meta` | 25 分钟前 |
+| 其他 | `Assets/_Project/Weather` | 25 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f10.png` | 6 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f12.png` | 25 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f13.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f14.png` | 13 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f15.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f16.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f18.png` | 52 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_0_f19.png` | 56 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_0_f20.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f30.png` | 7 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 39 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 3 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 34 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f40.png` | 1 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 20 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 24 秒前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f23.png` | 6 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f29.png` | 25 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f30.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f31.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f32.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f33.png` | 4 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f35.png` | 13 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f36.png` | 30 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f40.png` | 57 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f41.png` | 52 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f42.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_1_f43.png` | 56 分钟前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_1_f45.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 39 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f49.png` | 7 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 34 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f64.png` | 1 分钟前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f66.png` | 21 秒前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 1 小时前 |
-| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 19 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f34.png` | 6 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f41.png` | 25 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f47.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f49.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f50.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f53.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f55.png` | 1 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f57.png` | 13 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f59.png` | 3 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f64.png` | 57 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f65.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f66.png` | 52 分钟前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f67.png` | 2 小时前 |
+| 其他 | `Docs/QA/evidence/P37_auto/auto_2_f68.png` | 1 小时前 |
 | 其他 | `Docs/QA/evidence/P37_auto/auto_2_f71.png` | 2 小时前 |
-| 其他 | `Docs/QA/evidence/P43_snow_column_far.png` | 2 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snow_emitheight60.png` | 5 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snow_sky_look_up.png` | 3 分钟前 |
-| 其他 | `Docs/QA/evidence/P43_snow_sky_look_up2.png` | 2 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_roof_closeup.png` | 3 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snowcover_aerial.png` | 24 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snowcover_aerial2.png` | 6 分钟前 |
+| 其他 | `Docs/QA/evidence/P43_snowcover_aerial_final.png` | 3 分钟前 |
 
 ## 3. 谁在动（按文件修改时间反推，不需要任何人填报）
 
 | 专家 | 最近触碰的文件 | 时间 | 活跃度 |
 |---|---|---|---|
-| 断点 | `WeatherVisuals.cs` | 9 分钟前 | 🔥 正在干 |
+| 断点 | `SnowOnRoofs.cs` | 27 分钟前 | 🔥 正在干 |
 | 见微 | `10_时间天气面板_设计试绘_夜晚雪天.png` | 12 天前 | 歇着 |
 | 心跳 | `P3_时序历史层_调研报告_断点.md` | 16 天前 | 歇着 |
-| 挑刺 | `auto_2_f66.png` | 21 秒前 | 🔥 正在干 |
+| 挑刺 | `P43_snowcover_aerial_final.png` | 3 分钟前 | 🔥 正在干 |
 | 落笔 | — | — | 无记录 |
 
 ## 4. 今日提交
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 00:42 | `68c5384` | feat(P43): 雨雪撒播高度 16→60m（主理人反馈楼顶一线凭空出现） |
 | 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 
 ## 5. 文档新鲜度（谁过期了）
@@ -482,9 +505,9 @@
 
 | 文档 | 行数 | 最后修改 | 状态 |
 |---|---|---|---|
-| `P43_昼夜循环_验收与修复回执_断点.md` | 76 | 21 秒前 | ✅ 新鲜 |
-| `STATUS.md` | 525 | 29 分钟前 | ✅ 新鲜 |
-| `P43_昼夜循环_调研_断点.md` | 195 | 4 小时前 | ✅ 新鲜 |
+| `STATUS.md` | 549 | 1 分钟前 | ✅ 新鲜 |
+| `P43_昼夜循环_验收与修复回执_断点.md` | 76 | 56 分钟前 | ✅ 新鲜 |
+| `P43_昼夜循环_调研_断点.md` | 195 | 5 小时前 | ✅ 新鲜 |
 | `P42_餐厅梁柱死黑_踩坑日志.md` | 148 | 5 小时前 | ✅ 新鲜 |
 | `P42_室内补光_调光方法论_打光.md` | 525 | 5 小时前 | ✅ 新鲜 |
 | `P39_灯光视角突变与过曝_方案.md` | 220 | 1 天前 | ⚠️ 超 24h |
@@ -510,6 +533,7 @@
 
 | 时间 | 提交 | 说明 |
 |---|---|---|
+| 11-17 00:42 | `68c5384` | feat(P43): 雨雪撒播高度 16→60m（主理人反馈楼顶一线凭空出现） |
 | 11-17 00:16 | `dc44ff6` | feat(P43): 昼夜循环落地+验收修复 —— 密度断链/随机语义/初始高亮/冻结同源 四项全修 |
 | 11-16 20:31 | `d7e5ee4` | docs(P43): 昼夜循环调研阶段交付 —— 断点 8章19条带来源，零实现代码 |
 | 11-16 19:49 | `8c334c8` | docs(P42): 补录调光方法论 + 踩坑日志配套引用（打光补充） |
@@ -519,7 +543,6 @@
 | 11-14 00:54 | `a00cf88` | fix(P36): 天花板过曝结案 —— 补光点 Point→Spot 朝下(150°) + 灯管 HDR emission + Bloom 运行时接管 |
 | 11-13 15:37 | `c0a4796` | feat(P35): 室内补光层 v4（灯位补光+glow接管+应急底光）+ 方案标定文档 + pixelLightCount 12→20 |
 | 11-12 17:35 | `db4add8` | build(D13): 发黑修复后首次重打包成功 —— 新 exe 已产出，F22 无回归 |
-| 11-12 16:56 | `6dd16d3` | fix(D15): 暖气断电染色豁免落地 + 工作区大清理 + D15 定性更正（断点 11-10 汇报延迟裁决） |
 
 ---
 

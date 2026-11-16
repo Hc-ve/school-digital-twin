@@ -625,16 +625,16 @@ P13-55 | 【Bug3】朝上判据必须用顶点法线平均（叉积方向由绕�
 P13-56 | 【Bug3】屋顶雪壳必须钉世界原点并脱离跟随相机的父节点（白线 bug 同型病） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:transform\.SetParent\(null, true\);
 P13-57 | 【Bug3】挂载判存在必须全场景查找（脱离层级后 GetComponentInChildren 会漏判 → 重复创建） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:Object\.FindObjectOfType<SnowOnRoofs>\(true\)
 P13-58 | 【Bug3】必须跳过已用积雪着色器的几何（否则地面雪盘被收进雪壳 → 白度翻倍） | grep+:2:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:CampusUI/SnowGround"\)
-P13-59 | 【Bug3】雪壳必须设 _MaskOff=1（_SnowTex 是 Clamp 遮罩，世界 UV 超出后被钳到 alpha=0 边缘 → 整片 discard） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.SetFloat\(IdMaskOff, 1f\);
-P13-60 | 【Bug3】雪壳剔除模式必须跟原屋顶一致（Cull Off 会从室内天花板露白） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.SetFloat\(IdCullProp, 2f\);
+P13-59 | 【Bug3】雪壳必须设 _MaskOff=1（_SnowTex 是 Clamp 遮罩，世界 UV 超出后被钳到 alpha=0 边缘 → 整片 discard；v2 改由 MakeShellMaterial 统一创建，变量名 shellMat→m，意图不变 11-17） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:m\.SetFloat\(IdMaskOff, 1f\);
+P13-60 | 【Bug3】雪壳剔除模式必须跟原屋顶一致（Cull Off 会从室内天花板露白；v2 同上变量名变更 11-17） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:m\.SetFloat\(IdCullProp, 2f\);
 P13-61 | 【Shader】屋顶模式下覆盖率不采 _SnowTex alpha | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:float cov = roofMode \? 1\.0 : sn\.a;
 P13-62 | 【Shader】Cull 必须由属性驱动（默认 0=Off 保持地面雪盘原行为） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:Cull \[_Cull\]
 P13-63 | 【Shader】屋顶模式厚薄/微法线改从可平铺 _DetailTex 取（sn.r 被 Clamp 后是常数，梯度恒 0） | grep:1:Assets/_Project/Scripts/Weather/Resources/SnowGround.shader:float thickSrc = roofMode
 P13-64 | 【Bug3】雪壳顶点法线一律给 up（坡屋顶用原法线会偏灰） | grep+:3:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:norms\.Add\(Vector3\.up\);
-P13-65 | 【Bug3】索引必须 UInt32（顶点可超 65535） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMesh\.indexFormat = IndexFormat\.UInt32;
-P13-66 | 【Bug3】雪壳 renderQueue 2997（排在近场 2996 / 远场 2995 之上） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:shellMat\.renderQueue = 2997;
-P13-67 | 【事故】雪壳营锥不得被调用（注释行不算命中，2026-11-05 幕布发黑/浮空/脚印/无雪四路连带） | grep0:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:^\s*EnsureRoofSnow\(\);
-P13-68 | 【事故】SnowOnRoofs 必须有事故保险开关（即使被别处 AddComponent 也不 Build） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:DISABLED_BY_INCIDENT_20261105 = true;
+P13-65 | 【Bug3】索引必须 UInt32（顶点可超 65535；v2 变量 shellMesh→mesh 11-17） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:mesh\.indexFormat = IndexFormat\.UInt32;
+P13-66 | 【Bug3→v2 更新 11-17】雪壳 renderQueue 2996（v1 用 2997 是四路连带之一；屏幕是 Geometry 2000，v2 不收室内面后与屏幕无空间重叠，2996 与近场雪盘同族即可） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:m\.renderQueue = 2996;
+P13-67→v2 反转（11-17）| 【事故解除】EnsureRoofSnow 必须恢复调用（v2 按 §八判据重做：列顶判据/一楼一壳/无 Collider/Indoor 排除/烘焙链，四路连带各有独立防线；主理人明确要求楼顶积雪） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:^\s*EnsureRoofSnow\(\);
+P13-68 | 【事故】SnowOnRoofs 必须保留保险开关（开关名不许删；v2 置 false 放行但 kill-switch 语义不变，复发即拨回 true） | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:private static readonly bool DISABLED_BY_INCIDENT_20261105
 P13-69 | 【事故】事故保险必须在 Start 里生效并早退 | grep:1:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:if \(DISABLED_BY_INCIDENT_20261105\)
 P13-70 | 【回归】摘雪壳后 Bug2 观景水坑必须仍在（不许顺手回滚） | grep+:2:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:IsFreeCamMode
 P13-71 | 【回归】摘雪壳后 Bug1 室内剔除必须仍在 | grep+:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:cullTopY
@@ -758,3 +758,14 @@ P43-05 | 【修复2】「随机」确认 = 恢复自动轮换 SetAuto(true)（�
 P43-06 | 【修复2·防回潮】「随机」不许再摇骰子（旧 Random.Range(0,7) 一次性掷骰已删） | grep0:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:Random\.Range\(0, 7\)
 P43-07 | 【修复3】无预览且自动轮换时高亮「随机」（模式语义优先于当前天气档，不再误导"晴天被钉死"） | grep:1:Assets/_Project/Scripts/UI/TwinTimeWeatherCard.cs:WeatherDirector\.Instance\.auto
 P43-08 | 【修复4】冻结/恢复/起始三处基准同源（都取 NormalizeHour(TwinClimate.HourOfDay)；Pause 曾独用墙钟致每次开合面板丢一帧游戏时间） | grep:3:Assets/_Project/Scripts/Weather/TimeCycleDirector.cs:NormalizeHour\(TwinClimate\.HourOfDay\)
+
+# --- 六、P43 雪覆盖 v2 + 撒播高度相机自适应（2026-11-17，屋顶雪壳事故重做的回归护栏）---
+# 背景：主理人要求楼顶/树冠/灯顶积雪（D11 曾因四路连带停用）。v2 按分册 §八判据重做：
+# 列顶判据 + 一楼一壳 + 编辑器烘焙（静态批处理导致运行时网格不可读，运行时只兜底）。
+P43-09 | 【事故红线】雪壳永不带 Collider（SampleGroundHeight/脚印走物理射线，壳无碰撞体才天然免疫；v1 角色浮空即此通路） | grep0:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:AddComponent<MeshCollider>
+P43-10 | 【事故红线】IndoorByRendererRoof 建表必须排除雪壳（v1 室内判定翻转的通路：壳大包围盒恒满足"顶在头上+人在盒内"） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:StartsWith\("RoofSnowShell"\)
+P43-11 | 【防回潮】撒播高度必须保留相机自适应抬升（固定高度会被自由相机俯瞰压成"雪天花板"） | grep:1:Assets/_Project/Scripts/Weather/WeatherVisuals.cs:float CamEmitClearance
+P43-12 | 【v2 核心】雪壳列顶判据存在（colTop 逐列最高朝上面；世界绝对高度/纯相对高度均已被证伪） | grep+:2:Assets/_Project/Scripts/Weather/SnowOnRoofs.cs:colTop
+P43-13 | 【烘焙链路】编辑器烘焙工具必须存在（静态批处理使建筑运行时网格不可读，仅靠运行时扫描楼顶永远缺失） | has:Assets/_Project/Editor/RoofSnowBakeTool.cs
+P43-14 | 【烘焙链路】烘焙产物必须存在（SnowOnRoofs 路径 A 首选资源；缺失则自动退化为只扫未合批网格） | has:Assets/_Project/Weather/RoofSnow/Resources/RoofSnowBake.prefab
+P43-15 | 【树冠覆盖】树冠雪帽构建存在（地形树材质是共享资产不许改 _Color，帽是独立几何零污染） | grep:1:Assets/_Project/Scripts/Weather/SnowOnTrees.cs:TreeSnowCapsGO

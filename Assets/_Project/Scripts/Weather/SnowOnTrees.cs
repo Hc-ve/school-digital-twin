@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;   // ShadowCastingMode / LightProbeUsage / ReflectionProbeUsage 都在这个命名空间
+using System.Collections.Generic;
 
 namespace SchoolTwin.Weather
 {
@@ -8,9 +9,17 @@ namespace SchoolTwin.Weather
     /// 随全局雪量(_GlobalSnow，由 WeatherVisuals 每帧写入)出现/消失，
     /// 近似《异环》"树根被雪埋、顶部留秋色"的效果。
     ///
+    /// 【P43 追加 11-17 主理人反馈】树冠雪帽：树冠顶部再扣一顶扁半球雪帽
+    /// （地面+树高×0.86 处，半径按树冠包围盒收 0.75），与树根雪堆同材质同雪量。
+    /// 动机：航拍视角下"地面全白、树冠漆黑"不像现实——树上是有积雪的。
+    /// 为什么不做逐叶染色：地形树的原型 prefab 材质是**共享资产**，运行时改
+    /// _Color 会污染整个会话（B1 同型病：改 sharedMaterial = 改资产本体）；
+    /// 雪帽是独立几何，零材质改动。雪帽也是 CampusUI/SnowGround 材质 →
+    /// SnowOnRoofs v2 的着色器排除与 IndoorByRendererRoof 的排除都会自动跳过它。
+    ///
     /// 设计要点：
     ///  · 不修改任何内置着色器 —— 复用 CampusUI/SnowGround(受主光 + 球谐环境光 + 接收阴影 + 融雾)。
-    ///  · 所有树根雪堆合并进一个 mesh，仅 1 个 draw call。
+    ///  · 所有树根雪堆合并进一个 mesh，仅 1 个 draw call；树冠雪帽同一份材质再一个 mesh。
     ///  · 雪堆中心微隆、边缘柔和，叠加世界锁定的低频噪声，像雪堆堆在树根而非一片平板。
     ///  · 树木本身是竖直 mesh，雪堆是地面上的水平圆盘，树干从雪里穿出 → 视觉上正是"根被雪埋、冠留秋色"。
     ///
@@ -25,11 +34,22 @@ namespace SchoolTwin.Weather
         public int seg = 16;
         [Tooltip("雪堆中心最大隆起高度(米)")]
         public float pileHeight = 0.18f;
+        [Tooltip("树冠雪帽：帽底相对树高的位置系数（1.0=树顶，越小陷进树冠越深）")]
+        [Range(0.6f, 0.95f)]
+        public float capHeightK = 0.86f;
+        [Tooltip("树冠雪帽半径 = 树冠包围盒水平半径 × 此系数")]
+        [Range(0.4f, 1.0f)]
+        public float capRadiusK = 0.75f;
 
         private Mesh pileMesh;
         private Material pileMat;
         private MeshRenderer pileMr;
+        private Mesh capMesh;
+        private MeshRenderer capMr;
         private bool built;
+
+        // 原型尺寸缓存：prototypeIndex → (树高, 树冠水平半径)。懒算一次（prefab 不可靠 bounds，取网格 bounds × 层级缩放）。
+        private readonly Dictionary<int, Vector2> protoSize = new Dictionary<int, Vector2>();
 
         private static readonly int IdSnowTex = Shader.PropertyToID("_SnowTex");
         private static readonly int IdSnowDetail = Shader.PropertyToID("_DetailTex");
@@ -92,6 +112,15 @@ namespace SchoolTwin.Weather
             var norms = new Vector3[totalV];
             var tris = new int[totalT];
 
+            // ---- 树冠雪帽（第二块 mesh，同材质同雪量）----
+            // 顶点数按"每树 (R+1)×(S+1)"预算，R=4 环 × S=10 扇 = 55 顶点/树。
+            const int CapRings = 4, CapSectors = 10;
+            int capVertsPer = (CapRings + 1) * (CapSectors + 1);
+            var capVerts = new List<Vector3>(capVertsPer * instances.Length);
+            var capUvs = new List<Vector2>(capVertsPer * instances.Length);
+            var capNorms = new List<Vector3>(capVertsPer * instances.Length);
+            var capTris = new List<int>(CapRings * CapSectors * 6 * instances.Length);
+
             int vOff = 0, tOff = 0;
             for (int t = 0; t < instances.Length; t++)
             {
@@ -138,10 +167,44 @@ namespace SchoolTwin.Weather
                         tris[tOff++] = b; tris[tOff++] = c; tris[tOff++] = e;
                     }
                 }
+
+                // ---- 树冠雪帽：扁半球扣在树冠顶 ----
+                Vector2 ps = ProtoSize(inst.prototypeIndex, td);
+                float capY = wy - 0.02f + ps.x * capHeightK;   // wy 含 +0.02 的贴地抬升，回退掉再叠加树高
+                float capR = ps.y * capRadiusK;
+                if (capR < 0.6f) capR = 0.6f;                  // 树冠极小的原型给下限，别缩成一个点
+                float capH = capR * 0.45f;                     // 扁半球：高 = 半径的 45%，"一层雪毯"的厚度感
+                int capIdx0 = capVerts.Count;
+                for (int ring = 0; ring <= CapRings; ring++)   // ring 0 = 顶极点 → CapRings = 赤道
+                {
+                    float lat = (float)ring / CapRings * Mathf.PI * 0.5f;
+                    float yy = Mathf.Cos(lat) * capH;
+                    float rr = Mathf.Sin(lat) * capR;
+                    for (int s = 0; s <= CapSectors; s++)
+                    {
+                        float ang = (float)s / CapSectors * Mathf.PI * 2f;
+                        capVerts.Add(new Vector3(wx + Mathf.Sin(ang) * rr, capY + yy, wz + Mathf.Cos(ang) * rr));
+                        capUvs.Add(new Vector2((float)s / CapSectors, (float)ring / CapRings));
+                        capNorms.Add(Vector3.up);   // 与雪壳同理：薄雪层整体朝上受光
+                    }
+                }
+                for (int ring = 0; ring < CapRings; ring++)
+                {
+                    for (int s = 0; s < CapSectors; s++)
+                    {
+                        int a = capIdx0 + ring * (CapSectors + 1) + s;
+                        int b = a + 1;
+                        int c = a + (CapSectors + 1);
+                        int e = c + 1;
+                        capTris.Add(a); capTris.Add(c); capTris.Add(b);
+                        capTris.Add(b); capTris.Add(c); capTris.Add(e);
+                    }
+                }
             }
 
             pileMesh = new Mesh();
             pileMesh.name = "TreeSnowPiles";
+            pileMesh.indexFormat = IndexFormat.UInt32;   // 树多时 289 顶/棵会超 65535，按 32 位建免爆
             pileMesh.vertices = verts;
             pileMesh.uv = uvs;
             pileMesh.normals = norms;
@@ -181,6 +244,70 @@ namespace SchoolTwin.Weather
                 pileMr.reflectionProbeUsage = ReflectionProbeUsage.Off;
                 pileMr.enabled = false;         // 初始不渲染；由 Update 按雪量开关
             }
+
+            // ---- 树冠雪帽 mesh（与雪堆共用一份材质实例 → Update 只写一次雪量）----
+            if (capVerts.Count >= 3)
+            {
+                capMesh = new Mesh();
+                capMesh.name = "TreeSnowCaps";
+                capMesh.indexFormat = IndexFormat.UInt32;
+                capMesh.SetVertices(capVerts);
+                capMesh.SetUVs(0, capUvs);
+                capMesh.SetNormals(capNorms);
+                capMesh.SetTriangles(capTris, 0);
+                capMesh.RecalculateBounds();
+
+                // 【为什么单独开子物体】本物体的 MeshFilter/MeshRenderer 已被雪堆占用，
+                // 雪帽需要自己的 Renderer（不同 mesh）——按 SnowOnRoofs v2 同款做法独立子物体。
+                var capGo = new GameObject("TreeSnowCapsGO");
+                capGo.transform.SetParent(transform, false);   // 本物体已钉世界原点，子物体局部零位=世界坐标
+                var cmf = capGo.AddComponent<MeshFilter>();
+                capMr = capGo.AddComponent<MeshRenderer>();
+                cmf.sharedMesh = capMesh;
+                capMr.sharedMaterial = pileMat;                // 同一材质实例：雪量一处写、两处生效
+                capMr.shadowCastingMode = ShadowCastingMode.Off;
+                capMr.receiveShadows = true;
+                capMr.lightProbeUsage = LightProbeUsage.Off;
+                capMr.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                capMr.enabled = false;
+            }
+        }
+
+        /// <summary>
+        /// 取地形树原型的 (树高, 树冠水平半径)。
+        /// prefab 不在场景里，Renderer.bounds 不可靠；改用各 MeshFilter 的
+        /// sharedMesh.bounds × 自身层级缩放，相对 prefab 根求最大值。
+        /// 每个 prototype 只算一次（懒缓存）。
+        /// </summary>
+        private Vector2 ProtoSize(int idx, TerrainData td)
+        {
+            Vector2 v;
+            if (protoSize.TryGetValue(idx, out v)) return v;
+
+            float h = 8f, r = 2.4f;   // 取不到网格时按典型行道树兜底
+            var proto = td.treePrototypes[idx];
+            if (proto != null && proto.prefab != null)
+            {
+                float maxTop = 0f, maxRad = 0f;
+                Vector3 rootPos = proto.prefab.transform.position;
+                var smfs = proto.prefab.GetComponentsInChildren<MeshFilter>(true);
+                for (int i = 0; i < smfs.Length; i++)
+                {
+                    var sm = smfs[i].sharedMesh;
+                    if (sm == null) continue;
+                    var rt = smfs[i].transform;
+                    float topY = (rt.position.y - rootPos.y) + sm.bounds.max.y * rt.lossyScale.y;
+                    if (topY > maxTop) maxTop = topY;
+                    float rad = Mathf.Max(sm.bounds.extents.x * rt.lossyScale.x,
+                                          sm.bounds.extents.z * rt.lossyScale.z);
+                    if (rad > maxRad) maxRad = rad;
+                }
+                if (maxTop > 1f) h = maxTop;
+                if (maxRad > 0.5f) r = maxRad;
+            }
+            v = new Vector2(h, r);
+            protoSize[idx] = v;
+            return v;
         }
 
         private void Update()
@@ -189,12 +316,14 @@ namespace SchoolTwin.Weather
             float a = Shader.GetGlobalFloat(IdGlobalSnow);
             bool on = a > 0.01f;
             if (on != pileMr.enabled) pileMr.enabled = on;
+            if (capMr != null && on != capMr.enabled) capMr.enabled = on;
             if (on) pileMat.SetFloat(IdSnowAmount, a);
         }
 
         private void OnDestroy()
         {
             if (pileMesh != null) Destroy(pileMesh);
+            if (capMesh != null) Destroy(capMesh);
             if (pileMat != null) Destroy(pileMat);
         }
     }

@@ -1,105 +1,97 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using System.Collections.Generic;
 
 namespace SchoolTwin.Weather
 {
     /// <summary>
-    /// 屋顶/雨棚积雪：从场景里找出"正面朝上的大面"，在其上方 2cm 生成一层贴合的雪壳。
+    /// 雪壳 v2：找出场景里「暴露在天空下的朝上面」（楼顶 / 雨棚 / 女儿墙顶 / 灯顶 / 窗台等），
+    /// 在其上方 2cm 生成贴合的积雪壳。
     ///
     /// ══════════════════════════════════════════════════════════════════════
-    /// 【P13 Bug3：为什么房顶没雪，以及为什么不用粒子碰撞】
+    /// 【v2 · 2026-11-17 重做 —— 按事故分册 §八判据逐条落实】
     ///
-    /// ── 现象 ──────────────────────────────────────────────────────────────
-    /// 下雪天，地面、树根、草皮全白了，唯独**建筑屋顶是原色**，
-    /// 看起来像屋顶被单独挖掉了雪 —— 非常突兀。
+    /// v1（2026-11-05）四路连带的根因与 v2 的堵法：
+    ///   ① 幕布/屏幕被盖      → v2 不收室内面（见下），与屏幕无空间重叠；queue 2996。
+    ///   ② 角色浮空/脚印消失  → SampleGroundHeight 走 Physics 射线打 Collider，
+    ///                          而雪壳**只有 MeshRenderer 没有 Collider** → 射线天然穿透。
+    ///                          v2 铁律：这个类永不 AddComponent 任何 Collider。
+    ///   ③ 室内判定翻转       → IndoorByRendererRoof 建候选表时按着色器名/物体名排除雪壳
+    ///                          （WeatherVisuals.cs 内两行，2026-11-17 加）。
+    ///   ④ 自己糊成一团       → 根因是 v1 用「世界绝对高度 minRoofY」筛选，
+    ///                          1F 天花板 3.2m 就达标，室内楼板/吊顶全被收进壳。
     ///
-    /// ── 为什么现有的雪盘盖不到屋顶 ────────────────────────────────────────
-    /// 现有积雪是三块**水平板**：近场 SnowGround（脚下 90m）、
-    /// 远场 SnowGroundFar（260m）、树根 SnowOnTrees（每棵一个 3m 圆盘）。
-    /// 三者全部通过"逐顶点向下打射线贴地"定位（见 SampleGroundHeight）。
-    /// 而那个采样有两道硬限制：
-    ///       float topY = Mathf.Max(eyeY + 2f, refY + 12f);   // 起点只到 refY+12
-    ///       const float MaxRise = 1.5f;                       // dy > 1.5 直接丢弃
-    /// 屋顶在 refY + 12 到 refY + 20，**高出 MaxRise 十几倍** → 全部被丢弃。
-    /// 即便不丢弃，一块**贴地的水平板**在拓扑上也不可能同时贴地面又贴屋顶。
-    /// 所以"屋顶没雪"不是参数没调好，是数据通路根本不支持。
+    /// ── v2 的"屋顶判据"（三层，缺一不可）──────────────────────────────
+    ///   第 1 层 · 逐三角形粗筛（便宜，先跑）：
+    ///       · 世界 Y ≥ minWorldY(3m)      —— 地面铺装/路缘石归地面雪盘管；
+    ///       · 顶点法线平均朝上 wn.y ≥ minUpNormal(0.55)；
+    ///       · 三角形面积 ≥ minTriArea(0.35㎡) —— 滤掉栏杆/线脚/碎装饰。
+    ///   第 2 层 · 【核心】逐列最高朝上面（1m XZ 栅格）：
+    ///       把全部粗筛通过的三角形按其 XZ 所在栅格登记"该列最高朝上面"；
+    ///       只有「自己就站在这列最高处（±topTolerance）」的三角形才收进雪壳。
+    ///       为什么这一层能判"屋顶"：
+    ///         · 3F 楼板再高，同一列上方永远有 4F 楼板/屋顶 —— 不是列顶 → 出局；
+    ///         · 顶层吊顶与屋顶同列，屋顶比它高 0.2~0.5m → 吊顶出局；
+    ///         · 篮球馆屋顶（9m）在共享大网格里也是自己那列的最高面 → 正确入选
+    ///           （这正是 v1"世界绝对高度"会漏、§八路线 3"相对高度"单独用也会漏的
+    ///            共享网格场景，栅格法天然免疫）；
+    ///         · 灯顶、雨棚、女儿墙顶、窗台：各自列的最高面 → 全部入选（真实）。
+    ///       依赖 Collider 与否：**不依赖** —— 纯网格拓扑统计，O(N) 一次扫描。
+    ///       （v1 曾想用向上射线确认遮挡，但本工程全场景只有 19 个 MeshCollider，
+    ///        建筑大多无碰撞体，射线打不到东西，该路线在本项目不可用——记下来防走回头路。）
+    ///   第 3 层 · 相对高度兜底（相对本网格自身竖向跨度 ≥ relMinRatio(0.5)）：
+    ///       防止栅格误差把"半山腰的大平台"收进来；单层大跨建筑（跨度小）
+    ///       自身所有朝上面天然 ≥50%，不受此层误伤。
     ///
-    /// ── 为什么不用粒子碰撞（主理人问过这个方案）──────────────────────────
-    /// 三条硬约束，任一条都足够否掉它：
-    ///   ① Unity 粒子 Collision 的 World 模式要求 MeshCollider 必须 Convex。
-    ///      本工程 19 个 MeshCollider 全是凹形（convex=0），勾上会把走廊、
-    ///      屋顶凹角全部糊成一个凸包，碰撞检测直接失真。
-    ///   ② 性能不允许：雨 3200 粒/秒 × 每帧物理查询（WeatherVisuals 里早有此结论）。
-    ///   ③ **逻辑上不成立**：屋顶积雪的本质是**表面积雪** —— 雪停之后还在。
-    ///      而粒子有 lifetime，时间一到就消失。两者根本不是一件事。
-    ///
-    /// ── 本方案：复制屋顶网格，向上偏移 2cm，复用 SnowGround 材质 ──────────
-    /// 直接从建筑自己的网格生成雪壳，所以坡屋顶、女儿墙、雨棚、台阶顶面
-    /// 这些形状全都能贴合，不需要知道"哪里是屋顶"。
-    ///
-    /// 判据（遍历所有 MeshFilter 的三角形）：
-    ///   · 法线朝上：worldNormal.y > MinUpNormal（默认 0.55，约 57° 以内）
-    ///   · 面积够大：单三角形面积 > MinTriArea（滤掉扶手、栏杆、装饰线脚）
-    ///   · 位置够高：世界 Y > MinRoofY（滤掉地面铺装、路缘石）
-    /// 三者同时满足的三角形才复制进雪壳。
-    ///
-    /// 为什么是"逐三角形筛"而不是"整个网格筛"：
-    /// 建筑网格是一个整体（一栋楼一个大 mesh），屋顶和墙在同一个 mesh 里。
-    /// 只能按三角形判朝向，把朝上的那部分摘出来 —— 这正是本方案的价值所在。
+    /// ── 结构约束（§八共同前提）────────────────────────────────────────
+    ///   · 一楼一壳：按来源 Renderer 分组，每组一个子 GameObject + 独立 Mesh，
+    ///     不再合成全场景单块大 mesh；
+    ///   · 顶点全部世界坐标 → 容器钉死世界原点、SetParent(null)（白线教训）；
+    ///   · 材质复用 CampusUI/SnowGround（_MaskOff=1 世界 UV、_Cull=2 跟原屋顶单面）；
+    ///   · renderQueue 2996（同近场雪盘家族；屏幕 Geometry 2000 且无室内面，不再重叠）；
+    ///   · 雪量由 WeatherVisuals 每帧写的 _GlobalSnow 全局值驱动，与地面雪盘同开关。
     /// ══════════════════════════════════════════════════════════════════════
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class SnowOnRoofs : MonoBehaviour
     {
-        [Tooltip("三角形法线的世界 Y 分量下限。0.55 ≈ 与水平面夹角 57° 以内算作屋顶面")]
+        [Tooltip("三角形顶点法线世界 Y 下限。0.55 ≈ 与水平面夹角 57° 以内算朝上面")]
         public float minUpNormal = 0.55f;
 
-        [Tooltip("单个三角形的最小面积（㎡）。滤掉栏杆、扶手、线脚等细碎朝上面")]
+        [Tooltip("单个三角形最小面积（㎡）。滤掉栏杆、扶手、线脚等细碎朝上面")]
         public float minTriArea = 0.35f;
 
-        [Tooltip("最低高度（世界 Y）。低于此值的朝上面不算屋顶，避免与地面雪盘重复")]
-        public float minRoofY = 3.2f;
+        [Tooltip("世界 Y 下限。低于此值的朝上面归地面雪盘管（雪盘自身有贴地采样）")]
+        public float minWorldY = 3.0f;
+
+        [Tooltip("相对高度下限：面 minY 相对【本网格自身竖向跨度】的占比。防栅格误差收进半空平台")]
+        [Range(0.3f, 0.9f)]
+        public float relMinRatio = 0.5f;
+
+        [Tooltip("列顶判定容差（米）。面 minY 距该列最高朝上面不超过此值即视为列顶")]
+        public float topTolerance = 0.8f;
 
         [Tooltip("雪壳相对原面的抬升（米），避免与原屋顶 z-fighting")]
         public float lift = 0.02f;
 
-        [Tooltip("整块网格三角形数超过此值时跳过（建筑外壳合并网格可能上十万面，逐面扫代价过高）")]
-        public int maxTrisPerMesh = 120000;
+        [Tooltip("单网格三角形数超过此值时跳过（防一次性扫描卡死；2026-11-17 从 120k 放宽到 400k，建筑合并网格实测更大）")]
+        public int maxTrisPerMesh = 400000;
+
+        [Tooltip("栅格列宽（米）。1m 对楼顶/雨棚尺度合适；调小更精细但更慢")]
+        public float cellSize = 1.0f;
 
         // ══════════════════════════════════════════════════════════════════
-        // ⛔【2026-11-05 12:50 默认关闭 —— 本组件实测会污染整个场景】
-        //
-        // 实测四路连带故障（主理人 play 反馈）：
-        //   ① 机房幕布发黑        —— renderQueue 2997 盖在所有屏幕之上
-        //   ② 角色浮空            —— 被 SampleGroundHeight 当成"地面"
-        //   ③ 脚印消失            —— 同一份错误采样
-        //   ④ 屋顶反而仍无雪      —— 混入大量非屋顶面，自己糊成一团
-        //
-        // 真根因：minRoofY 是**世界绝对高度**，不是相对建筑。
-        // 机房在 1F、天花板 3m，minRoofY=3.2f 拦不住二层地板、走廊吊顶、
-        // 楼梯平台、看台顶面 —— 全被当成"屋顶"复制进了雪壳。
-        // 主理人截图上那块从天花板斜插进机房的黑色几何体就是它。
-        //
-        // 保持 enabled=false 是**兜底**：即使有人又从别处 AddComponent，
-        // 也不会 Build，场景不受影响。要重做请先解决"如何只取真正的屋顶"。
+        // ⛔ 事故保险开关（v1 时代引入，v2 重做后置 false 放行）。
+        // 保留这个开关而不是删掉：万一 v2 在某个场景又出现连带，把它拨回 true
+        // 即可整体停用（即使被别处 AddComponent 也不 Build），与 11-05 处置同口径。
+        // v2 放行的依据：§八三条判据已落实 + 四路连带各有独立防线（见类头注）。
+        // static readonly 而非 const：防编译期常量折叠产生 CS0162 不可达警告（v1 教训）。
         // ══════════════════════════════════════════════════════════════════
-        // 【为什么是 static readonly 而不是 const】———————————————
-        // 原来写的是 `private const bool`。值一样，但 `const` 会在编译期
-        // 常量折叠，于是 `Start()` 里 `if (true) { return; }` 之后的 `Build();`
-        // 被编译器判定为**不可达代码**，冒出 CS0162 警告：
-        //     SnowOnRoofs.cs(112,13): warning CS0162: Unreachable code detected
-        //
-        // 这个警告本身无害（行为正是我们想要的），但它会常驻 Console，
-        // 而"Console 里有警告"会让人对真正的新警告脱敏 —— 这正是 P26 那个
-        // 255 条重复警告埋掉真错误的老毛病。零成本消掉它，别留噪声。
-        // 改成 `static readonly` 后，值在运行时读取，编译器不能折叠，
-        // 分支保留，`Build()` 仍是可达的（只是永远不进）。
-        // ══════════════════════════════════════════════════════════════════
-        private static readonly bool DISABLED_BY_INCIDENT_20261105 = true;
+        private static readonly bool DISABLED_BY_INCIDENT_20261105 = false;
 
-        private Mesh shellMesh;
+        private readonly List<ShellPart> parts = new List<ShellPart>();
         private Material shellMat;
-        private MeshRenderer shellMr;
+        private Transform shellRoot;
         private bool built;
 
         private static readonly int IdSnowTex = Shader.PropertyToID("_SnowTex");
@@ -112,10 +104,39 @@ namespace SchoolTwin.Weather
         private static readonly int IdMaskOff = Shader.PropertyToID("_MaskOff");
         private static readonly int IdCullProp = Shader.PropertyToID("_Cull");
 
+        /// <summary>
+        /// 雪壳共享材质（两条路径共用）。参数的「为什么」见各行注释——
+        /// _MaskOff 与 _Cull 是 v1 用两次失败换来的，动之前先读注释。
+        /// </summary>
+        private Material MakeShellMaterial()
+        {
+            var m = new Material(Shader.Find("CampusUI/SnowGround"));
+            m.name = "RoofSnowShell";
+            m.SetTexture(IdSnowTex, ProceduralAssets.SnowPatch);
+            m.SetTexture(IdSnowDetail, ProceduralAssets.SnowDetail);
+            m.SetColor(IdSnowColor, new Color(0.92f, 0.95f, 1.0f, 1f));
+            m.SetColor(IdSkyColor, new Color(0.74f, 0.82f, 0.96f, 1f));
+            m.SetFloat(IdSnowAmount, 0f);
+            // 雪壳 UV 是世界坐标（几十的量程），_SnowTex 是 Clamp 遮罩——不关遮罩整片 discard（v1 实测教训）。
+            m.SetFloat(IdMaskOff, 1f);
+            // 剔除跟原屋顶一致（Cull Back 单面）：从室内看天花板不得露白（v1 实测教训）。
+            m.SetFloat(IdCullProp, 2f);
+            m.renderQueue = 2996;   // 与近场雪盘同族；屏幕 Geometry 2000 且 v2 不收室内面，无重叠
+            m.SetFloat(IdEdgeFade, 1.0f);   // 逐三角形拼壳没有"边缘"概念，均匀铺满
+            return m;
+        }
+
+        /// <summary>一个来源 Renderer 对应的一片壳。</summary>
+        private class ShellPart
+        {
+            public Mesh mesh;
+            public MeshRenderer renderer;
+            public string sourceName;
+            public int tris;
+        }
+
         private void Start()
         {
-            // ⛔ 事故保险：见 DISABLED_BY_INCIDENT_20261105 的说明。
-            // 即使有人从别处 AddComponent，也不会 Build → 场景不受污染。
             if (DISABLED_BY_INCIDENT_20261105)
             {
                 enabled = false;
@@ -124,21 +145,15 @@ namespace SchoolTwin.Weather
             Build();
         }
 
+        /// <summary>栅格键：世界 XZ → 1m 列。long 打包避免嵌套 Dictionary。</summary>
+        private static long CellKey(int cx, int cz) { return ((long)cx << 32) ^ (uint)cz; }
+
         private void Build()
         {
             if (built) return;
             built = true;
 
-            // ══════════════════════════════════════════════════════════════
-            // 【沿用 SnowOnTrees 的两条铁律】
-            //
-            // ① 本组件的顶点全部用**世界坐标**写进 mesh。
-            // ② 因此 transform 必须钉在世界原点，且**脱离跟随相机的父节点**。
-            //    上一轮"室内外诡异白线"就是这两个条件同时被破坏造成的：
-            //    顶点用世界坐标（对）+ 父节点每帧跟随相机（对）= 几何被平移两次。
-            //    编译器不报错、单元测试不报错，只有人眼看画面能发现。
-            //    详见 Docs/P13_踩坑日志_白线.md
-            // ══════════════════════════════════════════════════════════════
+            // ── 【两条铁律，白线事故】顶点全是世界坐标 → 钉死世界原点、脱离跟随相机层级 ──
             transform.SetParent(null, true);
             transform.position = Vector3.zero;
             transform.rotation = Quaternion.identity;
@@ -152,69 +167,100 @@ namespace SchoolTwin.Weather
                 return;
             }
 
-            // ---- 收集所有朝上的三角形 ----
-            var verts = new System.Collections.Generic.List<Vector3>(4096);
-            var norms = new System.Collections.Generic.List<Vector3>(4096);
-            var uvs = new System.Collections.Generic.List<Vector2>(4096);
-            var tris = new System.Collections.Generic.List<int>(6144);
+            // ══════════════════════════════════════════════════════════════
+            // 【路径 A · 烘焙产物（首选）】编辑器烘焙的雪壳 prefab。
+            // 为什么烘焙是首选：场景开了静态批处理，建筑的运行时网格全是
+            // "Combined Mesh (root: scene)"（758 个、CPU 不可读）——运行时扫描
+            // 只够到 55 个未合批小网格（树/门廊），楼顶永远扫不到（11-17 实测）。
+            // 烘焙在编辑模式跑（无批处理、原始网格、编辑器读顶点不受 isReadable 限制），
+            // 工具：SchoolTwin/雪壳/① 烘焙屋顶雪壳（RoofSnowBakeTool.cs）。
+            // 场景改动后重跑一次烘焙即可刷新。
+            // ══════════════════════════════════════════════════════════════
+            var baked = Resources.Load<GameObject>("RoofSnowBake");
+            if (baked != null)
+            {
+                var inst = Instantiate(baked, transform);
+                inst.name = "RoofSnowBake";
+                inst.transform.localPosition = Vector3.zero;
+                inst.transform.localRotation = Quaternion.identity;
+                inst.transform.localScale = Vector3.one;
 
+                shellMat = MakeShellMaterial();
+                var rs = inst.GetComponentsInChildren<MeshRenderer>();
+                for (int i = 0; i < rs.Length; i++)
+                {
+                    rs[i].sharedMaterial = shellMat;
+                    rs[i].shadowCastingMode = ShadowCastingMode.Off;
+                    rs[i].receiveShadows = true;
+                    rs[i].lightProbeUsage = LightProbeUsage.Off;
+                    rs[i].reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    rs[i].enabled = false;   // Update 按雪量统一开
+                    parts.Add(new ShellPart { renderer = rs[i], sourceName = rs[i].name, tris = 0 });
+                }
+                Debug.Log("[SnowOnRoofs v2] 使用烘焙产物：" + rs.Length + " 片（RoofSnowBake.prefab）");
+                return;
+            }
+
+            // ── 路径 B · 运行时扫描（兜底）：只有未合批的可读网格（树/门廊等）会命中 ──
+            BuildByScan(sh);
+        }
+
+        /// <summary>三层筛选 + 一楼一壳的运行时扫描（烘焙产物缺失时的兜底路径）。</summary>
+        private void BuildByScan(Shader sh)
+        {
+            // ---- 共享材质（所有壳共用一份，Update 只写一次）----
+            shellMat = MakeShellMaterial();
+
+            // ══════════════════════════════════════════════════════════════
+            // 第 1 层 · 粗筛：收集全部候选三角形（法线朝上 / 面积 / 世界高度）
+            // ══════════════════════════════════════════════════════════════
+            // 候选先入列表再过栅格，是因为"列最高"必须先看完全部候选才成立。
+            var cand = new List<Cand>();
             MeshFilter[] filters = FindObjectsOfType<MeshFilter>();
-            int scannedMeshes = 0, scannedTris = 0, keptTris = 0;
+            int scannedMeshes = 0, scannedTris = 0, skippedBig = 0;
 
             for (int fi = 0; fi < filters.Length; fi++)
             {
                 MeshFilter mf = filters[fi];
                 if (mf == null || mf.sharedMesh == null) continue;
+                if (mf.gameObject == gameObject) continue;   // 重入保护
 
-                // 跳过本组件自己（重入保护）与所有粒子/线渲染器所在对象
-                if (mf.gameObject == gameObject) continue;
-
-                // ══════════════════════════════════════════════════════════
-                // 【P13 Bug3】跳过所有"已经用了这套积雪着色器"的几何。
-                //
-                // 这类几何有三份，全都是**水平朝上的大面**，不排除就会全被收进雪壳：
-                //   · SnowGround      近场 90m 贴地雪盘
-                //   · SnowGroundFar   远场 260m 兜底雪盘
-                //   · TreeSnowPiles   树根雪堆（几十块 3m 圆盘）
-                // 后果不是"多一层雪"，而是**白度翻倍**：同一块地面被两层
-                // 半透明雪叠加，比周围亮一截，边缘还会出现明显的接缝。
-                // 更糟的是 Start 时它们多为 inactive（FindObjectsOfType 默认不返回），
-                // 但只要有任何一个当时是激活的，就会漏进来 —— 这是"有时过曝、
-                // 有时正常"的经典成因。用着色器名来判，比用物体名字可靠得多。
-                // ══════════════════════════════════════════════════════════
+                // 已用积雪着色器的几何（地面雪盘/远场盘/树根雪堆/其他雪壳）不收：
+                // 收进来 = 同一块面两层半透明雪叠加，白度翻倍（v1 实测教训）。
                 var selfRd = mf.GetComponent<Renderer>();
-                if (selfRd != null && selfRd.sharedMaterial != null
-                    && selfRd.sharedMaterial.shader != null
-                    && selfRd.sharedMaterial.shader.name == "CampusUI/SnowGround")
-                    continue;
+                if (selfRd == null || selfRd.sharedMaterial == null) continue;
+                string shName = selfRd.sharedMaterial.shader != null ? selfRd.sharedMaterial.shader.name : "";
+                if (shName == "CampusUI/SnowGround") continue;
+                // 屏幕类材质 defensively 跳过（Monitor/TwinScreen 家族）——
+                // 屏幕本身近乎竖直，法线筛也能挡，这里双保险零成本。
+                if (shName.IndexOf("SchoolTwin/", System.StringComparison.Ordinal) == 0) continue;
 
                 Mesh m = mf.sharedMesh;
                 if (!m.isReadable) continue;   // 不可读网格读不到顶点，只能放弃
-
-                Transform tr = mf.transform;
-
-                // 整块网格的包围盒都低于门槛 → 连扫都不用扫（地形/铺装/草坪就在这一档）
-                Bounds wb = WorldBounds(mf);
-                if (wb.max.y < minRoofY) continue;
 
                 Vector3[] mv = m.vertices;
                 Vector3[] mn = m.normals;
                 int[] mt = m.triangles;
                 if (mv == null || mt == null || mt.Length < 3) continue;
+                if (mn == null || mn.Length != mv.Length) continue;   // 无法可靠判朝向 → 整块跳过（宁可没雪不糊半楼）
 
-                // 【P13 Bug3】超大网格（建筑外壳常是几万面合并成一个 mesh）逐面扫描
-                // 代价过高，而且这类网格往往整块都在 minRoofY 之上，扫全量没有收益。
-                // 放在取完 mt 之后再判，避免 `m.triangles` 被访问两次
-                // （每次访问都会**复制一份**数组，几万面就是几百 KB 的无谓分配）。
-                if (mt.Length / 3 > maxTrisPerMesh) continue;
+                int triCount = mt.Length / 3;
+                if (triCount > maxTrisPerMesh) { skippedBig++; continue; }
+
+                Transform tr = mf.transform;
+                Bounds wb = selfRd.bounds;
+                // 整块网格的包围盒顶都够不到门槛 → 连扫都不用扫
+                if (wb.max.y < minWorldY) continue;
+
+                // 本网格自身竖向跨度（第 3 层相对高度的分母）。跨度 <2m 的网格（薄片/雨棚）
+                // 相对高度没有意义，直接给 1.0 放行，交给世界高度与列顶判。
+                float span = Mathf.Max(2f, wb.max.y - wb.min.y);
 
                 scannedMeshes++;
 
-                // 逐三角形筛。法线用顶点法线平均（比叉积稳：不受三角形绕序影响）。
                 for (int t = 0; t + 2 < mt.Length; t += 3)
                 {
                     scannedTris++;
-
                     int i0 = mt[t], i1 = mt[t + 1], i2 = mt[t + 2];
                     if (i0 >= mv.Length || i1 >= mv.Length || i2 >= mv.Length) continue;
 
@@ -222,155 +268,177 @@ namespace SchoolTwin.Weather
                     Vector3 w1 = tr.TransformPoint(mv[i1]);
                     Vector3 w2 = tr.TransformPoint(mv[i2]);
 
-                    // ---- 位置门槛：整块面都在门槛以上才算屋顶 ----
                     float minY = Mathf.Min(w0.y, Mathf.Min(w1.y, w2.y));
-                    if (minY < minRoofY) continue;
+                    if (minY < minWorldY) continue;
+                    if ((minY - wb.min.y) / span < relMinRatio) continue;   // 第 3 层先粗挡（省栅格）
 
-                    // ---- 面积门槛 ----
                     Vector3 cross = Vector3.Cross(w1 - w0, w2 - w0);
-                    float area = cross.magnitude * 0.5f;
-                    if (area < minTriArea) continue;
-
-                    // ---- 朝向门槛 ----
-                    // 法线取"顶点法线平均"而不是叉积，理由要说清楚：
-                    //   · 叉积方向由**三角形绕序**决定。这个工程的模型来自第三方资产，
-                    //     绕序不一定统一（左手/右手、导入时 Flip Normals 都可能改过），
-                    //     拿叉积判朝向会出现"同一栋楼一半屋顶有雪、一半没有"。
-                    //   · 顶点法线是美术/导入器算好的，朝向语义可靠，且对绕序免疫。
-                    // 网格连法线都没烘焙的情况（几乎不存在于 FBX 导入资产，
-                    // 本工程 245 个模型全部带法线）直接整块跳过 ——
-                    // 拿叉积猜朝向等于碰运气，宁可这栋楼没雪，也不要半栋楼有雪。
-                    if (mn == null || mn.Length != mv.Length) continue;   // 无法可靠判朝向 → 跳过
+                    if (cross.magnitude * 0.5f < minTriArea) continue;
 
                     Vector3 wn = (tr.TransformDirection(mn[i0]) +
                                   tr.TransformDirection(mn[i1]) +
                                   tr.TransformDirection(mn[i2])) / 3f;
-
                     if (wn.sqrMagnitude < 1e-8f) continue;
                     wn.Normalize();
                     if (wn.y < minUpNormal) continue;
 
-                    // ---- 通过：复制这个三角形，整体抬高 lift ----
+                    var c = new Cand
+                    {
+                        w0 = w0, w1 = w1, w2 = w2,
+                        minY = minY,
+                        cx = Mathf.FloorToInt(((w0.x + w1.x + w2.x) / 3f) / cellSize),
+                        cz = Mathf.FloorToInt(((w0.z + w1.z + w2.z) / 3f) / cellSize),
+                        src = mf,
+                    };
+                    cand.Add(c);
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
+            // 第 2 层 · 逐列最高朝上面：登记每列的最高候选 minY，只留列顶
+            // ══════════════════════════════════════════════════════════════
+            var colTop = new Dictionary<long, float>();
+            for (int i = 0; i < cand.Count; i++)
+            {
+                long key = CellKey(cand[i].cx, cand[i].cz);
+                float cur;
+                if (!colTop.TryGetValue(key, out cur) || cand[i].minY > cur)
+                    colTop[key] = cand[i].minY;
+            }
+
+            int keptTris = 0;
+            var bySource = new Dictionary<MeshFilter, List<Cand>>();
+            for (int i = 0; i < cand.Count; i++)
+            {
+                float top;
+                if (colTop.TryGetValue(CellKey(cand[i].cx, cand[i].cz), out top)
+                    && cand[i].minY >= top - topTolerance)
+                {
+                    List<Cand> l;
+                    if (!bySource.TryGetValue(cand[i].src, out l))
+                    {
+                        l = new List<Cand>();
+                        bySource[cand[i].src] = l;
+                    }
+                    l.Add(cand[i]);
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
+            // 一楼一壳：每个来源 Renderer 一片，子物体钉在世界原点局部零位
+            // ══════════════════════════════════════════════════════════════
+            foreach (var kv in bySource)
+            {
+                List<Cand> l = kv.Value;
+                if (l.Count == 0) continue;
+
+                var verts = new List<Vector3>(l.Count * 3);
+                var norms = new List<Vector3>(l.Count * 3);
+                var uvs = new List<Vector2>(l.Count * 3);
+                var tris = new List<int>(l.Count * 3);
+
+                for (int i = 0; i < l.Count; i++)
+                {
+                    Vector3 w0 = l[i].w0, w1 = l[i].w1, w2 = l[i].w2;
                     int b = verts.Count;
                     verts.Add(w0 + Vector3.up * lift);
                     verts.Add(w1 + Vector3.up * lift);
                     verts.Add(w2 + Vector3.up * lift);
 
-                    // 法线直接给"正上方"：屋顶积雪是一层薄壳，
-                    // 用原面法线会让坡屋顶上的雪偏灰（光照方向不对），
-                    // 而薄雪壳的观感应当整体朝上受光。
+                    // 法线一律给正上方：薄雪壳整体朝上受光，坡屋顶不会偏灰（v1 结论沿用）
                     norms.Add(Vector3.up);
                     norms.Add(Vector3.up);
                     norms.Add(Vector3.up);
 
-                    // UV 用世界 XZ 缩放，与 SnowGround 的地面雪盘同一套尺度，
-                    // 雪斑图案的疏密才能和地面一致。
+                    // UV 用世界 XZ 缩放（与地面雪盘同一套尺度，纹理连续）
                     const float uvScale = 1f / 6f;
                     uvs.Add(new Vector2(w0.x * uvScale, w0.z * uvScale));
                     uvs.Add(new Vector2(w1.x * uvScale, w1.z * uvScale));
                     uvs.Add(new Vector2(w2.x * uvScale, w2.z * uvScale));
 
-                    tris.Add(b);
-                    tris.Add(b + 1);
-                    tris.Add(b + 2);
-
-                    keptTris++;
+                    tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
                 }
+
+                var mesh = new Mesh();
+                mesh.name = "RoofSnowShell_" + kv.Key.name;
+                mesh.indexFormat = IndexFormat.UInt32;   // 顶点可超 65535
+                mesh.SetVertices(verts);
+                mesh.SetNormals(norms);
+                mesh.SetUVs(0, uvs);
+                mesh.SetTriangles(tris, 0);
+                mesh.RecalculateBounds();
+
+                var go = new GameObject("RoofSnowShell_" + kv.Key.name);
+                go.transform.SetParent(transform, false);   // 容器在世界原点 → 局部零位 = 世界坐标
+                var mf = go.AddComponent<MeshFilter>();
+                var mr = go.AddComponent<MeshRenderer>();
+                mf.sharedMesh = mesh;
+                mr.sharedMaterial = shellMat;
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = true;
+                mr.lightProbeUsage = LightProbeUsage.Off;
+                mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                mr.enabled = false;   // 初始不渲染，Update 按雪量统一开
+
+                parts.Add(new ShellPart { mesh = mesh, renderer = mr, sourceName = kv.Key.name, tris = l.Count });
+                keptTris += l.Count;
             }
 
             if (keptTris == 0)
             {
-                Debug.LogWarning("[SnowOnRoofs] 没有找到符合条件（朝上 / 面积够大 / 高度够）的屋面三角形，"
-                               + "屋顶积雪不会显示。已扫描 " + scannedMeshes + " 个网格 / "
-                               + scannedTris + " 个三角形。");
+                Debug.LogWarning("[SnowOnRoofs v2] 没有符合条件的暴露朝上面，屋顶积雪不显示。"
+                               + "扫描 " + scannedMeshes + " 网格 / " + scannedTris + " 三角形"
+                               + (skippedBig > 0 ? "；因超大跳过 " + skippedBig + " 网格" : ""));
                 enabled = false;
                 return;
             }
 
-            shellMesh = new Mesh();
-            shellMesh.name = "RoofSnowShell";
-            // 顶点数可能超过 65535，必须用 32 位索引
-            shellMesh.indexFormat = IndexFormat.UInt32;
-            shellMesh.SetVertices(verts);
-            shellMesh.SetNormals(norms);
-            shellMesh.SetUVs(0, uvs);
-            shellMesh.SetTriangles(tris, 0);
-            shellMesh.RecalculateBounds();
-
-            var myMf = GetComponent<MeshFilter>();
-            shellMr = GetComponent<MeshRenderer>();
-            if (myMf == null) myMf = gameObject.AddComponent<MeshFilter>();
-            if (shellMr == null) shellMr = gameObject.AddComponent<MeshRenderer>();
-            myMf.sharedMesh = shellMesh;
-
-            shellMat = new Material(sh);
-            shellMat.name = "RoofSnowShell";
-            shellMat.SetTexture(IdSnowTex, ProceduralAssets.SnowPatch);
-            shellMat.SetTexture(IdSnowDetail, ProceduralAssets.SnowDetail);
-            shellMat.SetColor(IdSnowColor, new Color(0.92f, 0.95f, 1.0f, 1f));
-            shellMat.SetColor(IdSkyColor, new Color(0.74f, 0.82f, 0.96f, 1f));
-            shellMat.SetFloat(IdSnowAmount, 0f);
-            // 不做边缘淡出：雪壳是按三角形拼出来的，没有"中心到边缘"的概念，
-            // 强制 1.0 让整片屋顶均匀铺满（与树根雪盘同理）。
-            shellMat.SetFloat(IdEdgeFade, 1.0f);
-            // ⚠️【P13 Bug3】必须打开"忽略雪遮罩"模式，否则屋顶雪一个字都画不出来。
-            //
-            // 地面雪盘把整块平面铺满 [0,1] UV，_SnowTex（SnowPatch）的 alpha
-            // 带"半径 93%~100% 淡到 0"的径向淡出，正好用来裁方形边界。
-            // 但雪壳的 UV 只能给**世界坐标**（保证相邻三角形之间纹理连续），
-            // 会跑到几十的范围 —— 而 _SnowTex 是 wrapMode=Clamp 的遮罩，
-            // 几十的 UV 全被钳到边缘那一列像素，那里 alpha ≈ 0
-            // → 片元里 `if (cov <= 0.003) discard` 把整片屋顶全部扔掉。
-            // 现场表现极具误导性：Console 说"雪壳已生成 1.2 万个三角形"，
-            // 画面上一片雪都没有 —— 会让人以为是筛选逻辑错了。
-            shellMat.SetFloat(IdMaskOff, 1f);
-            // ⚠️ 剔除模式必须跟着原屋顶走（_Cull = 2 = Back）。
-            // 雪壳复制的是屋顶三角形，朝向与原屋顶一致，本工程建筑材质是
-            // Standard 默认 Cull Back（单面）。若雪壳用 Cull Off，就会顺着
-            // "从室内看不见的那个屋顶"露出来，在天花板上糊一片白 ——
-            // 治了室外、坏了室内，正是 Bug 1 里"屋顶被单面剔除"的另一面。
-            shellMat.SetFloat(IdCullProp, 2f);
-            shellMat.renderQueue = 2997;
-
-            shellMr.sharedMaterial = shellMat;
-            shellMr.shadowCastingMode = ShadowCastingMode.Off;
-            shellMr.receiveShadows = true;
-            shellMr.lightProbeUsage = LightProbeUsage.Off;
-            shellMr.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            shellMr.enabled = false;
-
-            Debug.Log("[P13][屋顶积雪] 雪壳已生成：" + keptTris + " 个三角形 / "
-                    + verts.Count + " 个顶点（扫描 " + scannedMeshes + " 个网格，"
-                    + scannedTris + " 个三角形）");
+            Debug.Log("[SnowOnRoofs v2] 雪壳已生成：" + parts.Count + " 片 / " + keptTris + " 三角形"
+                    + "（扫描 " + scannedMeshes + " 网格 " + scannedTris + " 三角形"
+                    + (skippedBig > 0 ? "，超大跳过 " + skippedBig : "") + "）\n"
+                    + "  明细：" + BuildDetailLine());
         }
 
-        /// <summary>世界空间包围盒（用 renderer.bounds 更省，但没有 Renderer 时退回网格 bounds）。</summary>
-        private static Bounds WorldBounds(MeshFilter mf)
+        private string BuildDetailLine()
         {
-            var r = mf.GetComponent<Renderer>();
-            if (r != null) return r.bounds;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < parts.Count && i < 12; i++)
+                sb.Append(parts[i].sourceName).Append('=').Append(parts[i].tris).Append("  ");
+            if (parts.Count > 12) sb.Append("…共 ").Append(parts.Count);
+            return sb.ToString();
+        }
 
-            Bounds lb = mf.sharedMesh.bounds;
-            Transform tr = mf.transform;
-            Vector3 c = tr.TransformPoint(lb.center);
-            Vector3 e = tr.TransformVector(lb.extents);
-            return new Bounds(c, new Vector3(Mathf.Abs(e.x) * 2f, Mathf.Abs(e.y) * 2f, Mathf.Abs(e.z) * 2f));
+        /// <summary>粗筛候选的临时结构（第 2 层栅格过滤的前置）。</summary>
+        private class Cand
+        {
+            public Vector3 w0, w1, w2;
+            public float minY;
+            public int cx, cz;
+            public MeshFilter src;
         }
 
         private void Update()
         {
-            if (!built || shellMat == null || shellMr == null) return;
+            if (!built || shellMat == null || parts.Count == 0) return;
 
-            // 与地面雪盘、树根雪堆同一套开关口径：读 WeatherVisuals 每帧写的全局雪量。
+            // 与地面雪盘/树根雪堆同一套开关口径：读 WeatherVisuals 每帧写的全局雪量
             float a = Shader.GetGlobalFloat(IdGlobalSnow);
             bool on = a > 0.01f;
-            if (on != shellMr.enabled) shellMr.enabled = on;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i].renderer == null) continue;
+                if (on != parts[i].renderer.enabled) parts[i].renderer.enabled = on;
+            }
             if (on) shellMat.SetFloat(IdSnowAmount, a);
         }
 
         private void OnDestroy()
         {
-            if (shellMesh != null) Destroy(shellMesh);
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (parts[i].mesh != null) Destroy(parts[i].mesh);
+            }
+            parts.Clear();
             if (shellMat != null) Destroy(shellMat);
         }
     }
