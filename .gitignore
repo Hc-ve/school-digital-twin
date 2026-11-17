@@ -122,3 +122,10 @@ unity_build.log
 # MCP 工具运行时截图输出目录（工具产物，不入库）
 /Assets/Screenshots/
 /Assets/Screenshots.meta
+
+# ---------- 取证截图 / 参考图片（二进制，不入库；仅本地留存）----------
+# 11-17 教训：曾 add -A 把 228 张截图(200MB+)提交进去，直接导致 git push 打包 OOM。
+# 证据图本地留存即可，需要时可按回执里的路径复现；已入库的历史证据不受此规则影响。
+/Docs/QA/evidence/**/*.png
+/Docs/QA/evidence/**/*.jpg
+/Docs/QA/reference/**/*.jpg

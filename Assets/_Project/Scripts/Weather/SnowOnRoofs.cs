@@ -80,6 +80,9 @@ namespace SchoolTwin.Weather
         [Tooltip("栅格列宽（米）。1m 对楼顶/雨棚尺度合适；调小更精细但更慢")]
         public float cellSize = 1.0f;
 
+        [Tooltip("源网格名包含这些词就不铺雪：室内楼板/楼梯/顶棚不该有积雪")]
+        public string[] excludeSourceName = new string[] { "Floor2", "KitchenFloor", "ZalTop", "ZalStairs" };
+
         // ══════════════════════════════════════════════════════════════════
         // ⛔ 事故保险开关（v1 时代引入，v2 重做后置 false 放行）。
         // 保留这个开关而不是删掉：万一 v2 在某个场景又出现连带，把它拨回 true
@@ -173,6 +176,8 @@ namespace SchoolTwin.Weather
                 return;
             }
 
+            int keptParts = 0;
+
             // ══════════════════════════════════════════════════════════════
             // 【路径 A · 烘焙产物（首选）】编辑器烘焙的雪壳 prefab。
             // 为什么烘焙是首选：场景开了静态批处理，建筑的运行时网格全是
@@ -195,6 +200,9 @@ namespace SchoolTwin.Weather
                 var rs = inst.GetComponentsInChildren<MeshRenderer>();
                 for (int i = 0; i < rs.Length; i++)
                 {
+                    // 烘焙产物里也过滤室内表面：RoofSnowShell_Floor2 就是二楼楼板顶面，
+                    // 铺在楼梯口 = 一整块纯白平面（现场照片）。名字命中就直接销毁该片。
+                    if (IsExcludedShellSource(rs[i].name)) { Destroy(rs[i].gameObject); continue; }
                     rs[i].sharedMaterial = shellMat;
                     rs[i].shadowCastingMode = ShadowCastingMode.Off;
                     rs[i].receiveShadows = true;
@@ -202,8 +210,9 @@ namespace SchoolTwin.Weather
                     rs[i].reflectionProbeUsage = ReflectionProbeUsage.Off;
                     rs[i].enabled = false;   // Update 按雪量统一开
                     parts.Add(new ShellPart { renderer = rs[i], sourceName = rs[i].name, tris = 0 });
+                    keptParts++;
                 }
-                Debug.Log("[SnowOnRoofs v2] 使用烘焙产物：" + rs.Length + " 片（RoofSnowBake.prefab）");
+                Debug.Log("[SnowOnRoofs v2] 使用烘焙产物：" + keptParts + " 片（RoofSnowBake.prefab，剔除室内 " + (rs.Length - keptParts) + " 片）");
                 return;
             }
 
@@ -230,6 +239,16 @@ namespace SchoolTwin.Weather
                 MeshFilter mf = filters[fi];
                 if (mf == null || mf.sharedMesh == null) continue;
                 if (mf.gameObject == gameObject) continue;   // 重入保护
+
+                // 室内表面不铺雪：二楼楼板（Floor2）顶面在栅格里就是"列顶"，
+                // 会被判成屋顶 → 楼梯口出现一整块白片（实测）。这些名字直接出局。
+                bool excluded = false;
+                for (int k = 0; k < excludeSourceName.Length; k++)
+                {
+                    string ex = excludeSourceName[k];
+                    if (!string.IsNullOrEmpty(ex) && mf.name.Contains(ex)) { excluded = true; break; }
+                }
+                if (excluded) continue;
 
                 // 已用积雪着色器的几何（地面雪盘/远场盘/树根雪堆/其他雪壳）不收：
                 // 收进来 = 同一块面两层半透明雪叠加，白度翻倍（v1 实测教训）。
@@ -342,6 +361,15 @@ namespace SchoolTwin.Weather
                 List<Cand> l = kv.Value;
                 if (l.Count == 0) continue;
 
+                // 二次排除：源 Renderer 名（与雪壳命名同源），室内楼板在这里一定能拦住
+                bool exSkip = false;
+                for (int k = 0; k < excludeSourceName.Length; k++)
+                {
+                    string ex = excludeSourceName[k];
+                    if (!string.IsNullOrEmpty(ex) && kv.Key.name.Contains(ex)) { exSkip = true; break; }
+                }
+                if (exSkip) continue;
+
                 var verts = new List<Vector3>(l.Count * 3);
                 var norms = new List<Vector3>(l.Count * 3);
                 var uvs = new List<Vector2>(l.Count * 3);
@@ -407,6 +435,17 @@ namespace SchoolTwin.Weather
                     + "（扫描 " + scannedMeshes + " 网格 " + scannedTris + " 三角形"
                     + (skippedBig > 0 ? "，超大跳过 " + skippedBig : "") + "）\n"
                     + "  明细：" + BuildDetailLine());
+        }
+
+        /// <summary>源名命中排除名单（室内楼板/楼梯/顶棚）：两种 Build 路径共用。</summary>
+        private bool IsExcludedShellSource(string nm)
+        {
+            for (int k = 0; k < excludeSourceName.Length; k++)
+            {
+                string ex = excludeSourceName[k];
+                if (!string.IsNullOrEmpty(ex) && nm != null && nm.Contains(ex)) return true;
+            }
+            return false;
         }
 
         private string BuildDetailLine()

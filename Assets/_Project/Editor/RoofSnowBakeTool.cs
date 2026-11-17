@@ -39,6 +39,12 @@ namespace SchoolTwin.Weather
         private const float CellSize = 1.0f;
         private const string OutputPrefabPath = "Assets/_Project/Weather/RoofSnow/Resources/RoofSnowBake.prefab";
 
+        // ⛔ 室内表面不烘焙：二楼楼板顶面会被"逐列最高"误判成屋顶，
+        // 烘焙进 prefab 后就在楼梯口铺出一整块纯白平面（现场照片 11-17）。
+        // 与 SnowOnRoofs.excludeSourceName 保持同一份名单。
+        private static readonly string[] ExcludeSourceName =
+            { "Floor2", "KitchenFloor", "ZalTop", "ZalStairs" };
+
         private class Cand
         {
             public Vector3 w0, w1, w2;
@@ -202,6 +208,16 @@ namespace SchoolTwin.Weather
             {
                 List<Cand> l = kv.Value;
                 if (l.Count == 0) continue;
+
+                // 室内表面不烘焙：二楼楼板（Floor2）顶面在"逐列最高"里就是列顶，
+                // 会被判成屋顶 → 烘焙进 prefab 后在楼梯口铺出一整块纯白平面（现场照片）。
+                bool exSkip = false;
+                for (int k = 0; k < ExcludeSourceName.Length; k++)
+                {
+                    string ex = ExcludeSourceName[k];
+                    if (!string.IsNullOrEmpty(ex) && kv.Key.name.Contains(ex)) { exSkip = true; break; }
+                }
+                if (exSkip) continue;
 
                 var verts = new Vector3[l.Count * 3];
                 var norms = new Vector3[l.Count * 3];
