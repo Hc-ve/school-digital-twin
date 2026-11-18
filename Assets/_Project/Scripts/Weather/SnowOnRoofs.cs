@@ -81,7 +81,11 @@ namespace SchoolTwin.Weather
         public float cellSize = 1.0f;
 
         [Tooltip("源网格名包含这些词就不铺雪：室内楼板/楼梯/顶棚不该有积雪")]
-        public string[] excludeSourceName = new string[] { "Floor2", "KitchenFloor", "ZalTop", "ZalStairs" };
+        // 【2026-11-18 遗迹修复】Stairs02Concrete 必须排除：
+        // 它是二楼楼梯口的混凝土平台（顶面积约 4.5×1.4m），顶面被"逐列最高"误判成屋顶，
+        // 烘焙后是一整块纯白薄片（RoofSnowShell_Stairs02Concrete），现场就是那块"白板"。
+        // 上一轮只排了 Floor2，漏了它 —— 所以 Floor2 修好后白板"又回来了"。
+        public string[] excludeSourceName = new string[] { "Floor2", "KitchenFloor", "ZalTop", "ZalStairs", "Stairs02Concrete" };
 
         // ══════════════════════════════════════════════════════════════════
         // ⛔ 事故保险开关（v1 时代引入，v2 重做后置 false 放行）。
