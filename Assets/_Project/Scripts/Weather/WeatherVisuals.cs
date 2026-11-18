@@ -470,7 +470,7 @@ namespace SchoolTwin.Weather
                 pr.maxParticleSize = 0.6f;
                 pr.shadowCastingMode = ShadowCastingMode.Off;
                 pr.receiveShadows = false;
-                var m = ProceduralAssets.MakeSpriteMaterial(ProceduralAssets.RainStreak, Color.white, "ProcRainMat");
+                var m = ProceduralAssets.MakePrecipitationMaterial(ProceduralAssets.RainStreak, Color.white, "ProcRainMat");
                 if (m != null) pr.sharedMaterial = m;
             }
 
@@ -578,7 +578,7 @@ namespace SchoolTwin.Weather
                 pr.maxParticleSize = 1f;
                 pr.shadowCastingMode = ShadowCastingMode.Off;
                 pr.receiveShadows = false;
-                var m = ProceduralAssets.MakeSpriteMaterial(ProceduralAssets.Snowflake, Color.white, "ProcSnowMat");
+                var m = ProceduralAssets.MakePrecipitationMaterial(ProceduralAssets.Snowflake, Color.white, "ProcSnowMat");
                 if (m != null) pr.sharedMaterial = m;
             }
 
@@ -793,7 +793,7 @@ namespace SchoolTwin.Weather
                 pr.maxParticleSize = 0.4f;
                 pr.shadowCastingMode = ShadowCastingMode.Off;
                 pr.receiveShadows = false;
-                var m = ProceduralAssets.MakeSpriteMaterial(
+                var m = ProceduralAssets.MakePrecipitationMaterial(
                     ProceduralAssets.Snowflake, Color.white, "ProcSplashMat", 3002);
                 if (m != null) pr.sharedMaterial = m;
             }

@@ -29,6 +29,18 @@ namespace SchoolTwin.UI
         /// </summary>
         public static int FloorFilter { get; set; }
 
+        /// <summary>
+        /// 【P45】设备类型分组筛选："" = 全部；其余为分组键
+        /// （Light / Climate / Compute / Water / Access / Env，
+        ///  映射见 TwinSystemPage.CategoryInGroup）。
+        /// 设备总量上了 350 台（路灯 + 电棒 + 暖气 + 电脑…），只按楼层分已经
+        /// 归纳不动了 —— 类型分组是主理人 2026-11-18"重新划分设计归纳"裁决的落地。
+        /// </summary>
+        public static string DeviceCategoryFilter { get; set; } = "";
+
+        /// <summary>【P45】搜索关键字：匹配 TwinId 或 DisplayName（不分大小写）。空串 = 不过滤。</summary>
+        public static string DeviceSearchQuery { get; set; } = "";
+
         // ================================================================ 告警中心
 
         /// <summary>false = 进行中，true = 历史。两套视图共用。</summary>
@@ -111,6 +123,8 @@ namespace SchoolTwin.UI
         public static void Reset()
         {
             FloorFilter = 0;
+            DeviceCategoryFilter = "";
+            DeviceSearchQuery = "";
             AlarmHistory = false;
         }
     }

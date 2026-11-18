@@ -600,6 +600,36 @@ namespace SchoolTwin.Weather
             return m;
         }
 
+        /// <summary>
+        /// 雨雪粒子专用：可被实时灯（P44 路灯）照亮的透明材质（P44 · 2026-11-18）。
+        ///
+        /// 【为什么不用 MakeSpriteMaterial】Sprites/Default 的 SubShader 里写着
+        /// `Lighting Off`——纯自发光，结构上收不到任何实时灯：粒子在路灯锥里
+        /// 永远不亮。实拍调研（alamy《Snow falling in cones of light under
+        /// streetlights》等）：现实里飘落的雪/雨在灯锥里是一大片亮白粒子，
+        /// 这是雪夜路灯最有辨识度的画面。
+        /// CampusUI/PrecipitationLit 的 ForwardAdd 按"各向同性散射"提亮：
+        /// 亮度 = 灯色 × 距离/锥角衰减，无方向项（粒子 billboard 的法线永远
+        /// 朝相机，拿它算 NdotL 是纯错误）。base pass 与 Sprites/Default
+        /// 完全同观感——白天零回归。
+        /// </summary>
+        public static Material MakePrecipitationMaterial(Texture2D tex, Color tint, string name, int queue = 3000)
+        {
+            var sh = Shader.Find("CampusUI/PrecipitationLit");
+            if (sh == null)
+            {
+                // shader 缺席时退回老路径：粒子只是"灯下不亮"，不会消失（可回滚）
+                Debug.LogWarning("[ProceduralAssets] 找不到 CampusUI/PrecipitationLit，雨雪粒子退回无光照模式。");
+                return MakeSpriteMaterial(tex, tint, name, queue);
+            }
+            var m = new Material(sh);
+            m.name = name;
+            m.mainTexture = tex;
+            m.color = tint;
+            m.renderQueue = queue;
+            return m;
+        }
+
         // =====================================================================
         // 音频（全部程序化合成，无外部音频素材）
         // =====================================================================

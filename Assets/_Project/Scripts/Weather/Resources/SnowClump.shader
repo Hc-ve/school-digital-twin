@@ -139,6 +139,130 @@ Shader "CampusUI/SnowClump"
             }
             ENDCG
         }
+
+        // ══════════════════════════════════════════════════════════════════
+        // 【P44 · 2026-11-18】ForwardAdd：让实时点光/聚光（P44 路灯）照亮树枝积雪。
+        //
+        // ── 为什么必须有（主理人报障"晚上雪天树依旧是黑的"，经实拍调研）──
+        // alamy《Winter forest, road and trees covered with snow · night》等实拍：
+        // 现实里雪夜路灯旁的积雪树枝发白发亮，只有远离灯的树才是黑剪影。
+        // 本 shader 原先只有 ForwardBase —— 树雪只吃月光/球谐环境光，
+        // 灯旁照样黑。加法 pass 与 base 用同一套噪声 mask / clip / 调色，
+        // 保证"月光照的雪"和"路灯照的雪"是同一种雪。
+        // ══════════════════════════════════════════════════════════════════
+        Pass
+        {
+            Tags { "LightMode" = "ForwardAdd" }
+
+            Blend One One
+            ZWrite Off
+            ZTest LEqual
+
+            CGPROGRAM
+            #pragma vertex vertAdd
+            #pragma fragment fragAdd
+            #pragma multi_compile_fwdadd_fullshadows
+            #pragma multi_compile_fog
+            #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+
+            float4 _SnowColor;
+            float4 _ShadeColor;
+            float  _Grow;
+            float  _NoiseScale;
+            float  _AmbientMul;
+            float  _SunMul;
+            float  _BottomMul;
+
+            struct appdataAdd
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                float2 uv     : TEXCOORD0;
+            };
+
+            struct v2fAdd
+            {
+                float4 pos      : SV_POSITION;
+                float3 worldPos : TEXCOORD0;
+                float3 worldN   : TEXCOORD1;
+                float2 uv       : TEXCOORD4;
+                SHADOW_COORDS(2)
+                UNITY_FOG_COORDS(3)
+            };
+
+            v2fAdd vertAdd (appdataAdd v)
+            {
+                v2fAdd o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldN = normalize(UnityObjectToWorldNormal(v.normal));
+                o.uv = v.uv;
+                TRANSFER_SHADOW(o);
+                UNITY_TRANSFER_FOG(o, o.pos);
+                return o;
+            }
+
+            // 值噪声：与 base 同一份实现（独立的 CGPROGRAM 编译单元，各自声明）
+            float hash3 (float3 p)
+            {
+                return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+            }
+
+            float vnoise (float3 p)
+            {
+                float3 i = floor(p);
+                float3 f = frac(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float n000 = hash3(i + float3(0, 0, 0));
+                float n100 = hash3(i + float3(1, 0, 0));
+                float n010 = hash3(i + float3(0, 1, 0));
+                float n110 = hash3(i + float3(1, 1, 0));
+                float n001 = hash3(i + float3(0, 0, 1));
+                float n101 = hash3(i + float3(1, 0, 1));
+                float n011 = hash3(i + float3(0, 1, 1));
+                float n111 = hash3(i + float3(1, 1, 1));
+                float nx00 = lerp(n000, n100, f.x);
+                float nx10 = lerp(n010, n110, f.x);
+                float nx01 = lerp(n001, n101, f.x);
+                float nx11 = lerp(n011, n111, f.x);
+                float nxy0 = lerp(nx00, nx10, f.y);
+                float nxy1 = lerp(nx01, nx11, f.y);
+                return lerp(nxy0, nxy1, f.z);
+            }
+
+            fixed4 fragAdd (v2fAdd i) : SV_Target
+            {
+                float3 n = normalize(i.worldN);
+
+                // 与 base 同一套"哪里有雪"判据——clip 不一致会露馅（加法光溢出到该裁掉的区域）
+                float nz = vnoise(i.worldPos * _NoiseScale);
+                clip(_Grow * 1.20 - (1.0 - nz) * 0.18 - 0.002);
+
+                // 【ForwardAdd 核心】本 pass 收到的是"这一盏灯"：
+                // 点/聚光按像素重算方向；衰减含距离与（fullshadows 下的）实时阴影。
+                #ifdef USING_DIRECTIONAL_LIGHT
+                    float3 L = normalize(_WorldSpaceLightPos0.xyz);
+                #else
+                    float3 L = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+                #endif
+                // 半兰伯特与 base 同款：雪是强散射体，不要硬高光
+                float ndl = saturate(dot(n, L) * 0.5 + 0.5);
+                UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+                float3 direct = _LightColor0.rgb * ndl * _SunMul * atten;
+
+                float up = saturate(n.y * 1.15 - 0.05);
+                float3 col = lerp(_ShadeColor.rgb * direct, _SnowColor.rgb * direct, up);
+                col *= 0.94 + nz * 0.12;
+                float aoBottom = lerp(_BottomMul, 1.0, saturate(i.uv.y));
+                col *= aoBottom;
+
+                UNITY_APPLY_FOG(i.fogCoord, col);
+                return fixed4(col, 1.0);
+            }
+            ENDCG
+        }
     }
 
     FallBack Off

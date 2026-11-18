@@ -479,6 +479,214 @@ Shader "CampusUI/SnowGround"
             }
             ENDCG
         }
+
+        // ══════════════════════════════════════════════════════════════════
+        // 【P44 · 2026-11-18】ForwardAdd pass：让实时点光/聚光照亮雪面。
+    //
+    // ── 为什么必须有这个 pass（主理人报障"雪天夜里路灯一点光照痕迹都没有"）──
+    // 上面 ForwardBase 只承载一盏最亮的平行光（月光）。Unity 内置管线的
+    // 逐像素点光/聚光全部在 ForwardAdd 阶段渲染——本 pass 缺席时，
+    // 100 盏路灯（P44）、室内实时灯全部照不亮雪面，雪地在夜里就是死灰一片。
+    //
+    // ── 为什么是纯增量、可随时回滚 ──────────────────────────────────
+    // 原 ForwardBase pass 一行未动；本 pass 只做"加法"（Blend One One），
+    // 删掉整段即回到改前行为。无雪区（cov≈0）在片元里 discard，
+    // 不会出现"光透过雪照亮无雪地面"的穿帮。
+    //
+    // ── 为什么要 multi_compile_fwdadd_fullshadows ────────────────────
+    // 普通 fwdadd 变体不含点光/聚光的实时阴影采样；P44 路灯开了 Soft
+    // 阴影，树影/灯杆影要落在雪面上就必须带 fullshadows（编译变体多几个，
+    // 运行时成本不变）。
+    // ══════════════════════════════════════════════════════════════════
+    Pass
+    {
+        Name "SnowGroundAdd"
+        Tags { "LightMode" = "ForwardAdd" }
+
+        Blend One One
+        ZWrite Off
+        ZTest LEqual
+        Cull [_Cull]
+
+        CGPROGRAM
+        #pragma target 3.5
+        #pragma vertex vertAdd
+        #pragma fragment fragAdd
+
+        // fwdadd 变体族（POINT / SPOT / DIRECTIONAL / *_COOKIE），
+        // fullshadows 让点光立方阴影 / 聚光阴影参与衰减。
+        #pragma multi_compile_fwdadd_fullshadows
+        #pragma multi_compile_fog
+
+        #include "UnityCG.cginc"
+        #include "Lighting.cginc"
+        #include "AutoLight.cginc"
+
+        // 与 ForwardBase pass 同一套材质 uniform（两个 CGPROGRAM 是独立编译单元，
+        // 各自声明互不冲突；数值由同一份 Material 驱动，天然一致）。
+        sampler2D _SnowTex;
+        float4 _SnowTex_ST;
+        sampler2D _DetailTex;
+        fixed4 _SnowColor;
+        float  _SnowAmount;
+        fixed4 _SkyColor;
+        float  _EdgeFade;
+        float  _MicroNormal;
+        float  _AmbientBoost;
+        float  _MaskOff;
+
+        #define PRINT_MAX 128
+        float4 _Prints[PRINT_MAX];
+        float  _PrintCount;
+        float  _PrintRadius;
+        float  _PrintDepth;
+        float  _PrintLife;
+        float4 _PrintBounds;
+
+        // 脚印求深：与 ForwardBase 同一份实现（见上面那份的完整注释）。
+        float FootprintAt(float2 worldXZ)
+        {
+            if (_PrintDepth <= 0.001 || _PrintCount < 0.5) return 0.0;
+            if (_PrintBounds.x > _PrintBounds.z || _PrintBounds.y > _PrintBounds.w) return 0.0;
+
+            float2 bMin = _PrintBounds.xy - _PrintRadius;
+            float2 bMax = _PrintBounds.zw + _PrintRadius;
+            if (worldXZ.x < bMin.x || worldXZ.x > bMax.x) return 0.0;
+            if (worldXZ.y < bMin.y || worldXZ.y > bMax.y) return 0.0;
+
+            float best = 0.0;
+            float r2 = _PrintRadius * _PrintRadius;
+            float now = _Time.y;
+            float fadeStart = _PrintLife * 0.7;
+            float fadeSpan = max(_PrintLife * 0.3, 0.01);
+            for (int i = 0; i < PRINT_MAX; i++)
+            {
+                float4 p = _Prints[i];
+                if (p.w < 0.001) continue;
+                float2 d = worldXZ - p.xy;
+                float dist2 = dot(d, d);
+                if (dist2 > r2) continue;
+                float t = 1.0 - dist2 / r2;
+                float m = t * t;
+                float age = now - p.z;
+                m *= 1.0 - saturate((age - fadeStart) / fadeSpan);
+                best = max(best, m * p.w);
+            }
+            return best;
+        }
+
+        struct appdata
+        {
+            float4 vertex : POSITION;
+            float3 normal : NORMAL;
+            float2 uv     : TEXCOORD0;
+        };
+
+        struct v2fAdd
+        {
+            float4 pos      : SV_POSITION;
+            float2 uv       : TEXCOORD0;
+            float3 worldPos : TEXCOORD1;
+            float3 worldN   : TEXCOORD2;
+            SHADOW_COORDS(3)
+            UNITY_FOG_COORDS(4)
+        };
+
+        v2fAdd vertAdd(appdata v)
+        {
+            v2fAdd o;
+            o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+            o.pos      = UnityWorldToClipPos(o.worldPos);
+            o.worldN   = UnityObjectToWorldNormal(v.normal);
+            o.uv       = TRANSFORM_TEX(v.uv, _SnowTex);
+            TRANSFER_SHADOW(o);
+            UNITY_TRANSFER_FOG(o, o.pos);
+            return o;
+        }
+
+        fixed4 fragAdd(v2fAdd i) : SV_Target
+        {
+            // 覆盖率与裁剪：与 ForwardBase 完全同口径（无雪区必须 discard，
+            // 否则加法光会"透过雪"照亮裸地面）。
+            fixed4 sn = tex2D(_SnowTex, i.uv);
+            bool roofMode = _MaskOff > 0.5;
+            float cov = roofMode ? 1.0 : sn.a;
+            if (cov <= 0.003) discard;
+
+            float edge;
+            if (roofMode) edge = 1.0;
+            else if (_EdgeFade < 0.999)
+            {
+                float2 c = i.uv - 0.5;
+                float r = length(c) * 2.0;
+                edge = 1.0 - smoothstep(_EdgeFade, 1.0, r);
+            }
+            else edge = 1.0;
+            if (edge <= 0.003) discard;
+
+            // 微法线：与 ForwardBase 同源（屋顶模式改用 _DetailTex 梯度）。
+            float gDX, gDY;
+            if (roofMode)
+            {
+                float2 dw0 = i.worldPos.xz * 0.06;
+                float d0 = tex2D(_DetailTex, dw0).r;
+                gDX = ddx(d0);
+                gDY = ddy(d0);
+            }
+            else
+            {
+                gDX = ddx(sn.r);
+                gDY = ddy(sn.r);
+            }
+            float3 N = normalize(i.worldN + float3(-gDX, 0.0, -gDY) * _MicroNormal * 2.5);
+
+            // 【ForwardAdd 的核心区别】这里收到的是"本 pass 负责的那一盏灯"：
+            //   · 平行光 → _WorldSpaceLightPos0.xyz 是方向；
+            //   · 点/聚光 → 是世界坐标位置，方向要按像素重算（这就是路灯照亮雪面的入口）。
+            //   · UNITY_LIGHT_ATTENUATION 同时给出距离衰减与（fullshadows 下的）实时阴影。
+            #ifdef USING_DIRECTIONAL_LIGHT
+                float3 L = normalize(_WorldSpaceLightPos0.xyz);
+            #else
+                float3 L = normalize(_WorldSpaceLightPos0.xyz - i.worldPos);
+            #endif
+            float NdotL = saturate(dot(N, L));
+            UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+            float3 direct = _LightColor0.rgb * NdotL * atten;
+
+            // 厚薄/脏污/脚印的调色系数与 ForwardBase 同一套，
+            // 保证"路灯照亮的雪"和"月光照亮的雪"是同一种雪。
+            float thickSrc = roofMode
+                           ? tex2D(_DetailTex, i.worldPos.xz * 0.035).r
+                           : sn.r;
+            float thick = saturate(thickSrc * 1.15 - 0.10);
+            float lump = thick * thick;
+            float3 col = _SnowColor.rgb * direct;
+            col *= lerp(0.86, 1.12, thick);
+            col *= (1.0 + lump * 0.10);
+            float2 dw = i.worldPos.xz * 0.06;
+            float dirtN = tex2D(_DetailTex, dw).r;
+            float dirt = saturate((dirtN - 0.55) * 2.2);
+            float3 dirtyTint = float3(0.52, 0.48, 0.42);
+            col = lerp(col, col * dirtyTint * 1.6, dirt * 0.55);
+
+            // 脚印在加法光下同样要"坑底收光少"，否则路灯会把脚印照没了。
+            float fp = FootprintAt(i.worldPos.xz);
+            if (fp > 0.001)
+            {
+                float k = fp * _PrintDepth;
+                col *= lerp(1.0, 0.92, k);
+            }
+
+            // 加法混合下雾按 Unity 约定压向黑（UNITY_PASS_FORWARDADD 分支），
+            // 远处灯照雪不会把雾色越加越亮。
+            UNITY_APPLY_FOG(i.fogCoord, col);
+
+            // 覆盖率 alpha 乘进颜色：半透明雪缘不会以全亮度加进画面。
+            float a = saturate(smoothstep(0.0, 0.22, _SnowAmount) * cov * edge);
+            return fixed4(col * a, 1.0);
+        }
+        ENDCG
+    }
     }
 
     FallBack Off

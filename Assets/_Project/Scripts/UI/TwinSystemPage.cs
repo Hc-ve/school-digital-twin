@@ -90,12 +90,13 @@ namespace SchoolTwin.UI
 
         // ---- 设备管理（规格 §3.2；下沿 506）----
         private const float DevSearchY = 60f;
-        private const float DevCountY = 108f;
-        private const float DevHeadY = 134f;
-        private const float DevListY = 158f;
+        private const float DevCatY = 96f;      // 【P45】类型分组 chips 行（设备归纳重设计）
+        private const float DevCountY = 128f;
+        private const float DevHeadY = 152f;
+        private const float DevListY = 176f;
         private const float DevRowH = 44f;
         private const int DevRows = 64;         // 【C-31】对象池容量（53 台设备），原来固定 7 行看不到后面的
-        private const float DevListViewH = 348f; // 可视区高度：158 → 506
+        private const float DevListViewH = 330f; // 可视区高度：176 → 506（让位给类型分组行）
 
         // ---- 电力管理（规格 §3.3；下沿 508）----
         private const float PwrTreeY = 60f;
@@ -194,8 +195,12 @@ namespace SchoolTwin.UI
         private RectTransform _devContent;
 
         // 【C-30】楼层筛选 chip（全部 / 1F / 2F）。状态存在 TwinSystemState，与全屏共用一份。
-        private readonly TwinRoundedRect[] _chipBg = new TwinRoundedRect[3];
-        private readonly Text[] _chipText = new Text[3];
+        private readonly TwinRoundedRect[] _chipBg = new TwinRoundedRect[4];
+        private readonly Text[] _chipText = new Text[4];
+        // 【P45】类型分组 chips（全部/照明/温控/算力/给水/门窗广播/环境）
+        private readonly TwinRoundedRect[] _catChipBg = new TwinRoundedRect[7];
+        private readonly Text[] _catChipText = new Text[7];
+        private InputField _devSearchInput;
 
         // 【C-30】电力树的内容容器（合闸后要重画）。原来只有 Build 时跑一次。
         private RectTransform _pwrContent;
@@ -1409,9 +1414,14 @@ namespace SchoolTwin.UI
 
         private void BuildDevice(RectTransform root)
         {
-            // ---- 搜索筛选条 y=60 高 40：搜索框 240×32 R8 + 楼层 chip ×3（高 28 R14）----
+            // ---- 搜索筛选条 y=60：**真 InputField** 240×32 + 楼层 chip ×4 ----
+            //
+            // 【P45 · 搜索为什么"不可用"】原来这里只有一个 RoundedRect + Placeholder
+            // 文本 —— 没有 InputField、没有事件，是个画出来的假框（主理人报障实锤）。
+            // 现在补真输入框：onValueChanged 直接写 TwinSystemState.DeviceSearchQuery
+            // 并刷新台账，与楼层/类型筛选同一刷新管线。
             TwinRoundedRect search = TwinUIFactory.Rounded(root, "SearchBox", TwinTheme.R8,
-                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, false);
+                TwinTheme.Track, TwinTheme.Track, TwinTheme.Border, TwinTheme.StrokeHair.Width, true);
             TwinUIFactory.Place(search.rectTransform, RightX, DevSearchY, 240f, 32f);
 
             Text ph = TwinUIFactory.Label(search.rectTransform, "Placeholder", TwinTheme.FsCaption,
@@ -1420,16 +1430,30 @@ namespace SchoolTwin.UI
             ph.text = "搜索编号 / 名称";
             ph.raycastTarget = false;
 
-            // 楼层 chip ×3：全部 / 1F / 2F，高 28 R14
-            string[] chips = { "全部", "1F", "2F" };
+            Text inputText = TwinUIFactory.Label(search.rectTransform, "InputText", TwinTheme.FsCaption,
+                TextAnchor.MiddleLeft, TwinTheme.TextPrimary);
+            TwinUIFactory.Place(inputText.rectTransform, 12f, 0f, 216f, 32f);
+            inputText.supportRichText = false;
+            inputText.raycastTarget = false;
+
+            _devSearchInput = search.gameObject.AddComponent<InputField>();
+            _devSearchInput.textComponent = inputText;
+            _devSearchInput.placeholder = ph;
+            _devSearchInput.text = TwinSystemState.DeviceSearchQuery;
+            _devSearchInput.onValueChanged.AddListener(delegate {
+                TwinSystemState.DeviceSearchQuery = _devSearchInput != null ? _devSearchInput.text : "";
+                RefreshDevice();
+            });
+
+            // 楼层 chip ×4：全部 / 1F / 2F / 室外（室外 = 楼层 0 的分区，路灯/探照灯都在这）
+            string[] chips = { "全部", "1F", "2F", "室外" };
             for (int i = 0; i < chips.Length; i++)
             {
-                // 【C-30】原来 raycast:false + 无 Button —— 长得像按钮，点了一点反应都没有
-                // （主理人 play 实测）。现在补成真按钮：raycast 打开 + 挂 Button。
+                // 【C-30】真按钮：raycast 打开 + 挂 Button。
                 TwinRoundedRect chip = TwinUIFactory.Rounded(root, "Chip_" + i, 14f,
                     TwinTheme.Track, TwinTheme.Track,
                     Color.clear, TwinTheme.StrokeHair.Width, true);
-                TwinUIFactory.Place(chip.rectTransform, RightX + 248f + i * 52f, DevSearchY + 2f, 48f, 28f);
+                TwinUIFactory.Place(chip.rectTransform, RightX + 248f + i * 46f, DevSearchY + 2f, 44f, 28f);
                 _chipBg[i] = chip;
 
                 Text ct = TwinUIFactory.Label(chip.rectTransform, "T", TwinTheme.FsMicro,
@@ -1445,6 +1469,41 @@ namespace SchoolTwin.UI
                 cb.onClick.AddListener(delegate { OnFloorChipClicked(idx); });
             }
             RefreshFloorChips();
+
+            // ---- 【P45】类型分组 chips y=96 ×7：全部 / 照明 / 温控 / 算力 / 给水 / 门窗广播 / 环境 ----
+            //
+            // ── 为什么要这一排（主理人"重新划分设计归纳"裁决）──────────────
+            // 设备从 53 台涨到 350+ 台：室外路灯 100、电棒 136、暖气 60……
+            // 原来只有"全部 / 1F / 2F"的楼层划分，路灯探照灯根本归不进去。
+            // 分组键按 Category 归纳（映射见 CategoryInGroup），状态存
+            // TwinSystemState.DeviceCategoryFilter，与搜索/楼层筛选叠加生效。
+            string[] catChips = { "全部", "照明", "温控", "算力", "给水", "门窗广播", "环境" };
+            string[] catKeys = { "", "Light", "Climate", "Compute", "Water", "Access", "Env" };
+            float[] catW = { 44f, 48f, 48f, 48f, 48f, 84f, 44f };
+            float cx = RightX;
+            for (int i = 0; i < catChips.Length; i++)
+            {
+                TwinRoundedRect chip = TwinUIFactory.Rounded(root, "CatChip_" + i, 14f,
+                    TwinTheme.Track, TwinTheme.Track,
+                    Color.clear, TwinTheme.StrokeHair.Width, true);
+                TwinUIFactory.Place(chip.rectTransform, cx, DevCatY, catW[i], 26f);
+                _catChipBg[i] = chip;
+
+                Text ct = TwinUIFactory.Label(chip.rectTransform, "T", TwinTheme.FsMicro,
+                    TextAnchor.MiddleCenter, TwinTheme.TextMuted);
+                TwinUIFactory.Stretch(ct.rectTransform);
+                ct.text = catChips[i];
+                ct.raycastTarget = false;
+                _catChipText[i] = ct;
+
+                string key = catKeys[i];
+                Button cb = chip.gameObject.AddComponent<Button>();
+                cb.transition = Selectable.Transition.None;
+                cb.onClick.AddListener(delegate { OnCategoryChipClicked(key); });
+
+                cx += catW[i] + 4f;
+            }
+            RefreshCategoryChips();
 
             // ---- 计数行 y=108 高 18 ----
             _devCount = TwinUIFactory.Label(root, "DevCount", TwinTheme.FsCaption,
@@ -2134,23 +2193,29 @@ namespace SchoolTwin.UI
         {
             if (_devCount == null) return;
 
-            int total = TwinDeviceStats.ActiveDeviceCount;
-            int scope = TwinDeviceStats.ControlScopeCount;
-            _devCount.text = "共 " + total + " 台 · 受控 " + scope + " · 缺失 0";
-
             IReadOnlyList<TwinAnchor> all = TwinDeviceStats.AllDevices;
             _devBuf.Clear();
 
             // 【C-30】楼层筛选。状态从 TwinSystemState 读（全屏那套写的是同一个字段），
             // 所以窄态选 1F、切到全屏还是 1F。
             int filter = TwinSystemState.FloorFilter;
+            // 【P45】搜索关键字 + 类型分组（三重筛选叠加生效）
+            string query = TwinSystemState.DeviceSearchQuery;
+            string catGroup = TwinSystemState.DeviceCategoryFilter;
+            bool hasQuery = !string.IsNullOrEmpty(query);
+            bool hasCat = !string.IsNullOrEmpty(catGroup);
+
+            int total = 0;
+            int matched = 0;
 
             if (all != null)
             {
-                for (int i = 0; i < all.Count && _devBuf.Count < DevRows; i++)
+                for (int i = 0; i < all.Count; i++)
                 {
                     TwinAnchor a = all[i];
                     if (!TwinDeviceStats.IsActiveDevice(a)) continue;
+
+                    total++;
 
                     if (filter > 0)
                     {
@@ -2161,9 +2226,22 @@ namespace SchoolTwin.UI
                         if (floor != want) continue;
                     }
 
-                    _devBuf.Add(a);
+                    if (hasCat && !CategoryInGroup(a.Category, catGroup)) continue;
+
+                    if (hasQuery)
+                    {
+                        if (a.TwinId.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            a.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    }
+
+                    matched++;
+                    if (_devBuf.Count < DevRows) _devBuf.Add(a);
                 }
             }
+
+            int scope = TwinDeviceStats.ControlScopeCount;
+            _devCount.text = "共 " + matched + " / " + total + " 台 · 受控 " + scope + " · 缺失 0"
+                             + (matched > DevRows ? "（列表只显示前 " + DevRows + " 条，请用搜索/筛选收敛）" : "");
 
             for (int i = 0; i < DevRows; i++)
             {
@@ -2257,6 +2335,57 @@ namespace SchoolTwin.UI
 
                 if (_chipText[i] != null)
                     _chipText[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
+            }
+        }
+
+        // ================================================================ 【P45】类型分组交互
+
+        /// <summary>点类型分组 chip。只改共享状态 + 重画，与楼层 chip 同一模式。</summary>
+        private void OnCategoryChipClicked(string groupKey)
+        {
+            if (TwinSystemState.DeviceCategoryFilter == groupKey) return;
+            TwinSystemState.DeviceCategoryFilter = groupKey;
+            RefreshCategoryChips();
+            RefreshDevice();
+        }
+
+        /// <summary>类型分组 chips 的选中态刷新。</summary>
+        private void RefreshCategoryChips()
+        {
+            for (int i = 0; i < _catChipBg.Length; i++)
+            {
+                if (_catChipBg[i] == null) continue;
+                bool on = TwinSystemState.DeviceCategoryFilter == CategoryKeys[i];
+
+                Color fill = on ? TwinTheme.AccentDim : TwinTheme.Track;
+                _catChipBg[i].SetFill(fill, fill);
+                _catChipBg[i].SetBorder(on ? TwinTheme.AccentLine : Color.clear,
+                                        TwinTheme.StrokeHair.Width);
+
+                if (_catChipText[i] != null)
+                    _catChipText[i].color = on ? TwinTheme.Accent : TwinTheme.TextMuted;
+            }
+        }
+
+        /// <summary>类型分组键（与 BuildDevice 里 catKeys 一一对应）。</summary>
+        private static readonly string[] CategoryKeys = { "", "Light", "Climate", "Compute", "Water", "Access", "Env" };
+
+        /// <summary>
+        /// 设备 Category → 分组键的归纳映射。新设备类型出现时在这里加一行
+        /// （路灯/探照灯/电棒都是 Light，天然落进「照明」组）。
+        /// </summary>
+        private static bool CategoryInGroup(string category, string group)
+        {
+            if (string.IsNullOrEmpty(group)) return true;
+            switch (group)
+            {
+                case "Light": return category == "Light";
+                case "Climate": return category == "AC" || category == "Heat";
+                case "Compute": return category == "PC" || category == "Projector";
+                case "Water": return category == "Dispenser";
+                case "Access": return category == "Door" || category == "Bell" || category == "Alarm";
+                case "Env": return category == "Sensor";
+                default: return true;
             }
         }
 

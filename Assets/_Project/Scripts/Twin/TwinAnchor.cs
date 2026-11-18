@@ -161,6 +161,29 @@ namespace SchoolTwin.Twin
             }
         }
 
+        // ---------------------------------------------------------------- 配置入口
+
+        /// <summary>
+        /// 运行时自举专用的整体配置入口（P44 · 主理人授权新增）。
+        ///
+        /// ── 为什么需要它 ─────────────────────────────────────────────
+        /// `ExteriorLampAnchors` 在 AfterSceneLoad 给 100 盏室外路灯动态挂锚点，
+        /// 而上面四个身份字段都是 private serialized，没有公开写入口的话
+        /// 只能反射写私有字段 —— 脆弱、重构后静默失效（项目铁律禁止）。
+        /// 所以给一个显式的批量配置方法，让自举脚本在组件 Start() 之前调它，
+        /// 保证 Start 里按配置好的 TwinId 注册 Registry、订阅 Bus。
+        ///
+        /// ⚠️ 只供运行时自举在 AddComponent 之后、Start 之前调用；
+        ///    编辑期场景里的锚点仍走 Inspector 序列化，两条路径互不干扰。
+        /// </summary>
+        public void Configure(string twinId, string zone, string category, string displayName)
+        {
+            _twinId = twinId;
+            _zone = zone;
+            _category = category;
+            _displayName = displayName;
+        }
+
         // ---------------------------------------------------------------- 生命周期
 
         private void OnEnable()
