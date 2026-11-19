@@ -21,14 +21,20 @@ namespace SchoolTwin.Weather
     /// </summary>
     public class WeatherVisuals : MonoBehaviour
     {
-        private const float AreaSize = 110f;     // 发射盒水平尺寸（运行时按相机高度再放大）
+        private const float AreaSize = 64f;      // 【P47】发射盒水平尺寸 110 → 64：盒随角色走，
+                                                 // 密度全部集中在角色周边可视区（远处黑区里的粒子是浪费），
+                                                 // 局部密度 ×3，修"有的地方多有的地方没有"的区域性稀疏。
         // 【P43 追加 11-17 主理人反馈】撒播高度 16 → 60。
+        // 【P47 · 2026-11-19】60 → 28：雪以 1.3 m/s 匀速下落，撒得越高、新走到区域
+        // 的"空窗期"越长（60m 要落 46 秒——主理人报的"局部区域几乎没雪"正是玩家
+        // 走动后新区域等雪的延迟 + 缓冲满载节流的叠加）。28m 仍高于校园全部建筑
+        // （2~4 层 ≈ 15m），二楼窗外落雨观感不变；落程 28m → 21.5s，空窗期减半。
         // 16m 时雨雪从楼顶一线（教学楼约 15~16m）凭空出现，观感是"比楼高一点点"，不像天上来的；
         // 60m ≈ 教学楼 3.75 倍，肉眼不再看到"出生线"。注意发射点的真实语义是
         // 「室外地面 + EmitHeight」（见 UpdateGround :3912 emitPos.y = outdoorGroundY + EmitHeight），
         // 不是字面的"相机上方"。寿命不用跟着改：UpdateRainLifetime / UpdateSnowLifetime
         // 是按实测落距解 √(2h/g) 的解析式，落距变大自动重算。
-        private const float EmitHeight = 60f;    // 撒播高度基底（室外地面以上）
+        private const float EmitHeight = 28f;    // 【P47】撒播高度基底 60 → 28（见 AreaSize 处的空窗期分析；仍高于校园全部建筑）
         // 【P43 追加 11-17 二轮】发射高度随相机自适应：自由相机（F3）升到高空俯瞰时，
         // 固定 60m 的发射面就是一顶"雪天花板"—— 主理人航拍截图里看到的正是它。
         // 实际发射 Y = max(地面+60, 相机+40)，封顶 地面+250（封顶是为了给寿命解析式与
@@ -38,7 +44,12 @@ namespace SchoolTwin.Weather
         private const float DomeRadius = 380f;   // 云穹顶半径，必须小于相机 farClip(2000)
 
         private const float RainRateMax = 3200f; // rain = 1 时每秒发射数
-        private const float SnowRateMax = 520f;  // snow = 1 时每秒发射数
+        // 【P48 · 2026-11-19 提速+增密】雪密度 3200 → 12000：下落提速到 3.5 m/s 后
+        // 粒子在柱内停留时间缩短（寿命 21.5s→8s），同密度下存活数会掉——密度必须
+        // 按新寿命重算：12000×8s ≈ 9.6 万存活（体积密度 ≈0.84 粒/m³，前视切片
+        // ~470 粒，图2量级）。maxParticles 150000 容纳 9.6 万富余。
+        // 灯下提亮由 PrecipitationLit 的解析距离场负责（单 pass，密度上调零过绘代价）。
+        private const float SnowRateMax = 12000f; // snow = 1 时每秒发射数
 
         // 落地反馈
         private const float SplashArea = 18f;      // 雨滴溅射覆盖范围（相机脚下）。26→18：水花改成"贴地闪光"后
@@ -520,15 +531,17 @@ namespace SchoolTwin.Weather
             // 初速同时收到 0.25~0.6：雪片本身下落速度就是 0.3~1 m/s 量级，
             // 太大就成了冰雹，太小又全靠重力慢慢加速（要 10 秒才追上落距）。
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.25f, 0.60f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.16f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.09f, 0.18f);   // 【P47】0.07~0.16 → 加大，配合灯下发光观感
             main.startColor = new Color(1f, 1f, 1f, 0.9f);
-            main.gravityModifier = 0.035f;                 // 几乎不加速，慢慢飘
+            main.gravityModifier = 0f;                     // 【P47】重力归零：恒定终端速度下落（见 vel.y 注释）
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             // 【P43 追加】撒播高度随相机自适应后（最高 地面+250m），雪寿命最高
             // t=√(500/0.343)≈37.4s（Clamp 上限已同步 30→40）：活跃粒子
-            // Medium 520×37.4≈19.4k，High(×2)≈38.9k。旧 22000 在高空档不够
-            // （缓冲满会静默截断发射，见 BuildRain 同款注释）。
-            main.maxParticles = 45000;
+            // 【P47】缓冲与 SnowRateMax 3200 配套：匀速柱 3200×46s≈14.7 万全装得下；
+            // High(×2)≈29 万被 150k 截顶——暴雪预设的上限，可接受。
+            // （原 45000 配 520 粒/秒；密度上调后缓冲必须配套，否则缓冲满会
+            //  静默截断发射——P13 写过这条教训，见 BuildRain 同款注释。）
+            main.maxParticles = 120000;   // 【P47】150k → 120k：撒播高度 28m + 盒 64m 后稳态存活 ~7 万，留足余量
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
 
             var em = ps.emission;
@@ -553,7 +566,7 @@ namespace SchoolTwin.Weather
             // 就会看到雪片"横着飘"而不是"斜着落"。
             var noise = ps.noise;
             noise.enabled = true;
-            noise.strength = 0.55f;
+            noise.strength = 0.35f;   // 【P47】0.55 → 0.35：噪声漂移过强会把粒子推成疏密条带（区域性不均的次要因素）
             noise.frequency = 0.35f;
             noise.scrollSpeed = 0.35f;
             noise.damping = true;
@@ -567,7 +580,12 @@ namespace SchoolTwin.Weather
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.World;
             vel.x = new ParticleSystem.MinMaxCurve(0f);
-            vel.y = new ParticleSystem.MinMaxCurve(0f);
+            // 【P48 · 提速】恒定下落速度 -3.5 m/s（叠加初速 0.25~0.6 → 实际 3.75~4.1 m/s）。
+            // 主理人二轮反馈"下落太慢，一轮下落完另一轮还在空中"——1.3 m/s 的飘落
+            // 28m 要 21.5 秒，节奏像"慢动作"；3.5 m/s 是大雪+风的观感，28m 落程
+            // 8 秒一轮，循环感立起来。仍保持**匀速**（P47 的教训：重力加速会让
+            // 贴地密度只有高空 1/5，平视看不到雪）。
+            vel.y = new ParticleSystem.MinMaxCurve(-3.5f);
             vel.z = new ParticleSystem.MinMaxCurve(0f);
 
             var pr = go.GetComponent<ParticleSystemRenderer>();
@@ -2058,15 +2076,17 @@ namespace SchoolTwin.Weather
             // 【P13-D9】同上：落距实测，不套旧公式（旧公式假设发射盒挂相机上）
             float emitYs = snowPs.transform.position.y;
             float drop = Mathf.Max(1f, emitYs - outdoorGroundY);
-            const float G = 9.81f * 0.035f;       // 与 BuildSnow 的 gravityModifier 保持一致
-            // 同雨：shape 已转 -90°，初速朝下（0.25~0.6 m/s，取中值 0.4）。
-            const float V0 = 0.4f;
-            float t = (-V0 + Mathf.Sqrt(V0 * V0 + 2f * G * drop)) / G;
+            // 【P48】雪改恒定终端速度下落（BuildSnow：gravity=0 + vel.y=-3.5，
+            // 叠加初速 0.25~0.6 → 实际 3.75~4.1 m/s，取均值 3.5——主理人提速裁决）。
+            // 匀速下落让整根雪柱密度均匀——修"抬头一大堆、平视没几粒"的根因
+            // （原重力加速下落：越贴地越快、贴地密度只有高空的 1/5）。
+            const float V_FALL = 3.5f;
+            float t = drop / V_FALL;
 
             // 收 2%：让 alpha 归零发生在贴地前一点点，雪片"落进"地面而不是"消失在半空"。
-            // 上限 30→40：发射高度随相机自适应后（MaxEmitAGL=250m），落距 250m 时
-            // t=√(500/0.343)≈37.4s，30 的旧上限会让高空撒的雪"半空蒸发"。
-            t = Mathf.Clamp(t * 0.98f, 4f, 40f);
+            // 上限 40→80：匀速下落下，落距 250m（相机自适应上限）需 71s——
+            // 80s 的上限仍然覆盖；极端机位的撒雪不会"半空蒸发"。
+            t = Mathf.Clamp(t * 0.98f, 4f, 80f);
 
             var main = snowPs.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(t * 0.97f, t);

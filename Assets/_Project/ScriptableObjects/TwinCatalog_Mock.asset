@@ -14899,3 +14899,306 @@ MonoBehaviour:
       AlarmHigh: 1
       Epsilon: 0.05
       Hysteresis: 0
+  - TwinId: SportHall/Light/Tube_124
+    DisplayName: "\u4F53\u80B2\u9986\uFF08\u7BEE\u7403\u573A\uFF09 \u7535\u68D2 011"
+    Zone: SportHall
+    Category: Light
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Brightness
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 20
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 100
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 110
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class1-2/Clock/Wall_01
+    DisplayName: "1-2\u73ED \u6302\u949F 01"
+    Zone: Class1-2
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class1-4/Clock/Wall_01
+    DisplayName: "1-4\u73ED \u6302\u949F 01"
+    Zone: Class1-4
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class2-1/Clock/Wall_01
+    DisplayName: "2-1\u73ED \u6302\u949F 01"
+    Zone: Class2-1
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class2-1/Clock/Wall_02
+    DisplayName: "2-1\u73ED \u6302\u949F 02"
+    Zone: Class2-1
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassDirector/Clock/Wall_01
+    DisplayName: "\u4E3B\u4EFB\u5BA4 \u6302\u949F 01"
+    Zone: ClassDirector
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassDirector/Clock/Wall_02
+    DisplayName: "\u4E3B\u4EFB\u5BA4 \u6302\u949F 02"
+    Zone: ClassDirector
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Corridor1/Clock/Wall_01
+    DisplayName: "\u4E00\u5C42\u8D70\u5ECA \u6302\u949F 01"
+    Zone: Corridor1
+    Category: Clock
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: ClockTime
+      Unit: h
+      Min: 0
+      Max: 24
+      WarnLow: 0
+      WarnHigh: 24
+      AlarmLow: 0
+      AlarmHigh: 24
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: Class2-1/PC/Laptop_01
+    DisplayName: "2-1\u73ED \u7B14\u8BB0\u672C\u7535\u8111"
+    Zone: Class2-1
+    Category: PC
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 120
+      WarnLow: 0
+      WarnHigh: 100
+      AlarmLow: 0
+      AlarmHigh: 120
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: OnCount
+      Unit: tai
+      Min: 0
+      Max: 1
+      WarnLow: 0
+      WarnHigh: 1
+      AlarmLow: 0
+      AlarmHigh: 1
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: CPULoad
+      Unit: '%'
+      Min: 0
+      Max: 100
+      WarnLow: 0
+      WarnHigh: 85
+      AlarmLow: 0
+      AlarmHigh: 98
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassComputer/Projector/Proj_01
+    DisplayName: "\u8BA1\u7B97\u673A\u6559\u5BA4 \u6295\u5F71\u4EEA 01"
+    Zone: ClassComputer
+    Category: Projector
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 500
+      WarnLow: 0
+      WarnHigh: 450
+      AlarmLow: 0
+      AlarmHigh: 480
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: LampHours
+      Unit: h
+      Min: 0
+      Max: 10000
+      WarnLow: 0
+      WarnHigh: 9000
+      AlarmLow: 0
+      AlarmHigh: 9800
+      Epsilon: 0.05
+      Hysteresis: 0
+  - TwinId: ClassTeachers/Projector/Proj_01
+    DisplayName: "\u6559\u5E08\u529E\u516C\u5BA4 \u6295\u5F71\u4EEA 01"
+    Zone: ClassTeachers
+    Category: Projector
+    SourceTopic: 
+    DeviceModel:
+      Type: 
+      LocatedIn: 
+      PoweredBy: 
+      Properties: []
+      Actions: []
+      Events: []
+    Metrics:
+    - Metric: Power
+      Unit: W
+      Min: 0
+      Max: 500
+      WarnLow: 0
+      WarnHigh: 450
+      AlarmLow: 0
+      AlarmHigh: 480
+      Epsilon: 0.05
+      Hysteresis: 0
+    - Metric: LampHours
+      Unit: h
+      Min: 0
+      Max: 10000
+      WarnLow: 0
+      WarnHigh: 9000
+      AlarmLow: 0
+      AlarmHigh: 9800
+      Epsilon: 0.05
+      Hysteresis: 0
