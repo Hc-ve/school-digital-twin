@@ -227,6 +227,26 @@ namespace SchoolTwin.Weather
 
             switch (t)
             {
+                case TimeOfDay.Day:
+                    // 【P50 2026-11-19】主理人诉求：「6:00-19:00 阴天/雨天/雪天天空改回原来的」。
+                    // 原基准里恶劣天气白天 sun 只有 0.26~0.48、exposure 0.70~0.90、雾极浓，
+                    // 加上天气自动轮换跳到雾/雨档，白天画面就灰黑得像夜晚。
+                    // 只在**白天档**把这些天气提亮到接近晴天的明亮观感；夜/黄昏完全不改（红线）。
+                    // 用倍率而非改 EnvSample 基准，正好隔离夜档——Night/Dusk 各自 case 覆盖，不进这里。
+                    if (w == Weather.Overcast || w == Weather.Rain || w == Weather.Storm ||
+                        w == Weather.Fog || w == Weather.Snow)
+                    {
+                        sunMul = 2.0f;    // 0.26~0.48 → 0.52~0.96，方向光回来了
+                        expMul = 1.22f;   // 0.70~1.02 → 0.85~1.24，天光整体提亮
+                        ambMul = 1.15f;   // 暗部不再死黑
+                        fogMul = 0.45f;   // 浓雾削薄，远景不再糊成灰墙
+                        sunTint = new Color(1f, 0.98f, 0.94f);
+                        // 云帷幔(雾0.9/雪0.94)会把白天天空盖成灰黑，白天降到 0.35~0.45
+                        // 让天光透出来；夜里/黄昏不受影响（不进本分支）。
+                        s.overcast *= 0.45f;
+                        s.cloud *= 0.6f;
+                    }
+                    break;
                 case TimeOfDay.Dusk:
                     sunMul = 0.50f; expMul = 0.78f; ambMul = 0.80f;
                     skyMul = 0.92f; blueBias = 0.90f; fogMul = 0.80f;

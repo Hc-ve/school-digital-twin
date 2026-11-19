@@ -97,9 +97,10 @@ Shader "CampusUI/PrecipitationLit"
                 fixed4 c = i.col * t;
 
                 // 【光锥显雪】到各活跃灯头的解析距离场：1/(1+d²·k) 柔衰减。
-                // 【主理人 2026-11-19 裁决：光晕要比图2弱一档，防过曝】
-                // 系数 1.0/0.14：灯旁雪粒亮度 ≈1.5~2，Bloom 轻拾成小亮斑，
-                // 不堆成图2那种大灯晕；密度靠 SnowRateMax 1300 撑起来。
+                // 【P50 2026-11-19 主理人裁决：丁达尔光柱"适度增强、可控不过曝"】
+                // 系数 0.14 → 0.07：灯旁(d≈3m)提亮 ≈0.93→1.23(+32%)、d≈5m ≈0.44→0.73(+66%)，
+                // d≈10m 仍衰减到 0.25 —— 光柱明显但不全场泛白。灯球 emission 已回调到 3.0、
+                // Spot 强度回调过，实测室内/灯球不过曝才定此值。
                 float3 glow = float3(0, 0, 0);
                 int gcount = (int)_P44GlowCount;
                 for (int gi = 0; gi < P44_GLOW_MAX; gi++)
@@ -107,7 +108,7 @@ Shader "CampusUI/PrecipitationLit"
                     if (gi >= gcount) break;
                     float4 lamp = _P44Glow[gi];
                     float3 d = lamp.xyz - i.wpos;
-                    glow += lamp.w * (1.0 / (1.0 + dot(d, d) * 0.14));
+                    glow += lamp.w * (1.0 / (1.0 + dot(d, d) * 0.07));
                 }
                 // 提亮只加在雪粒自己的覆盖范围内（乘 alpha），粒子间隙不发光
                 c.rgb += glow * c.a;

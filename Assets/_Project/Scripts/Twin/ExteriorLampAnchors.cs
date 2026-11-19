@@ -114,8 +114,15 @@ namespace SchoolTwin.Twin
         private const string GlassMatName1 = "GlassWhite";
         private const string GlassMatName2 = "GlassLamp1";
 
-        /// <summary>灯头自发光强度。与美术夜间材质 GlassWhiteIllum 的实测值 (1,1,1) 同参数，纯白 LED 观感。</summary>
-        private const float GlowEmissionIntensity = 1.0f;
+        /// <summary>灯头自发光强度。【P50 2026-11-19】主理人 play 实测 6.0 刺眼（糊成大白团），
+        /// 回调到 3.0：仍 >1 冲过夜档 Bloom 阈值保留光晕，但观感柔和、贴近参考图"亮白点+柔光晕"。
+        /// 改的是共享材质 emission，100 盏零额外光源、零 FPS 成本。Standard shader 支持 HDR >1。</summary>
+        private const float GlowEmissionIntensity = 3.0f;
+
+        /// <summary>【P50】灯球色温：暖白 LED（约 3200K）的线性 RGB 比例。
+        /// 原 (1,1,1) 是 6500K 冷白，参考图是暖白 —— R 保留 1.0，G 压到 0.88，B 压到 0.72。
+        /// 与 GlowEmissionIntensity 相乘得到最终 emission=(3.0, 2.64, 2.16)。</summary>
+        private static readonly Color GlowWarmTint = new Color(1.0f, 0.88f, 0.72f, 1f);
 
         /// <summary>根节点名。带方括号是本工程"系统级常驻节点"命名惯例（TwinWeatherBootstrap 同款）。</summary>
         private const string RootName = "[ExteriorLampAnchors]";
@@ -714,7 +721,11 @@ namespace SchoolTwin.Twin
                             if (glow.HasProperty("_EmissionColor"))
                             {
                                 glow.EnableKeyword("_EMISSION");
-                                glow.SetColor("_EmissionColor", new Color(GlowEmissionIntensity, GlowEmissionIntensity, GlowEmissionIntensity, 1f));
+                                // 【P50】纯白(I,I,I) → 暖白 HDR：色温比例 × 强度，冲过 Bloom 阈值出光晕
+                                glow.SetColor("_EmissionColor", new Color(
+                                    GlowWarmTint.r * GlowEmissionIntensity,
+                                    GlowWarmTint.g * GlowEmissionIntensity,
+                                    GlowWarmTint.b * GlowEmissionIntensity, 1f));
                             }
                             glowCache[v.OriginalMaterial.name] = glow;
                             _glowInstances.Add(glow);
@@ -774,7 +785,7 @@ namespace SchoolTwin.Twin
                     l.type = LightType.Spot;
                     l.spotAngle = 115f;
                     l.range = 30f;
-                    l.intensity = 2f;
+                    l.intensity = 2.6f;   // 【P50】原2.0→3.2→回调2.6：3.2 太亮刺眼、连带1楼室内过曝
                     go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);   // 灯口朝下（截光型配光）
                 }
                 else if (root.name.StartsWith("RoadLamp1d", StringComparison.Ordinal))
@@ -786,7 +797,7 @@ namespace SchoolTwin.Twin
                     l.type = LightType.Spot;
                     l.spotAngle = 120f;
                     l.range = 35f;
-                    l.intensity = 2.8f;
+                    l.intensity = 3.2f;   // 【P50】原2.8→4.0→回调3.2：市政双头光池同步柔化
                     go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
                 }
                 else
@@ -800,7 +811,7 @@ namespace SchoolTwin.Twin
                     l.type = LightType.Spot;
                     l.spotAngle = 120f;
                     l.range = 9f;
-                    l.intensity = 1.5f;
+                    l.intensity = 2.0f;   // 【P50】原1.5→2.6→回调2.0：69盏庭院灯主力，柔化但保留光池（不退回照不亮）
                     go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);   // 灯口朝下（截光配光）
                 }
 

@@ -35,6 +35,16 @@ namespace SchoolTwin.Weather
         // 不是字面的"相机上方"。寿命不用跟着改：UpdateRainLifetime / UpdateSnowLifetime
         // 是按实测落距解 √(2h/g) 的解析式，落距变大自动重算。
         private const float EmitHeight = 28f;    // 【P47】撒播高度基底 60 → 28（见 AreaSize 处的空窗期分析；仍高于校园全部建筑）
+
+        // 【P50 2026-11-19】发射盒网格吸附步长（米）——修"雪随角色移动而变稀/消失"。
+        // 根因：原 emitPos.xz 每帧 = 角色 xz，玩家一动，新位置才开始发射；雪从 45m 高
+        // 落下需 ~13s，这 13s 就是"走过去雪还没落下来"的空窗（主理人实测的断层）。
+        // 修法：盒中心吸附到 24m 网格——格内走动盒完全静止（发射源不动=雪均匀），
+        // 跨格才跳一次且步长 24m << 盒半宽 55m，新旧覆盖区重叠 31m，
+        // 前方新区域多已被旧盒覆盖过、雪已在下 → 空窗基本消除。
+        // 粒子 simulationSpace=World，旧粒子留在原地继续落，跨格瞬间也无断层。
+        // 盒尺寸/发射率/粒子数全不变 → FPS 零影响（实测放大盒到 240m 会掉帧，故不采用）。
+        private const float EmitSnapGrid = 24f;
         // 【P43 追加 11-17 二轮】发射高度随相机自适应：自由相机（F3）升到高空俯瞰时，
         // 固定 60m 的发射面就是一顶"雪天花板"—— 主理人航拍截图里看到的正是它。
         // 实际发射 Y = max(地面+60, 相机+40)，封顶 地面+250（封顶是为了给寿命解析式与
@@ -531,7 +541,10 @@ namespace SchoolTwin.Weather
             // 初速同时收到 0.25~0.6：雪片本身下落速度就是 0.3~1 m/s 量级，
             // 太大就成了冰雹，太小又全靠重力慢慢加速（要 10 秒才追上落距）。
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.25f, 0.60f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.09f, 0.18f);   // 【P47】0.07~0.16 → 加大，配合灯下发光观感
+            // 【P50 2026-11-19】主理人实测"雪粒子像纸片、近景远景都太大" → 先砍到 0.05~0.09；
+            // 二轮反馈"抬头满天、平视几乎空"（体积几何 + 尺寸过小致中远距离亚像素）→ 回调到 0.07~0.12：
+            // 比纸片小、比 0.05 档平视可见。Billboard 近大远小是透视，缩小同时改善近/远景。
+            main.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.12f);
             main.startColor = new Color(1f, 1f, 1f, 0.9f);
             main.gravityModifier = 0f;                     // 【P47】重力归零：恒定终端速度下落（见 vel.y 注释）
             main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -3956,7 +3969,11 @@ namespace SchoolTwin.Weather
                 float emitY = Mathf.Min(
                     Mathf.Max(outdoorGroundY + EmitHeight, camY + CamEmitClearance),
                     outdoorGroundY + MaxEmitAGL);
-                Vector3 emitPos = new Vector3(anchorSrc.x, emitY, anchorSrc.z);
+                // 【P50】xz 吸附到 24m 网格（见 EmitSnapGrid 注释）：格内走动发射盒静止，
+                // 雪原地持续下落不随人移动；跨格才跳，世界空间旧粒子留在原地填补空窗。
+                float snapX = Mathf.Round(anchorSrc.x / EmitSnapGrid) * EmitSnapGrid;
+                float snapZ = Mathf.Round(anchorSrc.z / EmitSnapGrid) * EmitSnapGrid;
+                Vector3 emitPos = new Vector3(snapX, emitY, snapZ);
                 if (rainPs != null) rainPs.transform.position = emitPos;
                 if (snowPs != null) snowPs.transform.position = emitPos;
             }
