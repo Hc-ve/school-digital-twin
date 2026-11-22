@@ -19,13 +19,13 @@
 
 | 晴天白天 | 雨天 | 雪天（夜间） |
 |:---:|:---:|:---:|
-| ![晴天](docs/images/scene-clear-day.png) | ![雨天](docs/images/scene-rain.png) | ![雪天](docs/images/scene-snow.png) |
+| ![晴天](Docs/images/scene-clear-day.png) | ![雨天](Docs/images/scene-rain.png) | ![雪天](Docs/images/scene-snow.png) |
 
 15 分钟压缩 24 小时昼夜循环，7 档天气（晴/多云/阴/雨/暴雨/雾/雪）按转移链随机演变，天空与光照 2.4 秒平滑过渡。
 
 ### 室内光照与细节
 
-![室内光照](docs/images/indoor-lighting.png)
+![室内光照](Docs/images/indoor-lighting.png)
 
 室内照明分层（底光层 + 洗顶灯 + 灯管发光），配合过曝修复与材质调校，兼顾明暗层次与可读性。
 
@@ -44,17 +44,17 @@
 
 ## 🏗 系统架构
 
-![系统总体架构](docs/images/architecture-overview.png)
+![系统总体架构](Docs/images/architecture-overview.png)
 
 数据从设备点位经事件总线进入表现层与控制中心；时间天气系统同时驱动视觉侧（光照/天空）与数据侧（温湿度等物理量），由桥接层统一收口，避免两侧状态分叉。
 
 ### 五模块信息架构
 
-![五模块信息架构](docs/images/architecture-modules.png)
+![五模块信息架构](Docs/images/architecture-modules.png)
 
 ### 时间天气双通道
 
-![时间天气双通道](docs/images/architecture-weather.png)
+![时间天气双通道](Docs/images/architecture-weather.png)
 
 ---
 
@@ -137,7 +137,7 @@ Assets/
     ├── Twin/                 # 测点锚点与目录
     ├── UI/                   # UGUI 界面
     └── Weather/              # 时间天气系统
-docs/images/                  # 本 README 的配图
+Docs/images/                  # 本 README 的配图
 Docs/                         # 方案、评审、验收证据
 Tools/                        # 状态检查脚本
 ```
