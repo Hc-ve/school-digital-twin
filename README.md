@@ -5,7 +5,7 @@
 [![Unity](https://img.shields.io/badge/Unity-2022.3.62f3c1-black?logo=unity)](https://unity.com/)
 [![Pipeline](https://img.shields.io/badge/Pipeline-Built--in-blue)](https://docs.unity3d.com/Manual/RenderTech-BuiltInPipeline.html)
 [![Language](https://img.shields.io/badge/Language-C%23-purple)](https://learn.microsoft.com/en-us/dotnet/csharp/)
-[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)]
+[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)](https://www.microsoft.com/windows)
 [![Points](https://img.shields.io/badge/Device%20Points-363-orange)](#-数据规模)
 [![Checks](https://img.shields.io/badge/Checks-428-green)](#-质量保障)
 [![Version](https://img.shields.io/badge/Version-Prototype-v1-9F7AEA)](#-路线图)
@@ -294,9 +294,9 @@ python Tools/status.py        # 刷新 Docs/STATUS.md 看板
 
 ## 版权与许可
 
-本项目为**可公开查阅的工程原型**，代码与文档按现状提供，供数字孪生 / Unity 仿真系统设计与实现参考，欢迎学习与复用其中的架构思路与工程约定。
+本项目为个人独立完成的工程原型，**项目归属权与著作权完全归项目负责人何超臣个人所有**。仓库公开仅供学习交流与成果展示，不构成任何形式的授权许可。
 
-- 工程代码：可查阅、可参考；如需直接使用或修改，请保留出处说明
+- 工程代码、文档、设计方案：著作权归项目负责人所有。未经书面许可，不得复制、修改、分发或用于商业用途
 - 素材包（`Assets/TirGames/`）：原始教学素材，其权利归原作者所有
 - 第三方依赖（Unity、Post Processing Stack、TextMeshPro、Newtonsoft.Json 等）：按其各自许可证使用，著作权归原作者所有
 
@@ -304,4 +304,4 @@ python Tools/status.py        # 刷新 Docs/STATUS.md 看板
 
 ## 团队
 
-**校园数字孪生项目组** · 7 人协作 · 项目负责人统筹需求拆解、方案裁决、进度推进与质量验收；采用专项 Agent 协作工作流分担各职能域任务。
+**项目负责人：何超臣** —— 主导需求拆解、方案裁决、进度推进与质量验收；7 人团队协作完成各职能域任务，并采用专项 Agent 协作工作流提升多模块并行开发效率。
